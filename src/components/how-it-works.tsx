@@ -135,7 +135,7 @@ export function HowItWorks() {
   }, []);
 
   return (
-    <section id="como-funciona" className="scroll-mt-28 border-t border-line">
+    <section id="como-funciona" className="scroll-mt-28">
       <div className="mx-auto max-w-[1440px] px-5 sm:px-8">
         <div className="max-w-3xl pt-20 lg:pt-28">
           <p className="flex items-center gap-3 text-[12px] font-semibold tracking-[0.18em] text-brand-text uppercase">

@@ -25,34 +25,34 @@ const BENEFITS = [
 ];
 
 const FEATURES = [
-  { Icon: LineChart, title: "Painel ao vivo", text: "Entregas, funil e ranking de cada equipe atualizando sozinhos. Abra no computador da sala de vendas ou no celular." },
-  { Icon: BellRing, title: "Cobrança automática", text: "Lembrete antes de cada horário e aviso ao gerente quando alguém atrasa. Ninguém precisa cobrar no grupo." },
-  { Icon: Contact, title: "Carteira de clientes", text: "Cada cliente na etapa certa do funil, com WhatsApp a um toque e visita agendada direto da ficha." },
-  { Icon: Target, title: "Metas e projeção", text: "Meta mensal por corretor com a projeção pelo ritmo atual. Você sabe no dia 10 se o mês vai fechar." },
-  { Icon: CalendarCheck, title: "Agenda de visitas", text: "Visitas da equipe em um só lugar, com o que foi realizado, desmarcado ou faltou." },
-  { Icon: ShieldCheck, title: "Cada um vê o que deve", text: "Corretor vê os próprios números, gerente vê a equipe, diretoria vê tudo. Regra aplicada no banco de dados." },
+  { Icon: LineChart, title: "Painel ao vivo", text: "Entregas, funil e ranking de cada equipe atualizando sozinhos. Na sala de vendas ou no celular." },
+  { Icon: BellRing, title: "Cobrança automática", text: "Lembrete antes de cada horário e aviso ao gerente quando alguém atrasa." },
+  { Icon: Contact, title: "Carteira de clientes", text: "Cada cliente na etapa do funil, com WhatsApp a um toque e visita marcada na ficha." },
+  { Icon: Target, title: "Metas e projeção", text: "Meta mensal por corretor. No dia 10 você já sabe se o mês fecha, pelo ritmo de agora." },
+  { Icon: CalendarCheck, title: "Agenda de visitas", text: "As visitas da equipe num lugar só: o que foi realizado, desmarcado ou faltou." },
+  { Icon: ShieldCheck, title: "Cada um vê o que deve", text: "Corretor vê os próprios números. Gerente vê a equipe. Diretoria vê a imobiliária." },
 ];
 
 const FAQ = [
   {
     q: "Precisa instalar alguma coisa?",
-    a: "Não. O Pulse abre no navegador e pode ser instalado na tela inicial do celular como um aplicativo, em Android e iPhone.",
+    a: "Não. Abre no navegador do celular e do computador. Se quiser, coloca na tela inicial, no Android e no iPhone, e passa a abrir como um aplicativo.",
   },
   {
     q: "Quanto tempo leva para colocar a equipe?",
-    a: "Poucos minutos. Você cria as equipes e convida as pessoas por e-mail, uma a uma ou todas de uma vez com uma planilha.",
+    a: "Poucos minutos. Você cria as equipes e convida por e-mail, um a um ou todos de uma vez com uma planilha. No mesmo dia já dá para lançar o primeiro relatório.",
   },
   {
     q: "Como funciona a contratação?",
-    a: "Você cria a conta, escolhe quantas pessoas vão usar e ativa por Pix, boleto ou cartão. A cobrança é mensal, por pessoa ativa, e dá para cancelar quando quiser.",
+    a: "Você cria a conta, escolhe quantas pessoas vão usar e ativa por Pix, boleto ou cartão. A cobrança é mensal, por pessoa ativa. Cancela quando quiser.",
   },
   {
     q: "Os horários de relatório são fixos?",
-    a: "Você escolhe. De 1 a 8 horários por dia, do jeito que sua operação funciona.",
+    a: "Você escolhe. De 1 a 8 horários por dia, no fuso da imobiliária. Dez minutos antes, o corretor recebe o aviso. Quem marcou folga não entra na cobrança.",
   },
   {
-    q: "Um corretor consegue ver os números dos colegas?",
-    a: "Não. Cada pessoa vê só o que o cargo permite, e os dados de uma imobiliária nunca aparecem para outra.",
+    q: "Um corretor vê os números dos colegas?",
+    a: "Não. Corretor vê o próprio dia. Gerente vê a equipe. Diretoria vê a imobiliária. Os dados de uma empresa nunca aparecem para outra.",
   },
 ];
 
@@ -168,7 +168,7 @@ export default function Home() {
         </section>
 
         {/* Continua o hero: a frase primeiro, os quatro pontos no mesmo cartão. */}
-        <section>
+        <section className="bg-surface">
           <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:py-28">
             <Eyebrow>Na hora da venda</Eyebrow>
             <p className="mt-6 max-w-5xl font-display text-4xl leading-[1.05] font-bold tracking-[-0.03em] sm:text-6xl">
@@ -192,46 +192,46 @@ export default function Home() {
 
         <HowItWorks />
 
-        {/* Recursos */}
-        <section id="recursos" className="scroll-mt-28 border-t border-line bg-surface">
-          <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:py-28">
-            <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr] lg:items-end">
-              <div>
-                <Eyebrow>Recursos</Eyebrow>
-                <h2 className="mt-5 font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Tudo que o gestor comercial precisa.</h2>
-              </div>
-              <p className="text-lg leading-relaxed text-ink-2 lg:pb-2">
-                Do lembrete que chega no celular do corretor ao ranking que você mostra na reunião de segunda. Feito para a
-                rotina de imobiliária, não adaptado de outro setor.
+        <section id="recursos" className="scroll-mt-28 bg-surface">
+          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_1.4fr] lg:py-28">
+            <div>
+              <Eyebrow>Recursos</Eyebrow>
+              <h2 className="mt-5 font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Tudo que o gestor comercial precisa.</h2>
+              <p className="mt-5 max-w-md text-lg leading-relaxed text-ink-2">
+                Do lembrete no celular do corretor ao ranking da reunião de segunda. Feito para a rotina de imobiliária.
               </p>
             </div>
-            <ul className="mt-14 grid gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="border-t border-line">
               {FEATURES.map(({ Icon, title, text }) => (
-                <li key={title} className="bg-surface p-8 lg:p-10">
-                  <Icon className="size-6 text-brand-text" strokeWidth={1.6} />
-                  <h3 className="mt-6 font-display text-xl font-semibold tracking-tight">{title}</h3>
-                  <p className="mt-2.5 leading-relaxed text-muted">{text}</p>
+                <li key={title} className="flex gap-4 border-b border-line py-6">
+                  <Icon className="mt-1 size-5 shrink-0 text-brand-text" strokeWidth={1.6} />
+                  <div>
+                    <h3 className="font-display text-xl font-semibold tracking-tight">{title}</h3>
+                    <p className="mt-1.5 leading-relaxed text-muted">{text}</p>
+                  </div>
                 </li>
               ))}
             </ul>
           </div>
         </section>
 
-        {/* Dúvidas */}
-        <section id="duvidas" className="scroll-mt-28 border-t border-line bg-surface">
+        <section id="duvidas" className="scroll-mt-28">
           <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_1.4fr] lg:py-28">
             <div>
               <Eyebrow>Dúvidas</Eyebrow>
               <h2 className="mt-5 font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Perguntas frequentes.</h2>
+              <p className="mt-5 max-w-md text-lg leading-relaxed text-ink-2">
+                Instalação, equipe, cobrança e o que cada pessoa consegue ver.
+              </p>
             </div>
             <div className="border-t border-line">
               {FAQ.map((f) => (
                 <details key={f.q} className="group border-b border-line py-6">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-6 font-display text-lg font-semibold">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-6 font-display text-xl font-semibold tracking-tight">
                     {f.q}
                     <span className="text-2xl leading-none text-brand-text transition-transform group-open:rotate-45">+</span>
                   </summary>
-                  <p className="mt-4 max-w-2xl leading-relaxed text-ink-2">{f.a}</p>
+                  <p className="mt-3 max-w-xl leading-relaxed text-ink-2">{f.a}</p>
                 </details>
               ))}
             </div>
@@ -239,7 +239,7 @@ export default function Home() {
         </section>
 
         {/* Chamada final */}
-        <section className="relative overflow-hidden border-t border-line">
+        <section className="relative overflow-hidden bg-surface">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-x-0 bottom-[-60%] mx-auto h-[36rem] max-w-4xl rounded-full blur-3xl"
