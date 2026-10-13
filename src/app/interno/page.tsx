@@ -10,7 +10,7 @@ import { PulseMark } from "@/components/ui/logo";
 import { StatTile } from "@/components/live/viz";
 import { loadAlerts, loadCoupons, loadHealth, loadOrgs, loadOverview, type HealthStatus, type OrgStatusView } from "@/lib/interno";
 import { formatMoney, formatNumber } from "@/lib/metrics";
-import { requirePlatformAdmin } from "@/lib/platform-admin";
+import { platformAdminSession } from "@/lib/platform-admin";
 import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
 import { formatDate } from "@/lib/time";
 import { extendTrial, grantAccess, resolveAlertsBySource, setAlertResolved, setCouponActive, suspendAccess } from "./actions";
@@ -37,7 +37,8 @@ export default function InternoPage(props: PageProps<"/interno">) {
 }
 
 async function Gate({ searchParams }: { searchParams: PageProps<"/interno">["searchParams"] }) {
-  const { email } = await requirePlatformAdmin();
+  const { email, aal2 } = await platformAdminSession();
+  if (!aal2) return <EnableMfa />;
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const tab = (TABS.find((t) => t.id === one(sp.aba))?.id ?? "visao") as TabId;
@@ -385,6 +386,23 @@ async function Commercial() {
         <CouponForm />
       </Card>
     </div>
+  );
+}
+
+function EnableMfa() {
+  return (
+    <main className="grid min-h-dvh place-items-center px-5">
+      <Card className="max-w-md p-8 text-center">
+        <PulseMark className="mx-auto size-10" />
+        <h1 className="mt-5 font-display text-2xl font-semibold tracking-tight">Ative a verificação em duas etapas</h1>
+        <p className="mt-2 text-sm text-muted">
+          O painel interno mexe em todas as imobiliárias. Para abrir, sua conta precisa da verificação em duas etapas e da sessão confirmada com o código.
+        </p>
+        <Link href="/conta#seguranca" className={buttonClass("primary", "md", "mt-6")}>
+          Ativar na minha conta
+        </Link>
+      </Card>
+    </main>
   );
 }
 

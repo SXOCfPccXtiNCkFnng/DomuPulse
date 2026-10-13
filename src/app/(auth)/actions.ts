@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
-import { sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email-templates";
+import { sendPasswordChangedEmail, sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email-templates";
 import { siteUrl } from "@/lib/email";
+import { CAPTCHA_ERROR, verifyCaptcha } from "@/lib/captcha";
 import { LEGAL_DOCS_VERSION } from "@/lib/legal";
 import { describeError, logger } from "@/lib/logger";
 import { clientIp, rateLimit, tooManyAttempts } from "@/lib/rate-limit";
@@ -42,6 +43,7 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
     const check = await rateLimit(key, limit, 15 * 60);
     if (!check.ok) return { error: tooManyAttempts(check.retryAfterSec), values };
   }
+  if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
@@ -79,6 +81,7 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
 
   const parsed = signUpSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+  if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
   const { fullName, orgName, email, whatsapp, password } = parsed.data;
   const admin = createAdminClient();
@@ -156,6 +159,7 @@ export async function requestPasswordReset(_: FormState, formData: FormData): Pr
     const check = await rateLimit(key, limit, 60 * 60);
     if (!check.ok) return { error: tooManyAttempts(check.retryAfterSec), values };
   }
+  if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
   // O link sai pelo nosso e-mail, com a marca do Pulse. E-mail inexistente
   // recebe a mesma resposta, para não revelar quem tem conta.
@@ -192,6 +196,11 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
     if (error.code === "weak_password") return { fieldErrors: { password: "Senha fraca. Siga os requisitos abaixo do campo." } };
     return { error: "Não foi possível salvar a senha. Tente novamente." };
   }
+
+  // Recuperação de senha: avisa o dono do e-mail. No primeiro acesso por
+  // convite a pessoa está só criando a senha, então não há o que avisar.
+  const email = auth?.claims?.email;
+  if (!needsTerms && email) after(() => sendPasswordChangedEmail({ to: email }));
 
   // Quem entrou por convite aceita os termos aqui, no primeiro acesso.
   if (needsTerms) {

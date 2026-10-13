@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseWs = supabaseUrl.replace(/^http/, "ws");
+// Captcha do Cloudflare (Turnstile): script, iframe do desafio e verificação.
+const turnstile = "https://challenges.cloudflare.com";
 
 // CSP sem nonce para manter o prerender estático. 'unsafe-inline' em script
 // é exigido pelos scripts de inicialização do Next; o React escapa todo
@@ -10,11 +12,12 @@ const supabaseWs = supabaseUrl.replace(/^http/, "ws");
 // (src/lib/theme-script.ts), sem nenhum dado de usuário.
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' ${turnstile}${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' blob: data:",
   "font-src 'self'",
-  `connect-src 'self' ${supabaseUrl} ${supabaseWs}`.trim(),
+  `connect-src 'self' ${supabaseUrl} ${supabaseWs} ${turnstile}`.trim(),
+  `frame-src ${turnstile}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",

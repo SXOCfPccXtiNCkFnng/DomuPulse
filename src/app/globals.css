@@ -72,6 +72,31 @@
   color-scheme: dark;
 }
 
+/* Impressão e PDF sempre no tema claro: fundo escuro gasta tinta. */
+@media print {
+  /* Mesma especificidade das regras do tema escuro, e vem depois: vence. */
+  :root,
+  :root:not([data-theme="light"]),
+  :root[data-theme="dark"] {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f6fb;
+    --surface-3: #e1e7f1;
+    --line: #d5dce8;
+    --line-strong: #c8d1e0;
+    --ink: #0b1b36;
+    --ink-2: #2b3a56;
+    --muted: #5d6983;
+    --brand: #0f2a5f;
+    --brand-ink: #ffffff;
+    --brand-text: #1a3a7c;
+    --brand-soft: #e6edfa;
+    --shadow: none;
+    color-scheme: light;
+  }
+  .animate-rise { animation: none; }
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

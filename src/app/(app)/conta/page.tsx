@@ -4,11 +4,13 @@ import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { getCurrentMember, ROLE_LABEL, type OrgStatus } from "@/lib/auth";
 import { vapidPublicKey } from "@/lib/env";
 import { formatMoney } from "@/lib/metrics";
+import { isPlatformAdminEmail } from "@/lib/platform-admins";
 import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
 import { InstallGuide, PushSettings, SubscriptionForm } from "./client";
+import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
 export const metadata: Metadata = { title: "Conta" };
 
@@ -22,6 +24,7 @@ const STATUS_LABEL: Record<OrgStatus, { label: string; tone: "brand" | "warn" | 
 export default async function ContaPage() {
   const me = await getCurrentMember();
   const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
   const { data: org } = await supabase.from("organizations").select("seats, coupon_code").single();
   // A tabela de cupons é só do servidor: o percentual é lido com a chave de serviço.
   const { data: coupon } =
@@ -42,6 +45,21 @@ export default async function ContaPage() {
       <Card>
         <CardHeader title="Notificações" description="Lembretes de relatório e alertas da equipe neste aparelho" />
         <PushSettings vapidKey={vapidPublicKey()} />
+      </Card>
+
+      <Card id="seguranca">
+        <CardHeader title="Verificação em duas etapas" description="Um código do celular além da senha" />
+        <MfaSettings required={isPlatformAdminEmail(claims?.claims?.email)} />
+      </Card>
+
+      <Card>
+        <CardHeader title="Trocar senha" />
+        <ChangePasswordForm />
+      </Card>
+
+      <Card>
+        <CardHeader title="Aparelhos conectados" />
+        <SignOutEverywhere />
       </Card>
 
       <Card>

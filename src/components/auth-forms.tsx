@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useActionState, useState } from "react";
 import { requestPasswordReset, signIn, signUp, updatePassword } from "@/app/(auth)/actions";
+import { Captcha } from "@/components/captcha";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { PASSWORD_RULES } from "@/lib/password";
@@ -44,6 +45,7 @@ export function SignInForm() {
       <Link href="/recuperar-senha" className="-mt-1 self-end text-[13px] text-muted hover:text-ink">
         Esqueci minha senha
       </Link>
+      <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending} className="mt-1">
         {pending ? "Entrando..." : "Entrar"}
       </Button>
@@ -89,6 +91,7 @@ export function SignUpForm() {
         showRules
       />
       <TermsCheckbox error={state.fieldErrors?.acceptTerms} />
+      <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending} className="mt-1">
         {pending ? "Criando conta..." : "Começar teste grátis"}
       </Button>
@@ -116,6 +119,7 @@ export function ResetRequestForm() {
           key={state.values?.email}
         />
       </Field>
+      <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending}>
         {pending ? "Enviando..." : "Enviar link"}
       </Button>
@@ -149,7 +153,7 @@ export function NewPasswordForm({ needsTerms }: { needsTerms: boolean }) {
 
 // Controlado de propósito: o valor sobrevive à limpeza do formulário que o
 // React faz depois do envio, e a lista de requisitos marca enquanto digita.
-function PasswordField({
+export function PasswordField({
   name,
   label,
   autoComplete,

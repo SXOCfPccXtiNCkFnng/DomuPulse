@@ -16,8 +16,11 @@ await db.exec(`
   create table auth.users (id uuid primary key, email text);
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  create function auth.jwt() returns jsonb language sql stable as
+    $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+  create table auth.mfa_factors (id uuid primary key default gen_random_uuid(), user_id uuid not null, status text not null);
   grant usage on schema auth to anon, authenticated, service_role;
-  grant execute on function auth.uid() to anon, authenticated, service_role;
+  grant execute on function auth.uid(), auth.jwt() to anon, authenticated, service_role;
   grant usage on schema public to anon, authenticated, service_role;
   -- Igual ao padrão do Supabase: tudo liberado, o RLS é que restringe.
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
@@ -68,10 +71,11 @@ const today = (await db.query(`select (now() at time zone 'America/Sao_Paulo')::
 let passed = 0;
 let failed = 0;
 
-async function as(user, sql, params = [], role = "authenticated") {
+async function as(user, sql, params = [], role = "authenticated", aal = "aal1") {
   return db.transaction(async (tx) => {
     await tx.exec(`set local role ${role}`);
     await tx.query(`select set_config('request.jwt.claim.sub', $1, true)`, [user ? uid(user) : ""]);
+    await tx.query(`select set_config('request.jwt.claims', $1, true)`, [user ? JSON.stringify({ sub: uid(user), aal }) : ""]);
     return tx.query(sql, params);
   });
 }
@@ -173,6 +177,27 @@ check("dona lê a auditoria", audit.rows.length > 0, `veio ${audit.rows.length}`
 await expectError("cliente não acessa o log de notificações", "b1", "select * from notification_log", /permission denied/);
 await expectError("cliente não acessa eventos de cobrança", "ownerA", "select * from billing_events", /permission denied/);
 await expectError("funções internas não ficam expostas ao anon", null, "select private.my_org_id()", /permission denied/, [], "anon");
+
+// ---- Verificação em duas etapas ----------------------------------------
+console.log("\nVerificação em duas etapas");
+await db.exec(`insert into auth.mfa_factors (user_id, status) values ('${uid("mgr2")}', 'verified'), ('${uid("b3")}', 'unverified')`);
+const mgr2Sees = async (aal) => (await as("mgr2", "select id from members", [], "authenticated", aal)).rows.length;
+check("com 2FA ativa, só a senha não dá acesso a nada", (await mgr2Sees("aal1")) === 0);
+check("com o código confirmado, acesso normal", (await mgr2Sees("aal2")) === 2);
+await expectError("com 2FA ativa, só a senha não grava", "mgr2", `insert into daily_status (member_id, status_date) values ('${uid("m_b3")}', '${today}')`, /row-level security/);
+await expectRows("fator não confirmado não muda nada", "b3", "select id from members", 1);
+await expectRows("quem não ativou 2FA segue normal", "b1", "select id from members", 1);
+
+// ---- Somas por período ------------------------------------------------
+console.log("\nSomas por período");
+const monthAgo = new Date(Date.parse(today) - 30 * 86400000).toISOString().slice(0, 10);
+const totalsSql = `select * from report_totals_by_member('${monthAgo}', '${today}')`;
+await expectRows("corretor soma só os próprios relatórios", "b1", totalsSql, 1);
+await expectRows("gerente soma só a própria equipe (sem o corretor 3)", "mgr1", totalsSql, 1);
+await expectRows("dona soma a imobiliária inteira", "ownerA", totalsSql, 2);
+await expectRows("dona B não soma nada da imobiliária A", "ownerB", totalsSql, 0);
+await expectError("anon não chama as somas", null, totalsSql, /permission denied/, [], "anon");
+await expectError("período maior que 1 ano é recusado", "ownerA", "select * from report_totals_by_day('2020-01-01', '2026-01-01')", /Período inválido/);
 
 // ---- Plataforma (só o servidor) ---------------------------------------
 console.log("\nPlataforma");

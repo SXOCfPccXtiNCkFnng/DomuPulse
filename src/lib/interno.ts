@@ -112,6 +112,7 @@ export async function loadHealth(): Promise<HealthCheck[]> {
     ["Segredo do cron", has(env.CRON_SECRET, 32), "chamadas do cron-job.org", "Mínimo de 32 caracteres."],
     ["Asaas", has(env.ASAAS_API_KEY) && has(env.ASAAS_WEBHOOK_TOKEN, 32), "cobrança das assinaturas"],
     ["Administradores do painel", has(env.PLATFORM_ADMIN_EMAILS), "acesso a este painel e alertas de erro"],
+    ["Captcha (Turnstile)", has(env.TURNSTILE_SECRET_KEY) && has(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY), "proteção contra robôs no cadastro e login"],
   ];
   for (const [label, ok, why, extra] of config) {
     checks.push({

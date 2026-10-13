@@ -25,19 +25,21 @@ Endereço de produção: `pulse.domutech.digital`
 4. **Campos sensíveis bloqueados por coluna:** o administrador não consegue alterar plano, status de pagamento, assentos nem cupom pelo cliente.
 5. **Assinatura vencida = somente leitura,** aplicado no próprio RLS.
 6. **Login:** senha com 10 caracteres, maiúscula, minúscula, número e símbolo; nome e sobrenome; WhatsApp com DDD validado.
-7. **Limite de tentativas** no login, cadastro, recuperação de senha e convites, contado no banco (vale para todos os servidores).
-8. **Aceite dos termos registrado:** data, versão e IP de quem aceitou (cadastro e primeiro acesso por convite).
-9. **Chave secreta só no servidor** (`SUPABASE_SECRET_KEY`), usada apenas depois de verificar a permissão de quem chamou.
-10. **Cabeçalhos de segurança** (CSP, HSTS, X-Frame-Options e outros) em `next.config.ts`.
-11. **Webhook e crons autenticados** com segredo comparado em tempo constante; webhook idempotente.
-12. **Auditoria:** alterações em membros, relatórios, agenda, metas, comissões e ações do painel interno ficam em `audit_log`.
+7. **Limite de tentativas** no login, cadastro, recuperação de senha e convites, contado no banco (vale para todos os servidores), e **captcha** (Cloudflare Turnstile) nas mesmas telas.
+8. **Verificação em duas etapas** (aplicativo autenticador): opcional para todos, obrigatória no painel interno. Exigida também no banco: com ela ativa, só a senha não lê nem grava nada.
+9. **Troca de senha** pedindo a atual, aviso por e-mail quando a senha muda e botão para sair de todos os aparelhos.
+10. **Aceite dos termos registrado:** data, versão e IP de quem aceitou (cadastro e primeiro acesso por convite).
+11. **Chave secreta só no servidor** (`SUPABASE_SECRET_KEY`), usada apenas depois de verificar a permissão de quem chamou.
+12. **Cabeçalhos de segurança** (CSP, HSTS, X-Frame-Options e outros) em `next.config.ts`.
+13. **Webhook e crons autenticados** com segredo comparado em tempo constante; webhook idempotente.
+14. **Auditoria:** alterações em membros, relatórios, agenda, metas, comissões e ações do painel interno ficam em `audit_log`.
 
 ## Testes
 
 | Comando | O que faz |
 |---|---|
 | `npm test` | Testes de unidade: senha, nome, telefone, CPF e CNPJ, redirecionamento, fuso, ranking, preço, registro de erros |
-| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (60 cenários) |
+| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (71 cenários) |
 | `npm run typecheck` | Tipos do TypeScript |
 | `npm run lint` | Lint |
 
@@ -61,7 +63,14 @@ Sem o Resend configurado, os e-mails aparecem no terminal (com os links de convi
    - Site URL: `https://pulse.domutech.digital`
    - Redirect URLs: `https://pulse.domutech.digital/auth/confirm`
 4. Em **Authentication > Providers > Email**: senha com no mínimo 10 caracteres, exigindo minúsculas, maiúsculas, números e símbolos.
-5. Ative o captcha (Cloudflare Turnstile) em **Authentication > Attack Protection** se quiser uma camada extra no login.
+5. Em **Authentication > Multi-Factor**, confirme que o TOTP (aplicativo autenticador) está habilitado.
+
+## Captcha (Cloudflare Turnstile)
+
+1. Em dash.cloudflare.com, abra **Turnstile** e adicione o site `pulse.domutech.digital` (e `localhost` para testar), no modo **Managed**.
+2. Preencha `NEXT_PUBLIC_TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY`.
+
+Sem as chaves, o captcha fica desligado e a Saúde do sistema avisa.
 
 Não é preciso mexer nos modelos de e-mail nem no SMTP do Supabase: cadastro, convite e recuperação de senha saem pelo Resend, com a marca do Pulse.
 
@@ -72,6 +81,7 @@ Não é preciso mexer nos modelos de e-mail nem no SMTP do Supabase: cadastro, c
 | Boas-vindas | Ao criar a conta da imobiliária |
 | Convite | Quando a liderança convida alguém (link vale 24 h) |
 | Nova senha | Recuperação de senha (link vale 1 h) |
+| Senha alterada | Quando a senha muda, com link para recuperar se não foi a pessoa |
 | Teste acabando | 3 dias antes do fim do teste |
 | Teste encerrado | No dia em que o teste acaba |
 | Pagamento confirmado | Quando o Asaas confirma o pagamento |
@@ -151,7 +161,7 @@ O plano Hobby da Vercel é para uso não comercial. Para validar está ótimo; a
 src/
   app/
     (auth)/          entrar, criar conta, recuperar e definir senha
-    (app)/           painel, agenda, equipe, conta (exigem login)
+    (app)/           painel, relatórios, metas, agenda, equipe, conta (exigem login)
     interno/         painel interno da DomuTech
     termos/          Termos de Uso
     privacidade/     Política de Privacidade

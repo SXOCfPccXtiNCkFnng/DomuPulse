@@ -51,6 +51,12 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
   const userId = auth?.claims?.sub;
   if (!userId) redirect("/entrar");
 
+  // Segunda checagem da verificação em duas etapas (o proxy não roda em
+  // pré-carregamentos de página). Sem isso, o RLS devolveria vazio e a
+  // pessoa veria "sem acesso" em vez da tela do código.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") redirect("/verificacao");
+
   const { data } = await supabase
     .from("members")
     .select(

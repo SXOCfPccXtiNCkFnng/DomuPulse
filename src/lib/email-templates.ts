@@ -63,6 +63,27 @@ export function sendPasswordResetEmail(input: { to: string; link: string }) {
   });
 }
 
+export function sendPasswordChangedEmail(input: { to: string }) {
+  const when = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "long",
+    timeStyle: "short",
+  }).format(new Date());
+  const url = siteUrl("/recuperar-senha");
+  return sendEmail({
+    to: input.to,
+    subject: "Sua senha do Domu Pulse foi alterada",
+    html: brandedEmail({
+      heading: "Senha alterada",
+      bodyHtml:
+        p(`A senha da sua conta foi alterada em ${escapeHtml(when)} (horário de Brasília).`) +
+        p("Se foi você, está tudo certo. Se não foi, crie uma nova senha agora: isso desconecta quem estiver usando sua conta."),
+      cta: { label: "Não fui eu, criar nova senha", url },
+    }),
+    text: `A senha da sua conta do Domu Pulse foi alterada em ${when} (horário de Brasília).\n\nSe não foi você, crie uma nova senha agora:\n${url}${contactFooterText()}`,
+  });
+}
+
 export function sendTrialEndingEmail(input: { to: string; fullName: string; orgName: string; daysLeft: number }) {
   const name = firstName(input.fullName);
   const days = input.daysLeft === 1 ? "1 dia" : `${input.daysLeft} dias`;

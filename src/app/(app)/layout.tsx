@@ -1,4 +1,4 @@
-import { LogOut } from "lucide-react";
+import { CircleUser, LogOut } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { SideNav, TabBar } from "@/components/app-nav";
@@ -9,7 +9,7 @@ import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex print:hidden">
         <Link href="/painel" className="px-2">
           <Logo />
         </Link>
@@ -25,12 +25,15 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/85 px-4 backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/85 px-4 backdrop-blur-xl lg:hidden print:hidden">
           <Link href="/painel" aria-label="Painel">
             <PulseMark className="size-8" />
           </Link>
           <span className="flex items-center gap-1">
             <ThemeToggle />
+            <Link href="/conta" aria-label="Conta" className="grid size-9 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-ink">
+              <CircleUser className="size-[18px]" />
+            </Link>
             <SignOutButton compact />
           </span>
         </header>
@@ -39,7 +42,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           <BillingBanner />
         </Suspense>
 
-        <main className="flex-1 px-4 pt-5 pb-28 sm:px-6 lg:px-10 lg:pt-8 lg:pb-12">
+        <main className="flex-1 px-4 pt-5 pb-28 sm:px-6 lg:px-10 lg:pt-8 lg:pb-12 print:p-0">
           <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
         </main>
       </div>
@@ -104,7 +107,7 @@ async function BillingBanner() {
   if (!text) return null;
 
   return (
-    <div className="flex items-center justify-between gap-4 bg-brand px-4 py-2.5 text-[13px] text-brand-ink sm:px-6 lg:px-10">
+    <div className="flex items-center justify-between gap-4 bg-brand px-4 py-2.5 print:hidden text-[13px] text-brand-ink sm:px-6 lg:px-10">
       <span>{text}</span>
       {role === "owner" ? (
         <Link href="/conta#assinatura" className="shrink-0 font-semibold underline underline-offset-4">
