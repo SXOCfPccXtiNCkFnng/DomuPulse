@@ -1,0 +1,178 @@
+// Testes de segurança do banco. Aplica as migrações num Postgres embutido
+// (PGlite), simula o ambiente do Supabase (roles e auth.uid) e tenta
+// quebrar as permissões de cada cargo. Rode com: npm run test:db
+import { PGlite } from "@electric-sql/pglite";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const migrationsDir = join(import.meta.dirname, "..", "migrations");
+const db = new PGlite();
+
+await db.exec(`
+  create role anon nologin;
+  create role authenticated nologin;
+  create role service_role nologin bypassrls;
+  create schema auth;
+  create table auth.users (id uuid primary key, email text);
+  create function auth.uid() returns uuid language sql stable as
+    $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+  grant usage on schema auth to anon, authenticated, service_role;
+  grant execute on function auth.uid() to anon, authenticated, service_role;
+  grant usage on schema public to anon, authenticated, service_role;
+  -- Igual ao padrão do Supabase: tudo liberado, o RLS é que restringe.
+  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+  alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+`);
+
+for (const file of readdirSync(migrationsDir).filter((f) => f.endsWith(".sql")).sort()) {
+  await db.exec(readFileSync(join(migrationsDir, file), "utf8"));
+  console.log(`migração aplicada: ${file}`);
+}
+console.log();
+
+const ids = {};
+const uid = (n) => (ids[n] ??= crypto.randomUUID());
+
+// ---- Dados: duas imobiliárias -----------------------------------------
+await db.exec(`
+  insert into auth.users (id) values
+    ('${uid("ownerA")}'), ('${uid("dirA")}'), ('${uid("mgr1")}'), ('${uid("mgr2")}'),
+    ('${uid("b1")}'), ('${uid("b2")}'), ('${uid("b3")}'), ('${uid("bOff")}'),
+    ('${uid("ownerB")}'), ('${uid("bB")}');
+
+  insert into organizations (id, name) values ('${uid("orgA")}', 'Imob A'), ('${uid("orgB")}', 'Imob B');
+  insert into organizations (id, name, status, trial_ends_at) values ('${uid("orgC")}', 'Imob Expirada', 'trialing', now() - interval '1 day');
+  insert into divisions (id, org_id, name) values ('${uid("d1")}', '${uid("orgA")}', 'Diretoria'), ('${uid("dB")}', '${uid("orgB")}', 'Diretoria');
+  insert into teams (id, org_id, division_id, name) values
+    ('${uid("t1")}', '${uid("orgA")}', '${uid("d1")}', 'Equipe 1'),
+    ('${uid("t2")}', '${uid("orgA")}', '${uid("d1")}', 'Equipe 2'),
+    ('${uid("tB")}', '${uid("orgB")}', '${uid("dB")}', 'Equipe B');
+
+  insert into members (id, org_id, user_id, full_name, role, division_id, team_id, active) values
+    ('${uid("m_ownerA")}', '${uid("orgA")}', '${uid("ownerA")}', 'Dona A', 'owner', null, null, true),
+    ('${uid("m_dirA")}', '${uid("orgA")}', '${uid("dirA")}', 'Super A', 'director', '${uid("d1")}', null, true),
+    ('${uid("m_mgr1")}', '${uid("orgA")}', '${uid("mgr1")}', 'Gerente 1', 'manager', null, '${uid("t1")}', true),
+    ('${uid("m_mgr2")}', '${uid("orgA")}', '${uid("mgr2")}', 'Gerente 2', 'manager', null, '${uid("t2")}', true),
+    ('${uid("m_b1")}', '${uid("orgA")}', '${uid("b1")}', 'Corretor 1', 'broker', null, '${uid("t1")}', true),
+    ('${uid("m_b2")}', '${uid("orgA")}', '${uid("b2")}', 'Corretor 2', 'broker', null, '${uid("t1")}', true),
+    ('${uid("m_b3")}', '${uid("orgA")}', '${uid("b3")}', 'Corretor 3', 'broker', null, '${uid("t2")}', true),
+    ('${uid("m_bOff")}', '${uid("orgA")}', '${uid("bOff")}', 'Desligado', 'broker', null, '${uid("t1")}', false),
+    ('${uid("m_ownerB")}', '${uid("orgB")}', '${uid("ownerB")}', 'Dono B', 'owner', null, null, true),
+    ('${uid("m_bB")}', '${uid("orgB")}', '${uid("bB")}', 'Corretor B', 'broker', null, '${uid("tB")}', true);
+`);
+
+const today = (await db.query(`select (now() at time zone 'America/Sao_Paulo')::date::text as d`)).rows[0].d;
+
+// ---- Harness ------------------------------------------------------------
+let passed = 0;
+let failed = 0;
+
+async function as(user, sql, params = [], role = "authenticated") {
+  return db.transaction(async (tx) => {
+    await tx.exec(`set local role ${role}`);
+    await tx.query(`select set_config('request.jwt.claim.sub', $1, true)`, [user ? uid(user) : ""]);
+    return tx.query(sql, params);
+  });
+}
+
+function check(name, ok, detail = "") {
+  if (ok) passed++;
+  else failed++;
+  console.log(`${ok ? "PASSA" : "FALHA"}  ${name}${ok ? "" : `  ${detail}`}`);
+}
+
+async function expectRows(name, user, sql, n, params, role) {
+  try {
+    const r = await as(user, sql, params, role);
+    const count = r.affectedRows && !r.rows.length ? r.affectedRows : r.rows.length;
+    check(name, count === n, `esperado ${n}, veio ${count}`);
+  } catch (e) {
+    check(name, false, `erro: ${e.message}`);
+  }
+}
+
+async function expectError(name, user, sql, pattern, params, role) {
+  try {
+    await as(user, sql, params, role);
+    check(name, false, "executou sem erro");
+  } catch (e) {
+    check(name, pattern.test(e.message), `erro diferente: ${e.message}`);
+  }
+}
+
+const insertReport = (member, slot = "12:00", date = today) =>
+  `insert into reports (member_id, report_date, report_slot, visits) values ('${uid("m_" + member)}', '${date}', '${slot}', 3) returning id, org_id`;
+
+// ---- Visibilidade ------------------------------------------------------
+console.log("Visibilidade de membros");
+await expectRows("corretor vê só a si mesmo", "b1", "select id from members", 1);
+await expectRows("gerente vê a si e os 2 corretores ativos e 1 inativo da equipe", "mgr1", "select id from members", 4);
+await expectRows("superintendente vê a diretoria inteira, sem a dona", "dirA", "select id from members", 7);
+await expectRows("dona vê a imobiliária inteira", "ownerA", "select id from members", 8);
+await expectRows("dona B não vê nada da imobiliária A", "ownerB", `select id from members where org_id = '${uid("orgA")}'`, 0);
+await expectRows("membro desativado não vê nada", "bOff", "select id from members", 0);
+await expectRows("sem sessão não vê nada", null, "select id from members", 0);
+await expectError("anon não acessa tabelas", null, "select id from members", /permission denied/, [], "anon");
+
+// ---- Relatórios --------------------------------------------------------
+console.log("\nRelatórios");
+await expectRows("corretor lança o próprio relatório", "b1", insertReport("b1"), 1);
+await expectError("corretor não lança para colega", "b1", insertReport("b2"), /row-level security/);
+await expectError("corretor não lança para outra imobiliária", "b1", insertReport("bB"), /row-level security/);
+await expectError("horário fora da configuração", "b1", insertReport("b1", "13:00"), /Horário de relatório inválido/);
+await expectError("data futura", "b1", insertReport("b1", "15:00", "2999-01-01"), /data futura/);
+await expectError("corretor não edita relatório antigo", "b1", insertReport("b1", "15:00", "2020-01-01"), /Prazo/);
+await expectRows("gerente corrige relatório antigo do seu corretor", "mgr1", insertReport("b2", "15:00", "2020-01-01"), 1);
+await expectError("gerente não lança para outra equipe", "mgr1", insertReport("b3"), /row-level security/);
+await expectError("não lança para corretor desativado", "mgr1", insertReport("bOff"), /corretores ativos/);
+await expectError("não lança relatório para gerente", "dirA", insertReport("mgr1"), /corretores ativos/);
+await expectRows("superintendente lança para qualquer corretor da diretoria", "dirA", insertReport("b3"), 1);
+
+const spoof = await as("b1", `insert into reports (org_id, member_id, report_date, report_slot) values ('${uid("orgB")}', '${uid("m_b1")}', '${today}', '18:00') returning org_id`);
+check("org_id enviado pelo cliente é ignorado", spoof.rows[0].org_id === uid("orgA"), `veio ${spoof.rows[0].org_id}`);
+
+await expectRows("corretor não apaga relatório (só liderança)", "b1", `delete from reports where member_id = '${uid("m_b1")}' returning id`, 0);
+await expectRows("sem sessão não apaga nada (falha do sistema antigo)", null, "delete from reports returning id", 0);
+await expectRows("gerente vê relatórios só da equipe", "mgr1", "select id from reports", 3);
+await expectRows("corretor 3 não vê relatórios da equipe 1", "b3", "select id from reports", 1);
+await expectRows("gerente apaga relatório do seu corretor", "mgr1", `delete from reports where member_id = '${uid("m_b1")}' and report_slot = '18:00' returning id`, 1);
+
+await expectRows("corretor marca presença", "b1", `insert into daily_status (member_id, status_date, online) values ('${uid("m_b1")}', '${today}', true) returning member_id`, 1);
+await expectError("corretor não marca presença de colega", "b1", `insert into daily_status (member_id, status_date) values ('${uid("m_b2")}', '${today}')`, /row-level security/);
+
+// ---- Organização e cobrança -------------------------------------------
+console.log("\nOrganização e cobrança");
+await expectError("dona não muda o próprio status de pagamento", "ownerA", "update organizations set status = 'active'", /permission denied/);
+await expectError("dona não aumenta assentos sem pagar", "ownerA", "update organizations set seats = 999", /permission denied/);
+await expectRows("dona renomeia a imobiliária", "ownerA", "update organizations set name = 'Imob A Nova' returning id", 1);
+await expectRows("corretor não renomeia a imobiliária", "b1", "update organizations set name = 'Hack' returning id", 0);
+await expectError("corretor não se promove", "b1", `update members set role = 'owner' where id = '${uid("m_b1")}'`, /permission denied/);
+await expectError("corretor não cria membros", "b1", `insert into members (org_id, user_id, full_name, role) values ('${uid("orgA")}', '${uid("b1")}', 'x', 'owner')`, /permission denied/);
+
+await db.exec(`
+  insert into auth.users (id) values ('${uid("bC")}');
+  insert into divisions (id, org_id, name) values ('${uid("dC")}', '${uid("orgC")}', 'Diretoria C');
+  insert into teams (id, org_id, division_id, name) values ('${uid("tC")}', '${uid("orgC")}', '${uid("dC")}', 'Equipe C');
+  insert into members (org_id, user_id, full_name, role, team_id) values ('${uid("orgC")}', '${uid("bC")}', 'Corretor C', 'broker', '${uid("tC")}');
+`);
+await expectError("teste expirado fica somente leitura", "bC", `insert into reports (member_id, report_date, report_slot) select id, '${today}', '12:00' from members`, /row-level security/);
+
+// ---- Demais tabelas ----------------------------------------------------
+console.log("\nMetas, agenda, dispositivos e auditoria");
+await expectError("corretor não define a própria meta", "b1", `insert into goals (member_id, month, metric, target) values ('${uid("m_b1")}', '2026-10-01', 'sales', 5)`, /row-level security/);
+await expectRows("gerente define meta do corretor", "mgr1", `insert into goals (member_id, month, metric, target) values ('${uid("m_b1")}', '2026-10-01', 'sales', 5) returning id`, 1);
+await expectRows("corretor agenda visita", "b1", `insert into appointments (member_id, client_name, client_phone, scheduled_at) values ('${uid("m_b1")}', 'Cliente', '(11) 99999-0000', now()) returning id`, 1);
+await expectError("telefone com caracteres inválidos", "b1", `insert into appointments (member_id, client_name, client_phone, scheduled_at) values ('${uid("m_b1")}', 'Cliente', '<script>', now())`, /check constraint/);
+await expectRows("gerente da outra equipe não vê a agenda", "mgr2", "select id from appointments", 0);
+await expectError("não registra dispositivo para outro usuário", "b1", `insert into push_subscriptions (user_id, endpoint, p256dh, auth_key) values ('${uid("b2")}', 'https://push.example/x', 'k', 'a')`, /row-level security/);
+await expectRows("registra o próprio dispositivo", "b1", `insert into push_subscriptions (endpoint, p256dh, auth_key) values ('https://push.example/y', 'k', 'a') returning id`, 1);
+await expectRows("corretor não lê a auditoria", "b1", "select id from audit_log", 0);
+const audit = await as("ownerA", "select id from audit_log");
+check("dona lê a auditoria", audit.rows.length > 0, `veio ${audit.rows.length}`);
+await expectError("cliente não acessa o log de notificações", "b1", "select * from notification_log", /permission denied/);
+await expectError("cliente não acessa eventos de cobrança", "ownerA", "select * from billing_events", /permission denied/);
+await expectError("funções internas não ficam expostas ao anon", null, "select private.my_org_id()", /permission denied/, [], "anon");
+
+console.log(`\n${passed} passaram, ${failed} falharam`);
+process.exit(failed ? 1 : 0);

@@ -1,26 +1,166 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* As cores vivem em tokens. Tema claro: azul-marinho e branco. Tema
+   escuro: preto com superfícies em azul-marinho. Sem escolha salva, segue
+   o sistema; data-theme no <html> força um dos dois. */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #eef2f8;
+  --surface-3: #e1e7f1;
+  --line: #e2e7f0;
+  --line-strong: #c8d1e0;
+  --ink: #0b1b36;
+  --ink-2: #2b3a56;
+  --muted: #5d6983;
+  --brand: #0f2a5f;
+  --brand-ink: #ffffff;
+  --brand-text: #1a3a7c;
+  --brand-soft: #e6edfa;
+  --danger: #c62828;
+  --danger-soft: #fde8e8;
+  --warn: #9a5b00;
+  --warn-soft: #fdf1dc;
+  --shadow: 0 1px 2px rgb(11 27 54 / 0.04), 0 8px 24px -12px rgb(11 27 54 / 0.14);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --bg: #02050b;
+    --surface: #0a1428;
+    --surface-2: #0f1c37;
+    --surface-3: #172748;
+    --line: #15233f;
+    --line-strong: #223761;
+    --ink: #e9eef8;
+    --ink-2: #bcc8de;
+    --muted: #8291ae;
+    --brand: #2556c9;
+    --brand-ink: #ffffff;
+    --brand-text: #8fb2ff;
+    --brand-soft: #112450;
+    --danger: #ff6b6b;
+    --danger-soft: #2b0f16;
+    --warn: #ffb547;
+    --warn-soft: #2a1f0c;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px -16px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
   }
 }
 
+:root[data-theme="dark"] {
+  --bg: #02050b;
+  --surface: #0a1428;
+  --surface-2: #0f1c37;
+  --surface-3: #172748;
+  --line: #15233f;
+  --line-strong: #223761;
+  --ink: #e9eef8;
+  --ink-2: #bcc8de;
+  --muted: #8291ae;
+  --brand: #2556c9;
+  --brand-ink: #ffffff;
+  --brand-text: #8fb2ff;
+  --brand-soft: #112450;
+  --danger: #ff6b6b;
+  --danger-soft: #2b0f16;
+  --warn: #ffb547;
+  --warn-soft: #2a1f0c;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px -16px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-text: var(--brand-text);
+  --color-brand-soft: var(--brand-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --shadow-card: var(--shadow);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-bricolage);
+  --radius-card: 1.25rem;
+}
+
+html {
+  background: var(--bg);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-text);
+  outline-offset: 2px;
+}
+
+/* Linha de pulso que percorre a marca. */
+@keyframes pulse-trace {
+  from { stroke-dashoffset: 120; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes live-dot {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand-text) 60%, transparent); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Destaque rápido quando um dado chega ao vivo. */
+@keyframes flash {
+  0% { background-color: color-mix(in oklab, var(--brand-text) 22%, transparent); }
+  100% { background-color: transparent; }
+}
+
+@utility animate-trace {
+  stroke-dasharray: 120;
+  animation: pulse-trace 1.6s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+@utility animate-live {
+  animation: live-dot 2s ease-in-out infinite;
+}
+
+@utility animate-rise {
+  animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@utility animate-flash {
+  animation: flash 1.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
