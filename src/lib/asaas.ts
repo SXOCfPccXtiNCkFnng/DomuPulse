@@ -88,6 +88,6 @@ export async function firstPendingPayment(subscriptionId: string) {
 export type AsaasWebhook = {
   id: string;
   event: string;
-  payment?: { id: string; subscription?: string | null; externalReference?: string | null; value: number };
+  payment?: { id: string; subscription?: string | null; externalReference?: string | null; value: number; billingType?: string };
   subscription?: { id: string; externalReference?: string | null };
 };

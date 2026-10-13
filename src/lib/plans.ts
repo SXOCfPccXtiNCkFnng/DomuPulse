@@ -3,10 +3,8 @@ export const PRICE_PER_SEAT_CENTS = 3900;
 export const MIN_SEATS = 5;
 export const MAX_SEATS = 500;
 
-export function monthlyPriceCents(seats: number) {
-  return seats * PRICE_PER_SEAT_CENTS;
+// Valor mensal com o desconto do cupom, quando houver.
+export function monthlyPriceCents(seats: number, percentOff = 0) {
+  return Math.round(seats * PRICE_PER_SEAT_CENTS * (1 - percentOff / 100));
 }
 
-export function seatsForPayment(valueCents: number) {
-  return Math.max(MIN_SEATS, Math.min(MAX_SEATS, Math.floor(valueCents / PRICE_PER_SEAT_CENTS)));
-}

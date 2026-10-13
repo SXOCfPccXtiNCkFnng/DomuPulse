@@ -96,7 +96,10 @@ export default function Home() {
 
       <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-sm text-muted sm:px-8">
         <span>Domu Pulse, um produto DomuTech</span>
-        <span>pulse.domutech.digital</span>
+        <span className="flex gap-5">
+          <Link href="/termos" className="hover:text-ink">Termos de Uso</Link>
+          <Link href="/privacidade" className="hover:text-ink">Privacidade</Link>
+        </span>
       </footer>
     </div>
   );

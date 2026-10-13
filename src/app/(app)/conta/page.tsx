@@ -5,6 +5,7 @@ import { getCurrentMember, ROLE_LABEL, type OrgStatus } from "@/lib/auth";
 import { vapidPublicKey } from "@/lib/env";
 import { formatMoney } from "@/lib/metrics";
 import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
 import { InstallGuide, PushSettings, SubscriptionForm } from "./client";
@@ -21,7 +22,12 @@ const STATUS_LABEL: Record<OrgStatus, { label: string; tone: "brand" | "warn" | 
 export default async function ContaPage() {
   const me = await getCurrentMember();
   const supabase = await createClient();
-  const { data: org } = await supabase.from("organizations").select("seats").single();
+  const { data: org } = await supabase.from("organizations").select("seats, coupon_code").single();
+  // A tabela de cupons é só do servidor: o percentual é lido com a chave de serviço.
+  const { data: coupon } =
+    me.role === "owner" && org?.coupon_code
+      ? await createAdminClient().from("coupons").select("code, percent_off").eq("code", org.coupon_code).maybeSingle()
+      : { data: null };
   const status = STATUS_LABEL[me.org.status];
 
   return (
@@ -66,6 +72,7 @@ export default async function ContaPage() {
             pricePerSeatCents={PRICE_PER_SEAT_CENTS}
             defaultSeats={Math.max(MIN_SEATS, org?.seats ?? MIN_SEATS)}
             minSeats={MIN_SEATS}
+            appliedCoupon={coupon ? { code: coupon.code, percentOff: Number(coupon.percent_off) } : null}
           />
         </Card>
       ) : null}

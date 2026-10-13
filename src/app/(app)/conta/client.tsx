@@ -189,14 +189,21 @@ export function SubscriptionForm({
   pricePerSeatCents,
   defaultSeats,
   minSeats,
+  appliedCoupon,
 }: {
   pricePerSeat: string;
   pricePerSeatCents: number;
   defaultSeats: number;
   minSeats: number;
+  appliedCoupon: { code: string; percentOff: number } | null;
 }) {
   const [state, action, pending] = useActionState(startSubscription, {} as BillingState);
   const [seats, setSeats] = useState(defaultSeats);
+  // Controlados: continuam preenchidos se o servidor devolver um erro.
+  const [document, setDocument] = useState("");
+  const [coupon, setCoupon] = useState("");
+  const gross = Math.max(minSeats, seats || 0) * pricePerSeatCents;
+  const total = appliedCoupon ? Math.round(gross * (1 - appliedCoupon.percentOff / 100)) : gross;
 
   useEffect(() => {
     if (state.url) window.location.assign(state.url);
@@ -223,14 +230,34 @@ export function SubscriptionForm({
           />
         </Field>
         <Field label="CPF ou CNPJ" error={state.fieldErrors?.cpfCnpj}>
-          <Input name="cpfCnpj" inputMode="numeric" autoComplete="off" required />
+          <Input
+            name="cpfCnpj"
+            inputMode="numeric"
+            autoComplete="off"
+            required
+            value={document}
+            onChange={(e) => setDocument(e.target.value.replace(/[^\d./-]/g, "").slice(0, 18))}
+          />
         </Field>
       </div>
+      {appliedCoupon ? (
+        <p className="text-sm text-ink-2">
+          Cupom <strong>{appliedCoupon.code}</strong> aplicado: {appliedCoupon.percentOff}% de desconto.
+        </p>
+      ) : (
+        <Field label="Cupom de desconto" hint="Opcional" error={state.fieldErrors?.coupon}>
+          <Input
+            name="coupon"
+            autoComplete="off"
+            value={coupon}
+            onChange={(e) => setCoupon(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 30))}
+            className="uppercase"
+          />
+        </Field>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3">
-        <span className="text-sm text-muted">Total mensal</span>
-        <span className="font-display text-xl font-semibold tabular-nums">
-          {formatMoney(Math.max(minSeats, seats || 0) * pricePerSeatCents)}
-        </span>
+        <span className="text-sm text-muted">{coupon && !appliedCoupon ? "Total mensal, antes do cupom" : "Total mensal"}</span>
+        <span className="font-display text-xl font-semibold tabular-nums">{formatMoney(total)}</span>
       </div>
       <Button type="submit" disabled={pending}>
         {pending ? "Gerando fatura..." : "Assinar com Pix, boleto ou cartão"}

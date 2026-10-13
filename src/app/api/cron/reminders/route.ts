@@ -1,6 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
-import { cronSecret } from "@/lib/env.server";
+import { isCronRequest } from "@/lib/cron-auth";
+import { recordHeartbeat } from "@/lib/heartbeat";
+import { describeError, logger } from "@/lib/logger";
 import { sendToUsers } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { minutesNowIn, normalizeSlot, SLOT_LATE_AFTER, SLOT_OPENS_BEFORE, slotLabel, slotMinutes, todayIn } from "@/lib/time";
@@ -18,23 +19,25 @@ const WINDOWS: Record<Exclude<Kind, "team_overdue">, [number, number]> = {
   overdue: [SLOT_LATE_AFTER, 60],
 };
 
-function authorized(request: NextRequest) {
-  let secret: string;
+// O cron-job.org chama com GET por padrão; POST também é aceito.
+export async function GET(request: NextRequest) {
+  if (!isCronRequest(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   try {
-    secret = cronSecret();
-  } catch {
-    // Sem segredo configurado, ninguém passa.
-    return false;
+    const sent = await run();
+    await recordHeartbeat("cron.reminders", { ok: true, result: { sent } });
+    return NextResponse.json({ ok: true, sent });
+  } catch (error) {
+    const message = describeError(error);
+    logger.error("cron.reminders", { message });
+    await recordHeartbeat("cron.reminders", { ok: false, error: message });
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
-  const header = request.headers.get("authorization") ?? "";
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const received = Buffer.from(header);
-  return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
-export async function POST(request: NextRequest) {
-  if (!authorized(request)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+export const POST = GET;
 
+async function run() {
   const admin = createAdminClient();
   const { data: orgs } = await admin
     .from("organizations")
@@ -122,7 +125,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, sent });
+  return sent;
 }
 
 async function notifyOnce(

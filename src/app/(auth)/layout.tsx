@@ -21,7 +21,11 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <main className="flex flex-1 items-center py-10">
           <div className="w-full max-w-[400px] animate-rise">{children}</div>
         </main>
-        <p className="text-xs text-muted">Domu Pulse, um produto DomuTech</p>
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          <span>Domu Pulse, um produto DomuTech</span>
+          <Link href="/termos" className="hover:text-ink">Termos de Uso</Link>
+          <Link href="/privacidade" className="hover:text-ink">Privacidade</Link>
+        </p>
       </div>
 
       <aside

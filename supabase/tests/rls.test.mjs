@@ -174,5 +174,38 @@ await expectError("cliente não acessa o log de notificações", "b1", "select *
 await expectError("cliente não acessa eventos de cobrança", "ownerA", "select * from billing_events", /permission denied/);
 await expectError("funções internas não ficam expostas ao anon", null, "select private.my_org_id()", /permission denied/, [], "anon");
 
+// ---- Plataforma (só o servidor) ---------------------------------------
+console.log("\nPlataforma");
+for (const table of ["rate_limits", "ops_alerts", "system_heartbeats", "coupons"]) {
+  await expectError(`cliente não lê ${table}`, "ownerA", `select * from ${table}`, /permission denied/);
+}
+await expectError("cliente não chama o limitador", "ownerA", "select * from hit_rate_limit('x', 60)", /permission denied/);
+await expectError("anon não resgata cupom", null, "select redeem_coupon('X')", /permission denied/, [], "anon");
+await expectError("cliente não registra erro", "ownerA", "select record_ops_event('f','s','error','m',null,'{}',1)", /permission denied/);
+await expectError("dona não aplica cupom direto na organização", "ownerA", "update organizations set coupon_code = 'X'", /permission denied/);
+await expectError("membro não grava o próprio aceite dos termos", "b1", "update members set terms_accepted_at = now()", /permission denied/);
+
+const hits = [];
+for (let i = 0; i < 3; i++) hits.push((await as(null, "select hits from hit_rate_limit('login:1.2.3.4', 60)", [], "service_role")).rows[0].hits);
+check("limitador conta as tentativas em sequência", JSON.stringify(hits) === "[1,2,3]", `veio ${hits}`);
+
+const ev = async () => (await as(null, "select record_ops_event('fp1','cron','error','falhou',null,'{}',1) as novo", [], "service_role")).rows[0].novo;
+const firstEv = await ev();
+const secondEv = await ev();
+const grouped = await as(null, "select occurrences from ops_alerts where fingerprint = 'fp1'", [], "service_role");
+check("erro novo avisa, repetição só soma", firstEv === true && secondEv === false && grouped.rows[0].occurrences === 2, `${firstEv} ${secondEv} ${JSON.stringify(grouped.rows)}`);
+await as(null, "update ops_alerts set resolved_at = now() where fingerprint = 'fp1'", [], "service_role");
+check("erro resolvido que volta abre de novo", (await ev()) === true);
+
+await as(null, "select record_heartbeat('cron.x', true, '{}', null)", [], "service_role");
+await as(null, "select record_heartbeat('cron.x', false, '{}', 'caiu')", [], "service_role");
+const hb = (await as(null, "select run_count, last_error, last_ok_at is not null as ok_before from system_heartbeats where name = 'cron.x'", [], "service_role")).rows[0];
+check("batimento guarda a falha sem perder o último sucesso", hb.run_count === 2 && hb.last_error === "caiu" && hb.ok_before, JSON.stringify(hb));
+
+await as(null, "insert into coupons (code, percent_off, max_redemptions) values ('PILOTO', 20, 1)", [], "service_role");
+const r1 = (await as(null, "select redeem_coupon('piloto') as p", [], "service_role")).rows[0].p;
+const r2 = (await as(null, "select redeem_coupon('PILOTO') as p", [], "service_role")).rows[0].p;
+check("cupom respeita o limite de usos", Number(r1) === 20 && r2 === null, `${r1} ${r2}`);
+
 console.log(`\n${passed} passaram, ${failed} falharam`);
 process.exit(failed ? 1 : 0);

@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentMember, ROLE_RANK as RANK, type CurrentMember, type Role } from "@/lib/auth";
-import { publicEnv } from "@/lib/env";
+import { getCurrentMember, ROLE_LABEL, ROLE_RANK as RANK, type CurrentMember, type Role } from "@/lib/auth";
+import { siteUrl } from "@/lib/email";
+import { sendInviteEmail } from "@/lib/email-templates";
+import { describeError, logger } from "@/lib/logger";
+import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { emailSchema, fieldErrors, nameSchema, type FormState } from "@/lib/validation";
@@ -32,6 +35,9 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
   const { fullName, email, role, scopeId } = parsed.data;
 
   if (RANK[role] <= RANK[me.role]) return { error: "Você só pode convidar cargos abaixo do seu." };
+
+  const limit = await rateLimit(`invite:user:${me.userId}`, 40, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec) };
 
   // O escopo é lido com o cliente do usuário: o RLS garante que a equipe ou
   // diretoria pertence à organização dele.
@@ -62,12 +68,17 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
     return { error: `Todos os ${org.seats} assentos do plano estão em uso. Desative alguém ou aumente o plano.` };
   }
 
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${publicEnv().siteUrl}/auth/confirm`,
-    data: { full_name: fullName },
+  // Cria o usuário e o link de convite sem o Supabase mandar e-mail: o
+  // convite sai pelo nosso e-mail, com a marca do Pulse.
+  const { data: invited, error: inviteError } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: { data: { full_name: fullName } },
   });
-  if (inviteError || !invited.user) {
+  const hash = invited?.properties?.hashed_token;
+  if (inviteError || !invited.user || !hash) {
     if (inviteError?.code === "email_exists") return { fieldErrors: { email: "Este e-mail já tem conta no Pulse." } };
+    logger.error("team.invite_link", { message: describeError(inviteError), orgId: me.org.id });
     return { error: "Não foi possível enviar o convite. Tente novamente." };
   }
 
@@ -81,7 +92,22 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
   });
   if (memberError) {
     await admin.auth.admin.deleteUser(invited.user.id);
+    logger.error("team.invite_member", { message: describeError(memberError), orgId: me.org.id });
     return { error: "Não foi possível cadastrar o membro. Tente novamente." };
+  }
+
+  const sent = await sendInviteEmail({
+    to: email,
+    fullName,
+    orgName: me.org.name,
+    roleLabel: ROLE_LABEL[role],
+    invitedBy: me.fullName,
+    link: siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=invite`),
+  });
+  if (!sent.ok) {
+    // Sem e-mail o convite não serve: desfaz para poder tentar de novo.
+    await admin.auth.admin.deleteUser(invited.user.id);
+    return { error: "Não foi possível enviar o e-mail de convite. Tente novamente em instantes." };
   }
 
   revalidatePath("/equipe");

@@ -12,8 +12,9 @@ Endereço de produção: `pulse.domutech.digital`
 | Estilo | Tailwind CSS 4 com design tokens próprios (tema claro e escuro) |
 | Dados e login | Supabase: Postgres com RLS, Auth e Realtime |
 | Notificações | Web Push (VAPID) com service worker próprio |
-| Agendador | `pg_cron` + `pg_net` no Supabase chamando `/api/cron/reminders` |
-| Cobrança | Asaas (assinatura mensal por assento, Pix, boleto ou cartão) |
+| E-mail | Resend, com modelo visual próprio |
+| Agendador | cron-job.org chamando as rotas `/api/cron/*` |
+| Cobrança | Asaas (assinatura mensal por assento, Pix, boleto ou cartão, com cupons) |
 | Hospedagem | Vercel |
 
 ## Segurança: como funciona
@@ -21,15 +22,26 @@ Endereço de produção: `pulse.domutech.digital`
 1. **Toda autorização vive no banco.** Cada tabela tem RLS. O front só pede; o Postgres decide o que cada cargo vê e altera. As regras ficam em `supabase/migrations`.
 2. **Hierarquia:** administrador (owner) > superintendente (director) > gerente (manager) > corretor (broker). Cada nível vê e edita apenas quem está abaixo dele, dentro do próprio escopo.
 3. **Isolamento entre imobiliárias:** `org_id` é sempre derivado do membro por trigger, nunca do que o cliente envia.
-4. **Campos sensíveis bloqueados por coluna:** o administrador não consegue alterar plano, status de pagamento nem assentos pelo cliente. Só o webhook do Asaas faz isso.
+4. **Campos sensíveis bloqueados por coluna:** o administrador não consegue alterar plano, status de pagamento, assentos nem cupom pelo cliente.
 5. **Assinatura vencida = somente leitura,** aplicado no próprio RLS.
-6. **Login pelo Supabase Auth:** senha forte obrigatória, e-mail de boas-vindas no cadastro, recuperação de senha, convite por e-mail e bloqueio do usuário ao desativar.
-7. **Chave secreta só no servidor** (`SUPABASE_SECRET_KEY`), usada apenas depois de verificar a permissão de quem chamou.
-8. **Cabeçalhos de segurança** (CSP, HSTS, X-Frame-Options e outros) em `next.config.ts`.
-9. **Webhook e agendador autenticados** com segredo comparado em tempo constante, e webhook idempotente.
-10. **Auditoria:** alterações em membros, relatórios, agenda, metas e comissões ficam em `audit_log`, visível ao administrador.
+6. **Login:** senha com 10 caracteres, maiúscula, minúscula, número e símbolo; nome e sobrenome; WhatsApp com DDD validado.
+7. **Limite de tentativas** no login, cadastro, recuperação de senha e convites, contado no banco (vale para todos os servidores).
+8. **Aceite dos termos registrado:** data, versão e IP de quem aceitou (cadastro e primeiro acesso por convite).
+9. **Chave secreta só no servidor** (`SUPABASE_SECRET_KEY`), usada apenas depois de verificar a permissão de quem chamou.
+10. **Cabeçalhos de segurança** (CSP, HSTS, X-Frame-Options e outros) em `next.config.ts`.
+11. **Webhook e crons autenticados** com segredo comparado em tempo constante; webhook idempotente.
+12. **Auditoria:** alterações em membros, relatórios, agenda, metas, comissões e ações do painel interno ficam em `audit_log`.
 
-Os testes em `supabase/tests/rls.test.mjs` tentam quebrar essas regras (46 cenários). Rode com `npm run test:db` sempre que mexer no banco.
+## Testes
+
+| Comando | O que faz |
+|---|---|
+| `npm test` | Testes de unidade: senha, nome, telefone, CPF e CNPJ, redirecionamento, fuso, ranking, preço, registro de erros |
+| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (60 cenários) |
+| `npm run typecheck` | Tipos do TypeScript |
+| `npm run lint` | Lint |
+
+O GitHub roda tudo isso e o build a cada envio para `main` (`.github/workflows/ci.yml`).
 
 ## Rodando localmente
 
@@ -39,61 +51,99 @@ cp .env.example .env.local   # preencha as variáveis
 npm run dev
 ```
 
-Para testar notificações no computador é preciso HTTPS: `npx next dev --experimental-https`.
+Sem o Resend configurado, os e-mails aparecem no terminal (com os links de convite e senha), para testar localmente. Para testar notificações no computador é preciso HTTPS: `npx next dev --experimental-https`.
 
 ## Configurando o Supabase
 
 1. Crie um projeto em supabase.com (região São Paulo).
-2. Aplique o schema: `npx supabase link --project-ref SEU_REF` e depois `npx supabase db push`. Ou cole o arquivo de `supabase/migrations` no SQL Editor.
+2. Aplique o schema: `npx supabase link --project-ref SEU_REF` e depois `npx supabase db push`. Ou cole os arquivos de `supabase/migrations`, em ordem, no SQL Editor.
 3. Em **Authentication > URL Configuration**:
    - Site URL: `https://pulse.domutech.digital`
    - Redirect URLs: `https://pulse.domutech.digital/auth/confirm`
-4. Em **Authentication > Providers > Email**: senha com no mínimo 10 caracteres, exigindo maiúsculas, minúsculas e números. O cadastro da imobiliária não pede confirmação de e-mail: a conta é criada já confirmada pelo servidor.
-5. Em **Authentication > Email Templates**, troque o link de cada modelo para passar pelo app:
-   - Invite user: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
-   - Reset password: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
-6. Configure um SMTP próprio em **Authentication > SMTP** (o Resend serve: host smtp.resend.com, usuário resend, senha = a API key). O SMTP padrão do Supabase tem limite baixo de envios e é usado nos convites e na recuperação de senha.
-7. Ative o captcha (Cloudflare Turnstile) em **Authentication > Attack Protection** para proteger o login. O cadastro é feito pelo servidor e não passa por esse captcha; hoje ele tem só um campo armadilha contra robôs, então vale adicionar um captcha próprio no formulário antes de divulgar o cadastro em massa.
+4. Em **Authentication > Providers > Email**: senha com no mínimo 10 caracteres, exigindo minúsculas, maiúsculas, números e símbolos.
+5. Ative o captcha (Cloudflare Turnstile) em **Authentication > Attack Protection** se quiser uma camada extra no login.
 
-## E-mail de boas-vindas
+Não é preciso mexer nos modelos de e-mail nem no SMTP do Supabase: cadastro, convite e recuperação de senha saem pelo Resend, com a marca do Pulse.
 
-Ao criar a conta, a pessoa entra direto no painel e recebe um e-mail de parabéns, enviado pelo [Resend](https://resend.com) em segundo plano.
+## E-mails
 
-1. Crie a conta no Resend e verifique o domínio domutech.digital (registros DNS que o próprio Resend mostra).
+| E-mail | Quando |
+|---|---|
+| Boas-vindas | Ao criar a conta da imobiliária |
+| Convite | Quando a liderança convida alguém (link vale 24 h) |
+| Nova senha | Recuperação de senha (link vale 1 h) |
+| Teste acabando | 3 dias antes do fim do teste |
+| Teste encerrado | No dia em que o teste acaba |
+| Pagamento confirmado | Quando o Asaas confirma o pagamento |
+| Fatura em aberto | Quando a fatura vence sem pagamento |
+| Alerta de erro | Para a equipe DomuTech, quando surge um erro novo |
+
+1. Crie a conta no [Resend](https://resend.com) e verifique o domínio domutech.digital (registros DNS que o Resend mostra).
 2. Crie uma API key e preencha `RESEND_API_KEY` e `EMAIL_FROM` (ex.: `Domu Pulse <contato@domutech.digital>`).
-3. Sem essas variáveis o cadastro funciona normalmente, só não envia o e-mail.
 
-O modelo do e-mail fica em `src/lib/email.ts`.
+Os modelos ficam em `src/lib/email-templates.ts`, e a casca visual em `src/lib/email.ts`.
+
+## Crons (cron-job.org)
+
+O plano gratuito da Vercel só roda cron uma vez por dia, então as rotinas ficam no [cron-job.org](https://cron-job.org). Crie uma tarefa para cada rota, todas com o cabeçalho `Authorization: Bearer SEU_CRON_SECRET`:
+
+| URL | Frequência | O que faz |
+|---|---|---|
+| `https://pulse.domutech.digital/api/cron/reminders` | a cada 5 minutos | Lembretes de relatório no celular |
+| `https://pulse.domutech.digital/api/cron/billing` | 1 vez por dia, de manhã | Avisos de teste acabando e encerrado |
+| `https://pulse.domutech.digital/api/cron/cleanup` | 1 vez por dia, de madrugada | Apaga registros técnicos antigos |
+
+Cada execução fica registrada. Se uma tarefa parar, a aba Saúde do sistema do painel interno mostra.
+
+Gere o segredo com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 
 ## Notificações (Web Push)
 
 1. Gere as chaves: `npx web-push generate-vapid-keys`
 2. Coloque a pública em `NEXT_PUBLIC_VAPID_PUBLIC_KEY` e a privada em `VAPID_PRIVATE_KEY`.
-3. Depois do deploy, rode `supabase/cron.sql` no SQL Editor (cria o agendamento a cada 5 minutos, com a URL e o segredo guardados no Vault).
-
-Lembretes enviados:
 
 | Quando | Para quem | Mensagem |
 |---|---|---|
-| 1h antes do primeiro horário | Corretores sem presença marcada | Marcar presença |
+| 1 h antes do primeiro horário | Corretores sem presença marcada | Marcar presença |
 | 10 min antes de cada horário | Corretores trabalhando que ainda não enviaram | Lembrete do relatório |
 | 15 min depois do horário | Corretor atrasado | Relatório pendente |
 | 15 min depois do horário | Gerente da equipe | Resumo de quem está pendente |
 
 No iPhone, notificações só funcionam com o app instalado na tela de início (iOS 16.4 ou mais novo). A tela Conta guia esse passo.
 
+## Painel interno
+
+Em `/interno`, só para os e-mails listados em `PLATFORM_ADMIN_EMAILS`. Para qualquer outra pessoa, logada ou não, a página responde "não encontrada".
+
+| Aba | O que mostra |
+|---|---|
+| Visão geral | Receita mensal, imobiliárias por situação, pessoas ativas, relatórios do dia, testes acabando |
+| Saúde do sistema | Variáveis configuradas, migrações aplicadas e última execução de cada cron e do webhook |
+| Erros | Erros e avisos agrupados, com contador, detalhes e botão de resolvido |
+| Empresas | Lista com dono, assentos e último relatório; estender teste, liberar acesso e suspender |
+| Comercial | Cupons de desconto: criar, limitar usos, dar validade e desativar |
+
+Os erros do servidor chegam sozinhos: tudo que passa por `logger.error` vai para o painel, e um erro novo gera um e-mail para a equipe.
+
 ## Asaas
 
 1. Crie a chave de API (comece pelo sandbox) e coloque em `ASAAS_API_KEY`, com `ASAAS_ENV=sandbox`.
 2. Em **Integrações > Webhooks**, cadastre `https://pulse.domutech.digital/api/webhooks/asaas`, defina um token de autenticação (mínimo 32 caracteres) e coloque o mesmo valor em `ASAAS_WEBHOOK_TOKEN`.
 3. Eventos usados: `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `SUBSCRIPTION_DELETED`, `SUBSCRIPTION_INACTIVATED`.
-4. O preço por assento fica em `src/lib/plans.ts`.
+4. O preço por assento fica em `src/lib/plans.ts`. Os assentos pedidos só passam a valer quando o pagamento confirma.
+
+## Termos e privacidade
+
+Páginas em `/termos` e `/privacidade`. Ao alterar o texto, troque a data em `LEGAL_DOCS_VERSION` (`src/lib/legal.ts`): é ela que fica registrada no aceite de cada pessoa. Vale uma revisão por advogado antes de vender.
 
 ## Deploy na Vercel
 
 1. Importe o repositório na Vercel.
 2. Cadastre todas as variáveis de `.env.example` em **Settings > Environment Variables**.
 3. Adicione o domínio `pulse.domutech.digital` e crie o CNAME no DNS apontando para a Vercel.
+4. Crie as tarefas no cron-job.org.
+
+O plano Hobby da Vercel é para uso não comercial. Para validar está ótimo; ao começar a cobrar clientes, migre para o plano Pro.
 
 ## Estrutura
 
@@ -102,15 +152,17 @@ src/
   app/
     (auth)/          entrar, criar conta, recuperar e definir senha
     (app)/           painel, agenda, equipe, conta (exigem login)
-    api/cron/        lembretes chamados pelo pg_cron
+    interno/         painel interno da DomuTech
+    termos/          Termos de Uso
+    privacidade/     Política de Privacidade
+    api/cron/        rotinas chamadas pelo cron-job.org
     api/webhooks/    webhook do Asaas
     auth/            links de convite e senha, e saída
   components/        interface (ui/ tem as peças base)
-  lib/               acesso a dados, fuso horário, métricas, push, Asaas
+  lib/               dados, e-mail, logger, limite de tentativas, fuso, métricas, push, Asaas
   proxy.ts           renovação de sessão e redirecionamentos
 supabase/
-  migrations/        schema, RLS e triggers
+  migrations/        schema, RLS, triggers e recursos de plataforma
   tests/             testes de segurança do banco
-  cron.sql           agendamento dos lembretes
 public/sw.js         service worker (push)
 ```

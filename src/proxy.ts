@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isPlatformAdminEmail } from "@/lib/platform-admins";
 
 const APP_ROUTES = ["/painel", "/agenda", "/equipe", "/conta"];
 const AUTH_ROUTES = ["/entrar", "/criar-conta"];
@@ -47,6 +48,12 @@ export async function proxy(request: NextRequest) {
     response.cookies.getAll().forEach((c) => redirect.cookies.set(c));
     return redirect;
   };
+
+  // Painel interno: quem não está na lista recebe um 404 de verdade, antes de
+  // qualquer coisa da página ser enviada. Nem o código HTTP revela a rota.
+  if (matches(path, ["/interno"]) && !isPlatformAdminEmail(data?.claims?.email)) {
+    return NextResponse.rewrite(new URL("/_nao-encontrado", request.url), { status: 404 });
+  }
 
   if (!signedIn && matches(path, APP_ROUTES)) return redirectTo("/entrar");
   if (signedIn && matches(path, AUTH_ROUTES)) return redirectTo("/painel");
