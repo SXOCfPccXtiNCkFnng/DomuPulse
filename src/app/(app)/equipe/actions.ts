@@ -176,3 +176,163 @@ export async function createTeam(_: FormState, formData: FormData): Promise<Form
   revalidatePath("/equipe");
   return { success: "Equipe criada." };
 }
+
+// --------------------------------------------------------------------------
+// Gestão da equipe
+// --------------------------------------------------------------------------
+
+/**
+ * Quem chama lidera o alvo? Lido com o cliente do usuário: se o RLS deixa
+ * ver e o cargo do alvo é abaixo do seu, lidera.
+ */
+async function ledTarget(me: CurrentMember, memberId: string) {
+  if (!z.uuid().safeParse(memberId).success || memberId === me.id) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("members")
+    .select("id, user_id, role, team_id, division_id, full_name, active, terms_accepted_at")
+    .eq("id", memberId)
+    .maybeSingle();
+  if (!data || RANK[data.role as Role] <= RANK[me.role]) return null;
+  return data;
+}
+
+async function auditMember(actor: string, orgId: string, memberId: string, action: string, data: Record<string, unknown>) {
+  // Ações com a chave de serviço não têm usuário no banco: o autor vai explícito.
+  await createAdminClient().from("audit_log").insert({
+    org_id: orgId,
+    actor,
+    table_name: "members",
+    record_id: memberId,
+    action,
+    new_data: data,
+  });
+}
+
+const memberSchema = z.object({
+  fullName: nameSchema,
+  role: z.enum(["director", "manager", "broker"]),
+  scopeId: z.uuid("Escolha onde a pessoa vai atuar."),
+});
+
+export async function updateMember(memberId: string, _: FormState, formData: FormData): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role === "broker") return { error: "Sem permissão." };
+  if (!orgWritable(me.org)) return READ_ONLY;
+
+  const target = await ledTarget(me, memberId);
+  if (!target) return { error: "Sem permissão para alterar este membro." };
+
+  const parsed = memberSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
+  const { fullName, role, scopeId } = parsed.data;
+  if (RANK[role] <= RANK[me.role]) return { fieldErrors: { role: "Você só pode atribuir cargos abaixo do seu." } };
+
+  // O novo lugar precisa estar dentro do escopo de quem altera.
+  const supabase = await createClient();
+  let update: Record<string, unknown>;
+  if (role === "director") {
+    if (me.role !== "owner") return { error: "Só o administrador define superintendentes." };
+    const { data } = await supabase.from("divisions").select("id").eq("id", scopeId).maybeSingle();
+    if (!data) return { fieldErrors: { scopeId: "Diretoria inválida." } };
+    update = { full_name: fullName, role, division_id: data.id, team_id: null };
+  } else {
+    const { data } = await supabase.from("teams").select("id, division_id").eq("id", scopeId).maybeSingle();
+    if (!data) return { fieldErrors: { scopeId: "Equipe inválida." } };
+    if (me.role === "director" && data.division_id !== me.divisionId) return { fieldErrors: { scopeId: "Essa equipe está fora da sua diretoria." } };
+    if (me.role === "manager" && data.id !== me.teamId) return { fieldErrors: { scopeId: "Você só pode manter a pessoa na sua equipe." } };
+    update = { full_name: fullName, role, team_id: data.id, division_id: data.division_id };
+  }
+
+  const { error } = await createAdminClient().from("members").update(update).eq("id", memberId).eq("org_id", me.org.id);
+  if (error) {
+    logger.error("team.update_member", { message: describeError(error), orgId: me.org.id });
+    return { error: "Não foi possível salvar. Tente novamente." };
+  }
+  await auditMember(me.userId, me.org.id, memberId, "update_member", update);
+
+  revalidatePath("/equipe");
+  return { success: "Alterações salvas." };
+}
+
+export async function resendInvite(memberId: string): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role === "broker") return { error: "Sem permissão." };
+  const target = await ledTarget(me, memberId);
+  if (!target) return { error: "Sem permissão." };
+  if (target.terms_accepted_at) return { error: "Essa pessoa já entrou no Pulse." };
+
+  const limit = await rateLimit(`invite:resend:${memberId}`, 3, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec) };
+
+  const admin = createAdminClient();
+  const { data: user } = await admin.auth.admin.getUserById(target.user_id);
+  const email = user.user?.email;
+  if (!email) return { error: "Convite sem e-mail. Desative e convide de novo." };
+
+  // Convite ainda não aceito: um novo link de acesso, que leva a criar a senha.
+  let type: "invite" | "magiclink" = "invite";
+  let link = await admin.auth.admin.generateLink({ type: "invite", email });
+  if (link.error) {
+    type = "magiclink";
+    link = await admin.auth.admin.generateLink({ type: "magiclink", email });
+  }
+  const hash = link.data?.properties?.hashed_token;
+  if (link.error || !hash) {
+    logger.error("team.resend_invite", { message: describeError(link.error), orgId: me.org.id });
+    return { error: "Não foi possível gerar o convite. Tente novamente." };
+  }
+
+  const sent = await sendInviteEmail({
+    to: email,
+    fullName: target.full_name,
+    orgName: me.org.name,
+    roleLabel: ROLE_LABEL[target.role as Role],
+    invitedBy: me.fullName,
+    link: siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=${type}&next=/definir-senha`),
+  });
+  if (!sent.ok) return { error: "Não foi possível enviar o e-mail. Tente novamente em instantes." };
+  return { success: `Convite reenviado para ${email}.` };
+}
+
+const teamNameSchema = z.string().trim().min(2, "Nome muito curto.").max(80, "Nome muito longo.");
+
+export async function renameTeam(teamId: string, _: FormState, formData: FormData): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role !== "owner" && me.role !== "director") return { error: "Sem permissão." };
+  const name = teamNameSchema.safeParse(formData.get("name"));
+  if (!name.success) return { fieldErrors: { name: name.error.issues[0].message } };
+
+  // Cliente do usuário: o RLS só deixa o administrador ou o superintendente da diretoria.
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("teams").update({ name: name.data }).eq("id", teamId).select("id");
+  if (error?.code === "23505") return { fieldErrors: { name: "Já existe uma equipe com esse nome." } };
+  if (error || !data?.length) return { error: "Sem permissão ou equipe inexistente." };
+  revalidatePath("/equipe");
+  return { success: "Equipe renomeada." };
+}
+
+export async function deleteTeam(teamId: string): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role !== "owner" && me.role !== "director") return { error: "Sem permissão." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("teams").delete().eq("id", teamId).select("id");
+  // 23503: ainda há membros (mesmo desativados) ligados à equipe.
+  if (error?.code === "23503") return { error: "Mova as pessoas desta equipe antes. Quem já fez parte dela continua ligado a ela." };
+  if (error || !data?.length) return { error: "Sem permissão ou equipe inexistente." };
+  revalidatePath("/equipe");
+  return { success: "Equipe excluída." };
+}
+
+export async function renameDivision(divisionId: string, _: FormState, formData: FormData): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role !== "owner") return { error: "Só o administrador renomeia diretorias." };
+  const name = teamNameSchema.safeParse(formData.get("name"));
+  if (!name.success) return { fieldErrors: { name: name.error.issues[0].message } };
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("divisions").update({ name: name.data }).eq("id", divisionId).select("id");
+  if (error?.code === "23505") return { fieldErrors: { name: "Já existe uma diretoria com esse nome." } };
+  if (error || !data?.length) return { error: "Sem permissão ou diretoria inexistente." };
+  revalidatePath("/equipe");
+  return { success: "Diretoria renomeada." };
+}

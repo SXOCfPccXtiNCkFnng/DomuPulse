@@ -2,6 +2,7 @@ import { CircleUser, LogOut } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { SideNav, TabBar } from "@/components/app-nav";
+import { NotificationBell } from "@/components/notification-bell";
 import { ThemeSwitcher, ThemeToggle } from "@/components/theme";
 import { Logo, PulseMark } from "@/components/ui/logo";
 import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
@@ -10,9 +11,14 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex print:hidden">
-        <Link href="/painel" className="px-2">
-          <Logo />
-        </Link>
+        <div className="flex items-center justify-between px-2">
+          <Link href="/painel">
+            <Logo />
+          </Link>
+          <Suspense>
+            <MemberBell align="left" />
+          </Suspense>
+        </div>
         <div className="mt-8 flex-1">
           <Suspense fallback={<NavSkeleton />}>
             <MemberSideNav />
@@ -30,6 +36,9 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
             <PulseMark className="size-8" />
           </Link>
           <span className="flex items-center gap-1">
+            <Suspense>
+              <MemberBell align="right" />
+            </Suspense>
             <ThemeToggle />
             <Link href="/conta" aria-label="Conta" className="grid size-9 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-ink">
               <CircleUser className="size-[18px]" />
@@ -52,6 +61,11 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       </Suspense>
     </div>
   );
+}
+
+async function MemberBell({ align }: { align: "left" | "right" }) {
+  const member = await getCurrentMember();
+  return <NotificationBell userId={member.userId} align={align} />;
 }
 
 async function MemberSideNav() {

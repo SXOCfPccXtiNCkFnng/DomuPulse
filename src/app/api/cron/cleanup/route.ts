@@ -22,14 +22,18 @@ export async function GET(request: NextRequest) {
       admin.from("rate_limits").delete({ count: "exact" }).lt("reset_at", before(1)),
       admin.from("notification_log").delete({ count: "exact" }).lt("sent_at", before(30)),
       admin.from("ops_alerts").delete({ count: "exact" }).lt("resolved_at", before(90)),
+      // Avisos lidos somem em 60 dias; não lidos, em 180.
+      admin.from("notifications").delete({ count: "exact" }).lt("read_at", before(60)),
+      admin.from("notifications").delete({ count: "exact" }).lt("created_at", before(180)),
     ]);
     const failed = results.find((r) => r.error);
     if (failed?.error) throw failed.error;
 
     const result = {
       rateLimits: results[0].count ?? 0,
-      notifications: results[1].count ?? 0,
+      pushLog: results[1].count ?? 0,
       resolvedAlerts: results[2].count ?? 0,
+      inAppNotices: (results[3].count ?? 0) + (results[4].count ?? 0),
     };
     await recordHeartbeat("cron.cleanup", { ok: true, result });
     return NextResponse.json({ ok: true, ...result });

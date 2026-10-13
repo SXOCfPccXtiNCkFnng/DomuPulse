@@ -3,6 +3,7 @@ import { isCronRequest } from "@/lib/cron-auth";
 import { sendTrialEndedEmail, sendTrialEndingEmail } from "@/lib/email-templates";
 import { recordHeartbeat } from "@/lib/heartbeat";
 import { describeError, logger } from "@/lib/logger";
+import { notifyRoles } from "@/lib/notify";
 import { orgOwnerContact } from "@/lib/org-owner";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -49,6 +50,12 @@ async function run() {
   if (e1) throw e1;
 
   for (const org of endingOrgs ?? []) {
+    await notifyRoles(org.id, ["owner"], {
+      kind: "trial_ending",
+      title: "Teste grátis acabando",
+      body: "Ative a assinatura para a equipe continuar sem interrupção.",
+      url: "/conta#assinatura",
+    });
     const owner = await orgOwnerContact(org.id);
     if (!owner) continue;
     const daysLeft = Math.max(1, Math.ceil((Date.parse(org.trial_ends_at) - now.getTime()) / 86_400_000));
@@ -67,6 +74,12 @@ async function run() {
   if (e2) throw e2;
 
   for (const org of endedOrgs ?? []) {
+    await notifyRoles(org.id, ["owner"], {
+      kind: "trial_ended",
+      title: "Teste grátis encerrado",
+      body: "Os dados seguem salvos. Ative a assinatura para voltar a lançar.",
+      url: "/conta#assinatura",
+    });
     const owner = await orgOwnerContact(org.id);
     if (!owner) continue;
     const sent = await sendTrialEndedEmail({ to: owner.email, fullName: owner.fullName, orgName: org.name });

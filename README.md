@@ -39,7 +39,7 @@ Endereço de produção: `pulse.domutech.digital`
 | Comando | O que faz |
 |---|---|
 | `npm test` | Testes de unidade: senha, nome, telefone, CPF e CNPJ, redirecionamento, fuso, ranking, preço, registro de erros |
-| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (71 cenários) |
+| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (83 cenários) |
 | `npm run typecheck` | Tipos do TypeScript |
 | `npm run lint` | Lint |
 
@@ -120,6 +120,24 @@ Gere o segredo com `node -e "console.log(require('crypto').randomBytes(32).toStr
 | 15 min depois do horário | Gerente da equipe | Resumo de quem está pendente |
 
 No iPhone, notificações só funcionam com o app instalado na tela de início (iOS 16.4 ou mais novo). A tela Conta guia esse passo.
+
+## Avisos no app
+
+O sininho (barra lateral no computador, topo no celular) mostra avisos que chegam ao vivo:
+
+| Aviso | Para quem |
+|---|---|
+| Meta batida | Corretor e gerente da equipe (detectado no banco, no momento em que o total do mês cruza a meta) |
+| Novo membro na equipe | Liderança acima de quem aceitou o convite |
+| Pagamento confirmado ou fatura em aberto | Administrador |
+| Teste acabando ou encerrado | Administrador |
+
+Avisos lidos somem em 60 dias; não lidos, em 180 (rotina de limpeza).
+
+## Configurações e equipe
+
+- **Conta, Imobiliária** (só o administrador): nome, fuso horário e horários de relatório (de 1 a 8, entre 06:00 e 23:00, com 1 hora de distância). O banco também valida.
+- **Equipe:** editar nome, cargo e equipe de cada pessoa, reenviar convite pendente, renomear e excluir equipes vazias, renomear diretorias.
 
 ## Painel interno
 

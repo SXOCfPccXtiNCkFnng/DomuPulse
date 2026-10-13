@@ -7,6 +7,7 @@ import { sendPasswordChangedEmail, sendPasswordResetEmail, sendWelcomeEmail } fr
 import { siteUrl } from "@/lib/email";
 import { CAPTCHA_ERROR, verifyCaptcha } from "@/lib/captcha";
 import { LEGAL_DOCS_VERSION } from "@/lib/legal";
+import { notifyLeadersOf } from "@/lib/notify";
 import { describeError, logger } from "@/lib/logger";
 import { clientIp, rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { safeNext } from "@/lib/safe-redirect";
@@ -204,7 +205,7 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
 
   // Quem entrou por convite aceita os termos aqui, no primeiro acesso.
   if (needsTerms) {
-    await createAdminClient()
+    const { data: joined } = await createAdminClient()
       .from("members")
       .update({
         terms_accepted_at: new Date().toISOString(),
@@ -212,7 +213,19 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
         terms_accepted_ip: (await clientIp()).slice(0, 64),
       })
       .eq("user_id", userId)
-      .is("terms_accepted_at", null);
+      .is("terms_accepted_at", null)
+      .select("org_id, team_id, division_id, full_name")
+      .maybeSingle();
+
+    // Convite aceito: a liderança fica sabendo que a pessoa entrou.
+    if (joined) {
+      after(() =>
+        notifyLeadersOf(
+          { orgId: joined.org_id, teamId: joined.team_id, divisionId: joined.division_id },
+          { kind: "member_joined", title: "Novo membro na equipe", body: `${joined.full_name} aceitou o convite e já pode usar o Pulse.`, url: "/equipe" },
+        ),
+      );
+    }
   }
 
   redirect("/painel");

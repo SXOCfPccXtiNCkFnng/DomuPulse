@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
 import { InstallGuide, PushSettings, SubscriptionForm } from "./client";
+import { OrgSettingsForm } from "./org-settings";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
 export const metadata: Metadata = { title: "Conta" };
@@ -41,6 +42,13 @@ export default async function ContaPage() {
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{me.fullName}</h1>
       </header>
+
+      {me.role === "owner" ? (
+        <Card id="imobiliaria">
+          <CardHeader title="Imobiliária" description="Nome, fuso e horários de relatório da equipe" />
+          <OrgSettingsForm name={me.org.name} timezone={me.org.timezone} slots={me.org.reportSlots} />
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="Notificações" description="Lembretes de relatório e alertas da equipe neste aparelho" />

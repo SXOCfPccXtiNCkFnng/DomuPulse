@@ -188,13 +188,37 @@ await expectError("com 2FA ativa, só a senha não grava", "mgr2", `insert into 
 await expectRows("fator não confirmado não muda nada", "b3", "select id from members", 1);
 await expectRows("quem não ativou 2FA segue normal", "b1", "select id from members", 1);
 
+// ---- Configurações da imobiliária --------------------------------------
+console.log("\nConfigurações da imobiliária");
+await expectError("fuso inexistente é recusado", "ownerA", "update organizations set timezone = 'Lua/Base'", /Fuso horário inválido/);
+await expectError("horário de madrugada é recusado", "ownerA", "update organizations set report_slots = '{03:00,12:00}'", /entre 06:00 e 23:00/);
+const slotsSaved = await as("ownerA", "update organizations set report_slots = '{18:00,09:00}' returning report_slots::text as s");
+check("horários ficam em ordem", slotsSaved.rows[0]?.s === "{09:00:00,18:00:00}", JSON.stringify(slotsSaved.rows));
+await as("ownerA", "update organizations set report_slots = '{12:00,15:00,18:00,21:00}'");
+
+// ---- Avisos no app -----------------------------------------------------
+console.log("\nAvisos no app");
+await as("mgr1", `insert into goals (member_id, month, metric, target) values ('${uid("m_b2")}', date_trunc('month', '${today}'::date), 'visits', 5)`);
+await as("b2", `insert into reports (member_id, report_date, report_slot, visits) values ('${uid("m_b2")}', '${today}', '12:00', 3)`);
+await expectRows("abaixo da meta não avisa", "b2", "select id from notifications", 0);
+await as("b2", `insert into reports (member_id, report_date, report_slot, visits) values ('${uid("m_b2")}', '${today}', '15:00', 2)`);
+await expectRows("ao bater a meta, o corretor recebe o aviso", "b2", "select id from notifications where kind = 'goal_reached'", 1);
+await expectRows("o gerente da equipe também", "mgr1", "select id from notifications where kind = 'goal_reached'", 1);
+await as("b2", `insert into reports (member_id, report_date, report_slot, visits) values ('${uid("m_b2")}', '${today}', '18:00', 4)`);
+await expectRows("passar da meta não avisa de novo", "b2", "select id from notifications", 1);
+await expectRows("outro corretor não vê o aviso", "b1", "select id from notifications", 0);
+await expectError("cliente não cria aviso", "b2", `insert into notifications (user_id, kind, title) values ('${uid("b2")}', 'x', 'x')`, /permission denied/);
+await expectRows("marca o próprio aviso como lido", "b2", "update notifications set read_at = now() returning id", 1);
+await expectError("não altera o texto do aviso", "b2", "update notifications set title = 'hack'", /permission denied/);
+await expectRows("não marca aviso dos outros", "b1", "update notifications set read_at = now() returning id", 0);
+
 // ---- Somas por período ------------------------------------------------
 console.log("\nSomas por período");
 const monthAgo = new Date(Date.parse(today) - 30 * 86400000).toISOString().slice(0, 10);
 const totalsSql = `select * from report_totals_by_member('${monthAgo}', '${today}')`;
 await expectRows("corretor soma só os próprios relatórios", "b1", totalsSql, 1);
-await expectRows("gerente soma só a própria equipe (sem o corretor 3)", "mgr1", totalsSql, 1);
-await expectRows("dona soma a imobiliária inteira", "ownerA", totalsSql, 2);
+await expectRows("gerente soma só a própria equipe (sem o corretor 3)", "mgr1", totalsSql, 2);
+await expectRows("dona soma a imobiliária inteira", "ownerA", totalsSql, 3);
 await expectRows("dona B não soma nada da imobiliária A", "ownerB", totalsSql, 0);
 await expectError("anon não chama as somas", null, totalsSql, /permission denied/, [], "anon");
 await expectError("período maior que 1 ano é recusado", "ownerA", "select * from report_totals_by_day('2020-01-01', '2026-01-01')", /Período inválido/);

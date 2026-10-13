@@ -5,6 +5,7 @@ import { sendPaymentConfirmedEmail, sendPaymentOverdueEmail } from "@/lib/email-
 import { asaasEnv } from "@/lib/env.server";
 import { recordHeartbeat } from "@/lib/heartbeat";
 import { describeError, logger } from "@/lib/logger";
+import { notifyRoles } from "@/lib/notify";
 import { orgOwnerContact } from "@/lib/org-owner";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -90,6 +91,13 @@ export async function POST(request: NextRequest) {
 
   if (confirmedNow || body.event === "PAYMENT_OVERDUE") {
     after(async () => {
+      await notifyRoles(
+        org.id,
+        ["owner"],
+        body.event === "PAYMENT_OVERDUE"
+          ? { kind: "payment_overdue", title: "Fatura em aberto", body: "A fatura venceu e o pagamento ainda não foi identificado.", url: "/conta#assinatura" }
+          : { kind: "payment_confirmed", title: "Pagamento confirmado", body: `Assinatura ativa com ${seats} assentos.`, url: "/conta#assinatura" },
+      );
       const owner = await orgOwnerContact(org.id);
       if (!owner) return;
       if (body.event === "PAYMENT_OVERDUE") {

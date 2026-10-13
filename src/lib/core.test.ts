@@ -58,3 +58,18 @@ describe("registro de erros", () => {
     expect(meta).toEqual({ token: "[oculto]", password: "[oculto]", cpfCnpj: "[oculto]", status: 500 });
   });
 });
+
+describe("horários de relatório", () => {
+  it("ordena e remove repetidos", async () => {
+    const { checkSlots } = await import("@/lib/org-settings");
+    expect(checkSlots(["18:00", "12:00", "12:00"])).toEqual({ ok: true, slots: ["12:00", "18:00"] });
+  });
+
+  it("recusa horários colados, de madrugada ou em excesso", async () => {
+    const { checkSlots } = await import("@/lib/org-settings");
+    expect(checkSlots(["12:00", "12:30"]).ok).toBe(false);
+    expect(checkSlots(["03:00"]).ok).toBe(false);
+    expect(checkSlots([]).ok).toBe(false);
+    expect(checkSlots(["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]).ok).toBe(false);
+  });
+});
