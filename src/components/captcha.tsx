@@ -47,7 +47,7 @@ export function Captcha({ resetKey }: { resetKey?: unknown }) {
     loadScript()
       .then(() => {
         if (cancelled || !window.turnstile || widget.current) return;
-        const dark = document.documentElement.dataset.theme === "dark" || matchMedia("(prefers-color-scheme: dark)").matches;
+        const dark = document.documentElement.dataset.theme === "dark";
         widget.current = window.turnstile.render(el, {
           sitekey: SITE_KEY,
           language: "pt-br",

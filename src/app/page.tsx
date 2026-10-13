@@ -1,12 +1,12 @@
 import clsx from "clsx";
-import { ArrowRight, BellRing, CalendarCheck, Contact, LineChart, ShieldCheck, Target } from "lucide-react";
+import { ArrowRight, BellRing, CalendarCheck, ClipboardCheck, Contact, LineChart, Medal, Radar, Rocket, ShieldCheck, Target } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { ThemeToggle } from "@/components/theme";
+import { Depth, ParallaxScene } from "@/components/parallax";
+import { LandingNav } from "@/components/landing-nav";
 import { BrandMark } from "@/components/ui/logo";
+import heroImage from "../../public/landing/hero.webp";
 
 export const metadata: Metadata = {
   title: { absolute: "Domu Pulse | Relatório de corretor em tempo real" },
@@ -16,19 +16,11 @@ export const metadata: Metadata = {
 
 const CTA = "Começar agora";
 
-// A foto do corretor entra aqui quando o arquivo existir em public/landing.
-// Sem ela, a chamada principal mostra a prévia do painel.
-function heroPhoto() {
-  for (const ext of ["png", "webp", "jpg"]) {
-    if (existsSync(join(process.cwd(), "public", "landing", `corretor.${ext}`))) return `/landing/corretor.${ext}`;
-  }
-  return null;
-}
-
-const NAV = [
-  { href: "#como-funciona", label: "Como funciona" },
-  { href: "#recursos", label: "Recursos" },
-  { href: "#duvidas", label: "Dúvidas" },
+const BENEFITS = [
+  { Icon: ClipboardCheck, title: "Tudo fica registrado", text: "Cada relatório fica salvo. Compare dias, semanas e equipes sem montar planilha." },
+  { Icon: Radar, title: "Visão na hora certa", text: "Você vê quem entregou e quem travou enquanto ainda dá tempo de agir." },
+  { Icon: Medal, title: "Equipe engajada", text: "Ranking ao vivo e metas visíveis criam uma competição saudável." },
+  { Icon: Rocket, title: "Pronto no mesmo dia", text: "Abre no navegador e instala no celular. Sem treinamento longo." },
 ];
 
 const STEPS = [
@@ -83,8 +75,6 @@ const FAQ = [
 
 const btnPrimary =
   "inline-flex h-12 items-center justify-center gap-2 bg-brand px-7 text-[13px] font-semibold tracking-[0.1em] text-white uppercase transition-[filter] hover:brightness-125";
-const btnGhost =
-  "inline-flex h-12 items-center justify-center gap-2 border border-line-strong px-7 text-[13px] font-semibold tracking-[0.1em] text-ink uppercase transition-colors hover:border-ink";
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -96,109 +86,119 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 }
 
 export default function Home() {
-  const photo = heroPhoto();
-
   return (
     <div className="landing flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-40 border-b border-line bg-bg/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
-          <Link href="/" className="flex items-center gap-2.5" aria-label="Domu Pulse, início">
-            <BrandMark className="size-7" />
-            <span className="font-display text-lg font-semibold tracking-tight">
-              <span className="font-medium text-muted">Domu</span> Pulse
-            </span>
-          </Link>
-          <nav aria-label="Seções" className="hidden items-center gap-9 lg:flex">
-            {NAV.map((n) => (
-              <a key={n.href} href={n.href} className="text-[12px] font-semibold tracking-[0.14em] text-ink-2 uppercase hover:text-ink">
-                {n.label}
-              </a>
-            ))}
-          </nav>
-          <div className="flex items-center gap-4">
-            <ThemeToggle />
-            <Link href="/entrar" className="text-[12px] font-semibold tracking-[0.14em] text-ink-2 uppercase hover:text-ink">
-              Entrar
-            </Link>
-            <Link href="/criar-conta" className={clsx(btnPrimary, "hidden h-10 px-5 sm:inline-flex")}>
-              Criar conta
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LandingNav />
 
       <main className="flex-1">
-        {/* Chamada principal */}
-        <section className="relative overflow-hidden">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 right-[-10%] h-[42rem] w-[42rem] -translate-y-1/2 rounded-full opacity-60 blur-3xl"
-            style={{ background: "radial-gradient(closest-side, rgb(2 89 243 / 0.35), transparent)" }}
-          />
-          <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 pt-16 pb-20 sm:px-8 lg:grid-cols-[1.05fr_1fr] lg:pt-24 lg:pb-28">
-            <div className="animate-rise">
-              <Eyebrow>Relatório de corretor em tempo real</Eyebrow>
-              <h1 className="mt-6 font-display text-[2.9rem] leading-[0.98] font-bold tracking-[-0.03em] sm:text-7xl xl:text-[5.4rem]">
-                Chega de cobrar relatório <span className="text-brand-text">no grupo.</span>
-              </h1>
-              <p className="mt-7 max-w-xl text-lg leading-relaxed text-ink-2">
-                Seus corretores lançam visitas, propostas e vendas em horários fixos, direto do celular. Você acompanha cada
-                equipe no momento em que acontece e sabe na hora quem está vendendo e quem precisa de ajuda.
-              </p>
-              <div className="mt-10 flex flex-wrap gap-3">
-                <Link href="/criar-conta" className={btnPrimary}>
-                  {CTA}
-                  <ArrowRight className="size-4" />
-                </Link>
-                <a href="#como-funciona" className={btnGhost}>
-                  Como funciona
-                </a>
+        {/* Chamada principal: foto de fundo, texto sempre claro sobre ela. Os
+            cartões ao lado do corretor se movem com o mouse (ParallaxScene). */}
+        <section className="relative isolate overflow-hidden bg-[#02050b] text-white">
+          <ParallaxScene className="relative">
+            <Depth depth={-10} className="absolute -inset-6 -z-10">
+              <Image
+                src={heroImage}
+                alt=""
+                fill
+                priority
+                placeholder="blur"
+                sizes="100vw"
+                className="object-cover object-[72%_center] opacity-60 lg:opacity-100"
+              />
+            </Depth>
+            {/* Escurece a esquerda para o texto ler bem sobre qualquer parte da foto. */}
+            <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-[#02050b] via-[#02050b]/80 to-[#02050b]/0 lg:via-[#02050b]/50" />
+            <div aria-hidden="true" className="absolute inset-x-0 bottom-0 -z-10 h-40 bg-gradient-to-t from-[#02050b]/80 to-transparent" />
+
+            {/* Cartões flutuantes ao lado do corretor (só em telas grandes). */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden lg:block">
+              <div className="relative mx-auto h-full max-w-[1440px]">
+                <Depth depth={26} duration={2.2} className="absolute top-[15%] right-8 w-60">
+                  <div className="border border-white/15 bg-[#0a1428]/55 text-white shadow-[0_24px_60px_-20px_rgb(0_0_0/0.6)] backdrop-blur-md p-4 animate-rise" style={{ animationDelay: "0.35s" }}>
+                    <p className="text-[10px] font-semibold tracking-[0.16em] text-white/60 uppercase">Lembrete das 15h</p>
+                    <p className="mt-1 font-display text-2xl font-semibold">Enviado</p>
+                    <p className="mt-1 text-[13px] leading-snug text-white/70">18 corretores avisados, 10 minutos antes.</p>
+                  </div>
+                </Depth>
+
+                <Depth depth={12} duration={0.7} className="absolute top-[63%] left-[74%] w-72">
+                  <div className="border border-white/15 bg-[#0a1428]/55 text-white shadow-[0_24px_60px_-20px_rgb(0_0_0/0.6)] backdrop-blur-md p-4 animate-rise" style={{ animationDelay: "0.5s" }}>
+                    <p className="text-[10px] font-semibold tracking-[0.16em] text-white/60 uppercase">Equipe Norte, agora</p>
+                    <ul className="mt-3 space-y-2.5 text-sm">
+                      <li className="flex items-center justify-between gap-3">
+                        <span>Marina Alves</span>
+                        <span className="text-[12px] font-medium text-[#6ee7b7]">Entregue</span>
+                      </li>
+                      <li className="flex items-center justify-between gap-3">
+                        <span>Rafael Costa</span>
+                        <span className="text-[12px] font-medium text-[#f5c16c]">Atrasado</span>
+                      </li>
+                    </ul>
+                  </div>
+                </Depth>
+
+                <Depth depth={8} duration={0.7} className="absolute top-[48%] left-[82%] w-56">
+                  <div className="border border-white/15 bg-[#0a1428]/55 text-white shadow-[0_24px_60px_-20px_rgb(0_0_0/0.6)] backdrop-blur-md p-4 animate-rise" style={{ animationDelay: "0.65s" }}>
+                    <p className="text-[10px] font-semibold tracking-[0.16em] text-white/60 uppercase">Marina, relatório das 15h</p>
+                    <p className="mt-2 flex items-baseline justify-between gap-3">
+                      <span className="text-[13px] text-white/70">Visitas</span>
+                      <span className="font-display text-2xl font-semibold tabular-nums">4</span>
+                    </p>
+                    <p className="mt-1 flex items-baseline justify-between gap-3">
+                      <span className="text-[13px] text-white/70">Propostas</span>
+                      <span className="font-display text-2xl font-semibold tabular-nums">1</span>
+                    </p>
+                  </div>
+                </Depth>
               </div>
-              <p className="mt-5 text-sm text-muted">Sua equipe usando no mesmo dia.</p>
             </div>
 
-            <div className="relative animate-rise" style={{ animationDelay: "0.12s" }}>
-              {photo ? (
-                <div className="relative mx-auto aspect-[4/5] w-full max-w-[520px]">
-                  <Image
-                    src={photo}
-                    alt="Corretor de imóveis"
-                    fill
-                    priority
-                    sizes="(min-width: 1024px) 520px, 90vw"
-                    className="object-contain object-bottom"
-                  />
-                  <div className="absolute bottom-10 left-0 border border-line-strong bg-bg/85 px-5 py-4 backdrop-blur sm:-left-8">
-                    <p className="text-[11px] font-semibold tracking-[0.14em] text-muted uppercase">Relatório das 15h</p>
-                    <p className="mt-1 font-display text-2xl font-semibold tabular-nums">14 de 18 entregues</p>
-                  </div>
+            <div className="mx-auto flex min-h-dvh max-w-[1440px] items-center px-5 pt-32 pb-20 sm:px-8 lg:min-h-[64rem]">
+              <div className="max-w-[40rem] animate-rise">
+                <p className="flex items-center gap-3 text-[12px] font-semibold tracking-[0.18em] text-[#7ea5ff] uppercase">
+                  <span className="h-px w-8 bg-[#7ea5ff]" />
+                  Relatório de corretor em tempo real
+                </p>
+                <h1 className="mt-6 font-display text-[2.5rem] leading-[1.02] font-bold tracking-[-0.03em] sm:text-6xl xl:text-[4.1rem]">
+                  Chega de cobrar relatório <span className="text-[#7ea5ff]">no grupo.</span>
+                </h1>
+                <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/75">
+                  Seus corretores lançam visitas, propostas e vendas em horários fixos, direto do celular. Você acompanha cada
+                  equipe no momento em que acontece e sabe na hora quem está vendendo e quem precisa de ajuda.
+                </p>
+                <div className="mt-10 flex flex-wrap gap-3">
+                  <Link href="/criar-conta" className={clsx(btnPrimary, "bg-[#0259f3]")}>
+                    {CTA}
+                    <ArrowRight className="size-4" />
+                  </Link>
+                  <a
+                    href="#como-funciona"
+                    className="inline-flex h-12 items-center justify-center gap-2 border border-white/30 px-7 text-[13px] font-semibold tracking-[0.1em] text-white uppercase transition-colors hover:border-white"
+                  >
+                    Como funciona
+                  </a>
                 </div>
-              ) : (
-                <BoardPreview />
-              )}
+                <p className="mt-5 text-sm text-white/55">Sua equipe usando no mesmo dia.</p>
+              </div>
             </div>
-          </div>
+          </ParallaxScene>
         </section>
 
-        {/* Números do produto */}
-        <section className="border-y border-line bg-surface">
-          <dl className="mx-auto grid max-w-7xl grid-cols-2 px-5 sm:px-8 lg:grid-cols-4">
-            {[
-              ["30 s", "para o corretor lançar o relatório"],
-              ["8 etapas", "do funil, de lead a venda"],
-              ["Ao vivo", "sem atualizar a página"],
-              ["1 a 8", "horários de relatório por dia"],
-            ].map(([value, label], i) => (
-              <div key={label} className={clsx("py-8 lg:px-8", i > 0 && "lg:border-l lg:border-line", i % 2 === 1 && "pl-5 lg:pl-8")}>
-                <dt className="font-display text-3xl font-bold tracking-tight sm:text-4xl">{value}</dt>
-                <dd className="mt-1 text-sm text-muted">{label}</dd>
-              </div>
+        {/* Benefícios: na cor da página, sem divisórias. */}
+        <section>
+          <ul className="mx-auto grid max-w-[1440px] gap-x-10 gap-y-10 px-5 py-16 sm:grid-cols-2 sm:px-8 lg:grid-cols-4 lg:py-20">
+            {BENEFITS.map(({ Icon, title, text }) => (
+              <li key={title}>
+                <Icon className="size-7 text-brand-text" strokeWidth={1.6} />
+                <h3 className="mt-5 font-display text-xl font-semibold tracking-tight">{title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-muted">{text}</p>
+              </li>
             ))}
-          </dl>
+          </ul>
         </section>
 
         {/* Frase de impacto */}
-        <section className="mx-auto max-w-7xl px-5 py-24 sm:px-8 lg:py-32">
+        <section className="mx-auto max-w-[1440px] px-5 py-24 sm:px-8 lg:py-32">
           <p className="max-w-5xl font-display text-4xl leading-[1.05] font-bold tracking-[-0.03em] sm:text-6xl">
             Gestão que acontece <span className="text-brand-text">enquanto a venda acontece.</span>
           </p>
@@ -209,8 +209,8 @@ export default function Home() {
         </section>
 
         {/* Como funciona */}
-        <section id="como-funciona" className="scroll-mt-16 border-t border-line">
-          <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:py-28">
+        <section id="como-funciona" className="scroll-mt-28 border-t border-line">
+          <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:py-28">
             <Eyebrow>Como funciona</Eyebrow>
             <h2 className="mt-5 max-w-3xl font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Três passos. Nenhuma planilha.</h2>
             <ol className="mt-14 grid border-t border-line lg:grid-cols-3">
@@ -226,8 +226,8 @@ export default function Home() {
         </section>
 
         {/* Recursos */}
-        <section id="recursos" className="scroll-mt-16 border-t border-line bg-surface">
-          <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:py-28">
+        <section id="recursos" className="scroll-mt-28 border-t border-line bg-surface">
+          <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:py-28">
             <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr] lg:items-end">
               <div>
                 <Eyebrow>Recursos</Eyebrow>
@@ -250,26 +250,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Prévia do painel, quando a foto ocupa a chamada principal */}
-        {photo ? (
-          <section className="border-t border-line">
-            <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_1.1fr] lg:py-28">
-              <div>
-                <Eyebrow>O painel</Eyebrow>
-                <h2 className="mt-5 font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Sua operação como ela é, agora.</h2>
-                <p className="mt-6 text-lg leading-relaxed text-ink-2">
-                  Cada linha é um corretor, cada coluna um horário. Verde entregou, vermelho atrasou. Em cinco segundos você sabe
-                  onde agir.
-                </p>
-              </div>
-              <BoardPreview />
-            </div>
-          </section>
-        ) : null}
-
         {/* Dúvidas */}
-        <section id="duvidas" className="scroll-mt-16 border-t border-line bg-surface">
-          <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_1.4fr] lg:py-28">
+        <section id="duvidas" className="scroll-mt-28 border-t border-line bg-surface">
+          <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[1fr_1.4fr] lg:py-28">
             <div>
               <Eyebrow>Dúvidas</Eyebrow>
               <h2 className="mt-5 font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Perguntas frequentes.</h2>
@@ -295,7 +278,7 @@ export default function Home() {
             className="pointer-events-none absolute inset-x-0 bottom-[-60%] mx-auto h-[36rem] max-w-4xl rounded-full blur-3xl"
             style={{ background: "radial-gradient(closest-side, rgb(2 89 243 / 0.28), transparent)" }}
           />
-          <div className="relative mx-auto max-w-7xl px-5 py-24 text-center sm:px-8 lg:py-32">
+          <div className="relative mx-auto max-w-[1440px] px-5 py-24 text-center sm:px-8 lg:py-32">
             <h2 className="mx-auto max-w-4xl font-display text-4xl leading-[1.02] font-bold tracking-[-0.03em] sm:text-6xl">
               Amanhã você já vai saber <span className="text-brand-text">quem está vendendo.</span>
             </h2>
@@ -309,7 +292,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-10 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-6 px-5 py-10 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-8">
           <span className="flex items-center gap-2.5">
             <BrandMark className="size-5" />
             Domu Pulse, um produto DomuTech
@@ -328,71 +311,5 @@ export default function Home() {
         </div>
       </footer>
     </div>
-  );
-}
-
-// Ilustração do painel ao vivo. Dados de exemplo, só para mostrar o produto.
-const SAMPLE = [
-  { name: "Marina Alves", slots: ["ok", "ok", "ok", "wait"], visits: 4, sales: 1 },
-  { name: "Rafael Costa", slots: ["ok", "ok", "late", "wait"], visits: 3, sales: 1 },
-  { name: "Juliana Prado", slots: ["ok", "ok", "ok", "wait"], visits: 5, sales: 0 },
-  { name: "Bruno Lima", slots: ["ok", "late", "late", "wait"], visits: 1, sales: 0 },
-  { name: "Carla Mendes", slots: ["ok", "ok", "open", "wait"], visits: 2, sales: 2 },
-] as const;
-
-const SLOT_STYLE = {
-  ok: "bg-[#12b76a]",
-  late: "bg-[#f04438]",
-  open: "bg-[#f79009]",
-  wait: "bg-line-strong",
-} as const;
-
-function BoardPreview() {
-  return (
-    <figure className="border border-line-strong bg-surface shadow-[0_40px_120px_-40px_rgb(2_89_243/0.45)]">
-      <div className="flex items-center justify-between border-b border-line px-5 py-4">
-        <span className="flex items-center gap-2 text-[12px] font-semibold tracking-[0.14em] uppercase">
-          <span className="size-2 bg-[#12b76a]" />
-          Ao vivo
-        </span>
-        <span className="text-[12px] text-muted">Relatório das 18h, 3 de 5 entregues</span>
-      </div>
-      <div className="overflow-x-auto">
-      <table className="w-full min-w-[440px] text-sm">
-        <thead>
-          <tr className="text-left text-[11px] tracking-[0.12em] text-muted uppercase">
-            <th className="px-5 py-3 font-semibold">Corretor</th>
-            {["12h", "15h", "18h", "21h"].map((h) => (
-              <th key={h} className="px-1 py-3 text-center font-semibold">
-                {h}
-              </th>
-            ))}
-            <th className="px-3 py-3 text-right font-semibold">Visitas</th>
-            <th className="px-5 py-3 text-right font-semibold">Vendas</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SAMPLE.map((r) => (
-            <tr key={r.name} className="border-t border-line">
-              <td className="px-5 py-3 font-medium whitespace-nowrap">{r.name}</td>
-              {r.slots.map((s, i) => (
-                <td key={i} className="px-1 py-3">
-                  <span className={clsx("mx-auto block h-2 w-7", SLOT_STYLE[s])} />
-                </td>
-              ))}
-              <td className="px-3 py-3 text-right tabular-nums text-ink-2">{r.visits}</td>
-              <td className="px-5 py-3 text-right font-semibold tabular-nums">{r.sales}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-      <figcaption className="flex flex-wrap gap-x-5 gap-y-2 border-t border-line px-5 py-3 text-[11px] text-muted">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 bg-[#12b76a]" />Entregue</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 bg-[#f79009]" />Aberto</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 bg-[#f04438]" />Atrasado</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-4 bg-line-strong" />Em breve</span>
-      </figcaption>
-    </figure>
   );
 }
