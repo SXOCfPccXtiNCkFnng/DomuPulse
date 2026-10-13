@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { ArrowRight, BellRing, CalendarCheck, ClipboardCheck, Contact, LineChart, Medal, Radar, Rocket, ShieldCheck, Target } from "lucide-react";
+import { ArrowRight, BellRing, CalendarCheck, ClipboardCheck, Contact, Flame, LineChart, Radar, Rocket, ShieldCheck, Target } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { HowItWorks } from "@/components/how-it-works";
 import { Depth, ParallaxScene } from "@/components/parallax";
 import { LandingNav } from "@/components/landing-nav";
 import { BrandMark } from "@/components/ui/logo";
@@ -19,26 +20,8 @@ const CTA = "Começar agora";
 const BENEFITS = [
   { Icon: ClipboardCheck, title: "Tudo fica registrado", text: "Cada relatório fica salvo. Compare dias, semanas e equipes sem montar planilha." },
   { Icon: Radar, title: "Visão na hora certa", text: "Você vê quem entregou e quem travou enquanto ainda dá tempo de agir." },
-  { Icon: Medal, title: "Equipe engajada", text: "Ranking ao vivo e metas visíveis criam uma competição saudável." },
+  { Icon: Flame, title: "Equipe engajada", text: "Ranking ao vivo e metas visíveis criam uma competição saudável." },
   { Icon: Rocket, title: "Pronto no mesmo dia", text: "Abre no navegador e instala no celular. Sem treinamento longo." },
-];
-
-const STEPS = [
-  {
-    n: "01",
-    title: "Você define os horários",
-    text: "Por exemplo 12h, 15h, 18h e 21h. O Pulse avisa cada corretor no celular 10 minutos antes.",
-  },
-  {
-    n: "02",
-    title: "O corretor lança em 30 segundos",
-    text: "Leads, conversas, agendamentos, visitas, propostas e vendas. Botões grandes, direto do celular, sem planilha.",
-  },
-  {
-    n: "03",
-    title: "Você acompanha ao vivo",
-    text: "Quem entregou, quem atrasou, o funil de cada equipe e o ranking do dia. Atualiza sozinho, no segundo em que acontece.",
-  },
 ];
 
 const FEATURES = [
@@ -184,46 +167,30 @@ export default function Home() {
           </ParallaxScene>
         </section>
 
-        {/* Benefícios: na cor da página, sem divisórias. */}
+        {/* Continua o hero: a frase primeiro, os quatro pontos no mesmo cartão. */}
         <section>
-          <ul className="mx-auto grid max-w-[1440px] gap-x-10 gap-y-10 px-5 py-16 sm:grid-cols-2 sm:px-8 lg:grid-cols-4 lg:py-20">
-            {BENEFITS.map(({ Icon, title, text }) => (
-              <li key={title}>
-                <Icon className="size-7 text-brand-text" strokeWidth={1.6} />
-                <h3 className="mt-5 font-display text-xl font-semibold tracking-tight">{title}</h3>
-                <p className="mt-2 text-[15px] leading-relaxed text-muted">{text}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* Frase de impacto */}
-        <section className="mx-auto max-w-[1440px] px-5 py-24 sm:px-8 lg:py-32">
-          <p className="max-w-5xl font-display text-4xl leading-[1.05] font-bold tracking-[-0.03em] sm:text-6xl">
-            Gestão que acontece <span className="text-brand-text">enquanto a venda acontece.</span>
-          </p>
-          <p className="mt-8 max-w-2xl text-lg leading-relaxed text-ink-2">
-            Planilha no fim do dia mostra o que já passou. Com o Pulse, você vê a operação enquanto ainda dá tempo de agir:
-            puxar quem travou, reconhecer quem está indo bem e redistribuir leads antes de perder a semana.
-          </p>
-        </section>
-
-        {/* Como funciona */}
-        <section id="como-funciona" className="scroll-mt-28 border-t border-line">
           <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:py-28">
-            <Eyebrow>Como funciona</Eyebrow>
-            <h2 className="mt-5 max-w-3xl font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Três passos. Nenhuma planilha.</h2>
-            <ol className="mt-14 grid border-t border-line lg:grid-cols-3">
-              {STEPS.map((s, i) => (
-                <li key={s.n} className={clsx("py-10 lg:pr-10", i > 0 && "border-t border-line lg:border-t-0 lg:border-l lg:pl-10")}>
-                  <span className="font-display text-6xl font-bold text-brand-text/40 tabular-nums">{s.n}</span>
-                  <h3 className="mt-6 font-display text-2xl font-semibold tracking-tight">{s.title}</h3>
-                  <p className="mt-3 leading-relaxed text-ink-2">{s.text}</p>
+            <Eyebrow>Na hora da venda</Eyebrow>
+            <p className="mt-6 max-w-5xl font-display text-4xl leading-[1.05] font-bold tracking-[-0.03em] sm:text-6xl">
+              Gestão que acontece <span className="text-brand-text">enquanto a venda acontece.</span>
+            </p>
+            <p className="mt-8 max-w-2xl text-lg leading-relaxed text-ink-2">
+              Planilha no fim do dia mostra o que já passou. Com o Pulse, você vê a operação enquanto ainda dá tempo de agir:
+              puxar quem travou, reconhecer quem está indo bem e redistribuir leads antes de perder a semana.
+            </p>
+            <ul className="mt-16 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+              {BENEFITS.map(({ Icon, title, text }) => (
+                <li key={title}>
+                  <Icon className="size-6 text-brand-text" strokeWidth={1.6} />
+                  <h3 className="mt-5 font-display text-xl font-semibold tracking-tight">{title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-muted">{text}</p>
                 </li>
               ))}
-            </ol>
+            </ul>
           </div>
         </section>
+
+        <HowItWorks />
 
         {/* Recursos */}
         <section id="recursos" className="scroll-mt-28 border-t border-line bg-surface">
