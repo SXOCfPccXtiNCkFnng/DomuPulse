@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Field, FormMessage, Input } from "@/components/ui/field";
+import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import type { FormState } from "@/lib/validation";
 import { createCoupon } from "./actions";
 
@@ -30,16 +30,23 @@ export function ConfirmButton({ label, confirmLabel, danger = false }: { label: 
 
 export function CouponForm() {
   const [state, action, pending] = useActionState(createCoupon, {} as FormState);
+  const [kind, setKind] = useState<"percent" | "days">("days");
   return (
     <form action={action} className="flex flex-col gap-4 p-5 sm:p-6" noValidate>
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
       {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Código" error={state.fieldErrors?.code}>
-          <Input name="code" placeholder="PILOTO20" className="uppercase" required />
+          <Input name="code" placeholder="AMIGO30" className="uppercase" required />
         </Field>
-        <Field label="Desconto (%)" error={state.fieldErrors?.percentOff}>
-          <Input name="percentOff" type="number" min={1} max={100} required />
+        <Field label="Tipo">
+          <Select name="kind" value={kind} onChange={(e) => setKind(e.target.value as "percent" | "days")}>
+            <option value="days">Dias grátis</option>
+            <option value="percent">Desconto (%)</option>
+          </Select>
+        </Field>
+        <Field label={kind === "days" ? "Quantos dias" : "Desconto (%)"} error={state.fieldErrors?.amount}>
+          <Input name="amount" type="number" min={1} max={kind === "days" ? 365 : 100} required />
         </Field>
         <Field label="Limite de usos" hint="Vazio = sem limite" error={state.fieldErrors?.maxRedemptions}>
           <Input name="maxRedemptions" type="number" min={1} />

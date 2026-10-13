@@ -39,7 +39,7 @@ Endereço de produção: `pulse.domutech.digital`
 | Comando | O que faz |
 |---|---|
 | `npm test` | Testes de unidade: senha, nome, telefone, CPF e CNPJ, redirecionamento, fuso, ranking, preço, registro de erros |
-| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (95 cenários) |
+| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (100 cenários) |
 | `npm run typecheck` | Tipos do TypeScript |
 | `npm run lint` | Lint |
 
@@ -82,8 +82,8 @@ Não é preciso mexer nos modelos de e-mail nem no SMTP do Supabase: cadastro, c
 | Convite | Quando a liderança convida alguém (link vale 24 h) |
 | Nova senha | Recuperação de senha (link vale 1 h) |
 | Senha alterada | Quando a senha muda, com link para recuperar se não foi a pessoa |
-| Teste acabando | 3 dias antes do fim do teste |
-| Teste encerrado | No dia em que o teste acaba |
+| Acesso gratuito acabando | 1 dia antes do fim do acesso gratuito (cupom) |
+| Acesso gratuito encerrado | No dia em que o acesso gratuito acaba |
 | Pagamento confirmado | Quando o Asaas confirma o pagamento |
 | Fatura em aberto | Quando a fatura vence sem pagamento |
 | Alerta de erro | Para a equipe DomuTech, quando surge um erro novo |
@@ -121,6 +121,16 @@ Gere o segredo com `node -e "console.log(require('crypto').randomBytes(32).toStr
 | 15 min depois do horário | Gerente da equipe | Resumo de quem está pendente |
 
 No iPhone, notificações só funcionam com o app instalado na tela de início (iOS 16.4 ou mais novo). A tela Conta guia esse passo.
+
+## Ativação, assinatura e cupons
+
+Não há acesso gratuito aberto. Quem cria a conta cai em **/ativar**, o único lugar que mostra preço, e ativa de um destes jeitos:
+
+1. **Assinatura** pelo Asaas (Pix, boleto ou cartão). A conta libera quando o pagamento confirma.
+2. **Cupom de dias grátis** (por exemplo, AMIGO30 = 30 dias): libera na hora, sem pagamento. Bom para presentear quem você conhece.
+3. **Cupom de desconto (%)**: fica guardado e vale em todas as faturas da assinatura.
+
+Os cupons são criados no painel interno, aba Comercial, com limite de usos e validade opcionais. Cada imobiliária usa cada cupom uma vez só (garantido no banco). O painel interno também permite liberar acesso manualmente.
 
 ## Avisos no app
 

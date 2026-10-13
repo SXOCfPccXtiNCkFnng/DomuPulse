@@ -266,7 +266,7 @@ export async function loadOrgs(search: string) {
 export async function loadCoupons() {
   const { data } = await createAdminClient()
     .from("coupons")
-    .select("code, percent_off, description, active, max_redemptions, redemption_count, expires_at, created_at")
+    .select("code, percent_off, free_days, description, active, max_redemptions, redemption_count, expires_at, created_at")
     .order("created_at", { ascending: false });
   return data ?? [];
 }

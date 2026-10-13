@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { FirstSteps, type Step } from "@/components/first-steps";
 import { BrokerToday } from "@/components/live/broker-today";
 import { LiveBoard } from "@/components/live/live-board";
-import { getCurrentMember, isLeader, type CurrentMember } from "@/lib/auth";
+import { getCurrentMember, isLeader, orgCanWrite, type CurrentMember } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Painel" };
 
 export default async function PainelPage() {
   const member = await getCurrentMember();
+  // Conta que ainda não foi ativada (sem assinatura nem cupom) vai para a ativação.
+  if (member.org.status === "trialing" && !orgCanWrite(member.org)) redirect("/ativar");
   if (!isLeader(member.role)) return <BrokerToday member={member} />;
 
   return (

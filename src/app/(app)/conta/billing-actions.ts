@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
   AsaasError,
@@ -10,24 +11,26 @@ import {
 } from "@/lib/asaas";
 import { getCurrentMember } from "@/lib/auth";
 import { isCpfOrCnpj, onlyDigits } from "@/lib/document";
-import { MAX_SEATS, MIN_SEATS, monthlyPriceCents } from "@/lib/plans";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { describeError, logger } from "@/lib/logger";
+import { MAX_SEATS, MIN_SEATS, monthlyPriceCents } from "@/lib/plans";
+import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { todayIn } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
 
 const schema = z.object({
   seats: z.coerce.number().int().min(MIN_SEATS).max(MAX_SEATS),
   cpfCnpj: z.string().refine(isCpfOrCnpj, "CPF ou CNPJ inválido."),
-  coupon: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .refine((v) => v === "" || /^[A-Z0-9]{3,30}$/.test(v), "Cupom inválido.")
-    .optional(),
 });
 
 export type BillingState = FormState & { url?: string };
+
+/** Desconto do cupom já aplicado na organização, em %. */
+async function appliedPercent(code: string | null) {
+  if (!code) return 0;
+  const { data } = await createAdminClient().from("coupons").select("percent_off").eq("code", code).maybeSingle();
+  return Number(data?.percent_off ?? 0);
+}
 
 export async function startSubscription(_: BillingState, formData: FormData): Promise<BillingState> {
   const me = await getCurrentMember();
@@ -46,25 +49,7 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
     .single();
   if (!org) return { error: "Organização não encontrada." };
 
-  // Cupom: o já aplicado continua valendo; um novo só entra se ainda for válido.
-  const couponCode = (org.coupon_code as string | null) ?? (parsed.data.coupon || null);
-  let percentOff = 0;
-  if (couponCode) {
-    const { data: coupon } = await admin
-      .from("coupons")
-      .select("percent_off, active, expires_at, max_redemptions, redemption_count")
-      .eq("code", couponCode)
-      .maybeSingle();
-    const usable =
-      coupon &&
-      (org.coupon_code ||
-        (coupon.active &&
-          (!coupon.expires_at || new Date(coupon.expires_at) > new Date()) &&
-          (coupon.max_redemptions == null || coupon.redemption_count < coupon.max_redemptions)));
-    if (!usable) return { fieldErrors: { coupon: "Cupom inválido, vencido ou esgotado." } };
-    percentOff = Number(coupon.percent_off);
-  }
-
+  const percentOff = await appliedPercent(org.coupon_code as string | null);
   const valueCents = monthlyPriceCents(parsed.data.seats, percentOff);
 
   try {
@@ -90,7 +75,7 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
         valueCents,
         orgId: org.id,
         nextDueDate: todayIn(me.org.timezone),
-        description: `Domu Pulse, ${parsed.data.seats} assentos${percentOff ? `, cupom ${couponCode}` : ""}`,
+        description: `Domu Pulse, ${parsed.data.seats} assentos${percentOff ? `, cupom ${org.coupon_code}` : ""}`,
       });
       subscriptionId = subscription.id;
       await admin.from("organizations").update({ asaas_subscription_id: subscriptionId }).eq("id", org.id);
@@ -98,11 +83,6 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
 
     // Assentos pedidos viram ativos quando o pagamento confirmar (webhook).
     await admin.from("organizations").update({ subscribed_seats: parsed.data.seats }).eq("id", org.id);
-
-    if (couponCode && !org.coupon_code) {
-      await admin.rpc("redeem_coupon", { p_code: couponCode });
-      await admin.from("organizations").update({ coupon_code: couponCode }).eq("id", org.id);
-    }
 
     const payment = await firstPendingPayment(subscriptionId);
     if (payment?.invoiceUrl?.startsWith("https://")) return { url: payment.invoiceUrl };
@@ -114,4 +94,61 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
     });
     return { error: "Não foi possível falar com o meio de pagamento agora. Tente em alguns minutos." };
   }
+}
+
+/**
+ * Aplica um cupom à imobiliária. "Dias grátis" libera o acesso na hora, sem
+ * pagamento; "desconto" fica guardado e vale em todas as faturas da assinatura.
+ * O banco garante que cada imobiliária usa cada cupom uma vez só.
+ */
+export async function redeemCoupon(_: BillingState, formData: FormData): Promise<BillingState> {
+  const me = await getCurrentMember();
+  if (me.role !== "owner") return { error: "Só o administrador aplica cupons." };
+
+  const code = String(formData.get("coupon") ?? "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{3,30}$/.test(code)) return { fieldErrors: { coupon: "Digite o código do cupom." } };
+
+  const limit = await rateLimit(`coupon:${me.org.id}`, 10, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec) };
+
+  const admin = createAdminClient();
+  const { data: org } = await admin.from("organizations").select("coupon_code, status, trial_ends_at").eq("id", me.org.id).single();
+
+  // Desconto só cabe um por assinatura: confere antes de gastar o cupom.
+  const { data: coupon } = await admin.from("coupons").select("percent_off").eq("code", code).maybeSingle();
+  if (coupon?.percent_off != null && org?.coupon_code) {
+    return { fieldErrors: { coupon: "Sua assinatura já tem um cupom de desconto." } };
+  }
+
+  const { data } = await admin
+    .rpc("redeem_coupon", { p_code: code, p_org: me.org.id })
+    .maybeSingle<{ percent_off: number | null; free_days: number | null }>();
+  if (!data) return { fieldErrors: { coupon: "Cupom inválido, vencido, esgotado ou já usado por esta imobiliária." } };
+
+  if (data.free_days) {
+    // Soma a partir de hoje ou do fim do acesso atual, o que for depois.
+    const base = Math.max(Date.now(), Date.parse(org?.trial_ends_at ?? new Date().toISOString()));
+    const until = new Date(base + data.free_days * 86_400_000);
+    const update =
+      org?.status === "trialing"
+        ? { trial_ends_at: until.toISOString(), trial_reminder_sent_at: null, trial_ended_notified_at: null }
+        : null;
+    if (update) await admin.from("organizations").update(update).eq("id", me.org.id);
+    await admin.from("audit_log").insert({
+      org_id: me.org.id,
+      actor: me.userId,
+      table_name: "platform",
+      record_id: me.org.id,
+      action: "redeem_free_days",
+      new_data: { code, free_days: data.free_days },
+    });
+    revalidatePath("/", "layout");
+    return update
+      ? { success: `Cupom aplicado: ${data.free_days} dias de acesso liberados.`, url: "/painel" }
+      : { success: "Cupom registrado. Como sua assinatura já está ativa, os dias grátis não se aplicam." };
+  }
+
+  await admin.from("organizations").update({ coupon_code: code }).eq("id", me.org.id);
+  revalidatePath("/", "layout");
+  return { success: `Cupom aplicado: ${Number(data.percent_off)}% de desconto em todas as faturas.` };
 }

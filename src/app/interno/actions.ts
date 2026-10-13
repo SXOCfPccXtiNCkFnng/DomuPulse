@@ -83,7 +83,8 @@ const couponSchema = z.object({
     .trim()
     .toUpperCase()
     .regex(/^[A-Z0-9]{3,30}$/, "Use de 3 a 30 letras e números, sem espaços."),
-  percentOff: z.coerce.number().min(1, "Mínimo 1%.").max(100, "Máximo 100%."),
+  kind: z.enum(["percent", "days"]),
+  amount: z.coerce.number().int("Use um número inteiro.").min(1, "Mínimo 1."),
   maxRedemptions: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(1).optional()),
   expiresAt: z.preprocess((v) => (v === "" ? undefined : v), z.iso.date().optional()),
   description: z.string().trim().max(200).optional(),
@@ -95,12 +96,15 @@ export async function createCoupon(_: FormState, formData: FormData): Promise<Fo
   if (!parsed.success) {
     return { fieldErrors: Object.fromEntries(parsed.error.issues.map((i) => [String(i.path[0]), i.message])) };
   }
-  const { code, percentOff, maxRedemptions, expiresAt, description } = parsed.data;
+  const { code, kind, amount, maxRedemptions, expiresAt, description } = parsed.data;
+  if (kind === "percent" && amount > 100) return { fieldErrors: { amount: "Desconto de no máximo 100%." } };
+  if (kind === "days" && amount > 365) return { fieldErrors: { amount: "No máximo 365 dias." } };
   const { error } = await createAdminClient()
     .from("coupons")
     .insert({
       code,
-      percent_off: percentOff,
+      percent_off: kind === "percent" ? amount : null,
+      free_days: kind === "days" ? amount : null,
       max_redemptions: maxRedemptions ?? null,
       // Vale até o fim do dia escolhido, no horário de Brasília.
       expires_at: expiresAt ? `${expiresAt}T23:59:59-03:00` : null,
@@ -109,7 +113,7 @@ export async function createCoupon(_: FormState, formData: FormData): Promise<Fo
   if (error) {
     return error.code === "23505" ? { fieldErrors: { code: "Já existe um cupom com esse código." } } : { error: describeError(error) };
   }
-  await audit(userId, null, "create_coupon", { code, percentOff });
+  await audit(userId, null, "create_coupon", { code, kind, amount });
   revalidatePath("/interno");
   return { success: `Cupom ${code} criado.` };
 }

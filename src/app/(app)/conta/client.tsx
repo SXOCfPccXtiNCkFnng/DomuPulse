@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { formatMoney } from "@/lib/metrics";
 import { removePushSubscription, savePushSubscription, sendTestNotification, setWeeklyDigest } from "./actions";
-import { startSubscription, type BillingState } from "./billing-actions";
+import { redeemCoupon, startSubscription, type BillingState } from "./billing-actions";
 
 function urlBase64ToUint8Array(base64: string) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -201,7 +201,6 @@ export function SubscriptionForm({
   const [seats, setSeats] = useState(defaultSeats);
   // Controlados: continuam preenchidos se o servidor devolver um erro.
   const [document, setDocument] = useState("");
-  const [coupon, setCoupon] = useState("");
   const gross = Math.max(minSeats, seats || 0) * pricePerSeatCents;
   const total = appliedCoupon ? Math.round(gross * (1 - appliedCoupon.percentOff / 100)) : gross;
 
@@ -242,21 +241,11 @@ export function SubscriptionForm({
       </div>
       {appliedCoupon ? (
         <p className="text-sm text-ink-2">
-          Cupom <strong>{appliedCoupon.code}</strong> aplicado: {appliedCoupon.percentOff}% de desconto.
+          Cupom <strong>{appliedCoupon.code}</strong> aplicado: {appliedCoupon.percentOff}% de desconto em todas as faturas.
         </p>
-      ) : (
-        <Field label="Cupom de desconto" hint="Opcional" error={state.fieldErrors?.coupon}>
-          <Input
-            name="coupon"
-            autoComplete="off"
-            value={coupon}
-            onChange={(e) => setCoupon(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 30))}
-            className="uppercase"
-          />
-        </Field>
-      )}
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-2 px-4 py-3">
-        <span className="text-sm text-muted">{coupon && !appliedCoupon ? "Total mensal, antes do cupom" : "Total mensal"}</span>
+        <span className="text-sm text-muted">Total mensal</span>
         <span className="font-display text-xl font-semibold tabular-nums">{formatMoney(total)}</span>
       </div>
       <Button type="submit" disabled={pending}>
@@ -290,5 +279,36 @@ export function WeeklyDigestToggle({ initial }: { initial: boolean }) {
         className="mt-1 size-5 shrink-0 accent-[var(--brand)]"
       />
     </label>
+  );
+}
+
+/** Cupom da DomuTech: dias grátis liberam o acesso na hora; desconto vale na assinatura. */
+export function CouponForm() {
+  const [state, action, pending] = useActionState(redeemCoupon, {} as BillingState);
+  const [code, setCode] = useState("");
+
+  useEffect(() => {
+    if (state.url) window.location.assign(state.url);
+  }, [state]);
+
+  return (
+    <form action={action} className="flex flex-col gap-3 p-5 sm:p-6" noValidate>
+      {state.error ? <FormMessage>{state.error}</FormMessage> : null}
+      {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
+      <div className="flex flex-wrap items-start gap-2">
+        <Field label="Código do cupom" error={state.fieldErrors?.coupon} className="min-w-48 flex-1">
+          <Input
+            name="coupon"
+            autoComplete="off"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 30))}
+            className="uppercase tracking-wider"
+          />
+        </Field>
+        <Button type="submit" variant="secondary" disabled={pending || code.length < 3} className="mt-6 h-11">
+          {pending ? "Aplicando..." : "Aplicar"}
+        </Button>
+      </div>
+    </form>
   );
 }

@@ -116,16 +116,16 @@ async function BillingBanner() {
   let text: string | null = null;
   if (org.status === "canceled") text = "Assinatura cancelada. Os dados estão disponíveis só para consulta.";
   else if (org.status === "past_due") text = "Há uma fatura em aberto. Regularize para não perder o acesso.";
-  else if (org.status === "trialing" && daysLeft <= 0) text = "O período de teste terminou. Os dados estão disponíveis só para consulta.";
-  else if (org.status === "trialing" && daysLeft <= 5) text = `Faltam ${daysLeft} ${daysLeft === 1 ? "dia" : "dias"} de teste grátis.`;
+  else if (org.status === "trialing" && daysLeft <= 0) text = "A conta ainda não está ativa. Os dados ficam disponíveis só para consulta.";
+  else if (org.status === "trialing" && daysLeft <= 5) text = `Faltam ${daysLeft} ${daysLeft === 1 ? "dia" : "dias"} de acesso gratuito.`;
   if (!text) return null;
 
   return (
     <div className="flex items-center justify-between gap-4 bg-brand px-4 py-2.5 print:hidden text-[13px] text-brand-ink sm:px-6 lg:px-10">
       <span>{text}</span>
       {role === "owner" ? (
-        <Link href="/conta#assinatura" className="shrink-0 font-semibold underline underline-offset-4">
-          Ver assinatura
+        <Link href={org.status === "trialing" ? "/ativar" : "/conta#assinatura"} className="shrink-0 font-semibold underline underline-offset-4">
+          {org.status === "trialing" ? "Ativar conta" : "Ver assinatura"}
         </Link>
       ) : null}
     </div>

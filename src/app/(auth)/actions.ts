@@ -107,7 +107,14 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
   const user = data.user;
   const { data: org, error: orgError } = await admin
     .from("organizations")
-    .insert({ name: orgName, contact_phone: whatsapp })
+    // Sem teste grátis: a conta nasce aguardando ativação (assinatura ou cupom).
+    .insert({
+      name: orgName,
+      contact_phone: whatsapp,
+      trial_ends_at: new Date().toISOString(),
+      trial_reminder_sent_at: new Date().toISOString(),
+      trial_ended_notified_at: new Date().toISOString(),
+    })
     .select("id")
     .single();
 
@@ -139,7 +146,7 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
   const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
   if (signInError) redirect("/entrar");
 
-  redirect("/painel");
+  redirect("/ativar");
 }
 
 const RESET_SENT = {

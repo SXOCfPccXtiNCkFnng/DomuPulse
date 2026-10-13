@@ -10,24 +10,25 @@ function firstName(fullName: string) {
 
 export function sendWelcomeEmail(input: { to: string; fullName: string; orgName: string }) {
   const name = firstName(input.fullName);
-  const url = siteUrl("/painel");
+  const url = siteUrl("/ativar");
   return sendEmail({
     to: input.to,
     subject: "Bem-vindo ao Domu Pulse",
     html: brandedEmail({
       heading: `Parabéns, ${name}!`,
-      preheader: "Seu teste grátis de 14 dias já começou.",
+      preheader: "Falta só ativar a conta para a equipe começar.",
       bodyHtml:
-        p(`A <strong>${escapeHtml(input.orgName)}</strong> agora faz parte do Domu Pulse. Seu teste grátis de 14 dias já começou.`) +
+        p(`A <strong>${escapeHtml(input.orgName)}</strong> agora faz parte do Domu Pulse.`) +
         p("Para começar:") +
         `<ol style="margin:0;padding-left:20px">
+          <li>Ative a conta com a assinatura ou um cupom</li>
           <li>Crie a primeira equipe na aba Equipe</li>
           <li>Convide o gerente e os corretores</li>
           <li>Ative as notificações no celular na aba Conta</li>
         </ol>`,
-      cta: { label: "Acessar o painel", url },
+      cta: { label: "Ativar minha conta", url },
     }),
-    text: `Parabéns, ${name}!\n\nA ${input.orgName} agora faz parte do Domu Pulse. Seu teste grátis de 14 dias já começou.\n\nPara começar:\n1. Crie a primeira equipe na aba Equipe\n2. Convide o gerente e os corretores\n3. Ative as notificações no celular na aba Conta\n\nAcesse: ${url}${contactFooterText()}`,
+    text: `Parabéns, ${name}!\n\nA ${input.orgName} agora faz parte do Domu Pulse.\n\nPara começar:\n1. Ative a conta com a assinatura ou um cupom\n2. Crie a primeira equipe na aba Equipe\n3. Convide o gerente e os corretores\n4. Ative as notificações no celular na aba Conta\n\nAcesse: ${url}${contactFooterText()}`,
   });
 }
 
@@ -153,15 +154,15 @@ export function sendTrialEndingEmail(input: { to: string; fullName: string; orgN
   const url = siteUrl("/conta#assinatura");
   return sendEmail({
     to: input.to,
-    subject: `Faltam ${days} de teste grátis no Domu Pulse`,
+    subject: `Faltam ${days} de acesso gratuito no Domu Pulse`,
     html: brandedEmail({
       heading: `Faltam ${days}, ${name}`,
       bodyHtml:
-        p(`O teste grátis da <strong>${escapeHtml(input.orgName)}</strong> termina em ${days}.`) +
+        p(`O acesso gratuito da <strong>${escapeHtml(input.orgName)}</strong> termina em ${days}.`) +
         p("Para a equipe continuar enviando relatórios sem interrupção, ative a assinatura. O pagamento pode ser por Pix, boleto ou cartão."),
       cta: { label: "Ativar assinatura", url },
     }),
-    text: `Faltam ${days}, ${name}\n\nO teste grátis da ${input.orgName} termina em ${days}. Para a equipe continuar enviando relatórios, ative a assinatura:\n${url}${contactFooterText()}`,
+    text: `Faltam ${days}, ${name}\n\nO acesso gratuito da ${input.orgName} termina em ${days}. Para a equipe continuar enviando relatórios, ative a assinatura:\n${url}${contactFooterText()}`,
   });
 }
 
@@ -170,15 +171,15 @@ export function sendTrialEndedEmail(input: { to: string; fullName: string; orgNa
   const url = siteUrl("/conta#assinatura");
   return sendEmail({
     to: input.to,
-    subject: "Seu teste grátis do Domu Pulse terminou",
+    subject: "Seu acesso gratuito ao Domu Pulse terminou",
     html: brandedEmail({
-      heading: `O teste terminou, ${name}`,
+      heading: `O acesso gratuito terminou, ${name}`,
       bodyHtml:
-        p(`O teste grátis da <strong>${escapeHtml(input.orgName)}</strong> chegou ao fim. Todos os dados continuam salvos e disponíveis para consulta.`) +
+        p(`O acesso gratuito da <strong>${escapeHtml(input.orgName)}</strong> chegou ao fim. Todos os dados continuam salvos e disponíveis para consulta.`) +
         p("Ative a assinatura para a equipe voltar a enviar relatórios e agendar visitas."),
       cta: { label: "Ativar assinatura", url },
     }),
-    text: `O teste terminou, ${name}\n\nO teste grátis da ${input.orgName} chegou ao fim. Os dados continuam salvos. Ative a assinatura para voltar a usar:\n${url}${contactFooterText()}`,
+    text: `O acesso gratuito terminou, ${name}\n\nO acesso gratuito da ${input.orgName} chegou ao fim. Os dados continuam salvos. Ative a assinatura para voltar a usar:\n${url}${contactFooterText()}`,
   });
 }
 

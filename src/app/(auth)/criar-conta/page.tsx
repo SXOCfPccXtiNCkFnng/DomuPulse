@@ -7,8 +7,8 @@ export const metadata: Metadata = { title: "Criar conta" };
 export default function SignUpPage() {
   return (
     <>
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Teste grátis por 14 dias</h1>
-      <p className="mt-2 mb-8 text-muted">Sem cartão. Você convida a equipe depois.</p>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">Crie a conta da sua imobiliária</h1>
+      <p className="mt-2 mb-8 text-muted">Em poucos minutos sua equipe está lançando relatórios.</p>
       <SignUpForm />
       <p className="mt-8 text-sm text-muted">
         Já tem conta?{" "}

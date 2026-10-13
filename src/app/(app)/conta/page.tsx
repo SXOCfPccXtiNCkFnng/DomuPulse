@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeSwitcher } from "@/components/theme";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
-import { getCurrentMember, ROLE_LABEL, type OrgStatus } from "@/lib/auth";
+import { getCurrentMember, orgCanWrite, ROLE_LABEL, type OrgStatus } from "@/lib/auth";
 import { vapidPublicKey } from "@/lib/env";
 import { formatMoney } from "@/lib/metrics";
 import { isPlatformAdminEmail } from "@/lib/platform-admins";
@@ -9,14 +9,14 @@ import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
-import { InstallGuide, PushSettings, SubscriptionForm, WeeklyDigestToggle } from "./client";
+import { CouponForm, InstallGuide, PushSettings, SubscriptionForm, WeeklyDigestToggle } from "./client";
 import { OrgSettingsForm } from "./org-settings";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
 export const metadata: Metadata = { title: "Conta" };
 
 const STATUS_LABEL: Record<OrgStatus, { label: string; tone: "brand" | "warn" | "danger" | "neutral" }> = {
-  trialing: { label: "Teste grátis", tone: "neutral" },
+  trialing: { label: "Acesso gratuito", tone: "neutral" },
   active: { label: "Ativa", tone: "brand" },
   past_due: { label: "Fatura em aberto", tone: "warn" },
   canceled: { label: "Cancelada", tone: "danger" },
@@ -90,7 +90,9 @@ export default async function ContaPage() {
             title="Assinatura"
             description={
               me.org.status === "trialing"
-                ? `Teste grátis até ${formatDate(me.org.trialEndsAt.slice(0, 10))}`
+                ? orgCanWrite(me.org)
+                  ? `Acesso gratuito até ${formatDate(me.org.trialEndsAt.slice(0, 10))}`
+                  : "Conta aguardando ativação"
                 : `${org?.seats ?? 0} assentos contratados`
             }
             action={<Badge tone={status.tone}>{status.label}</Badge>}
@@ -100,8 +102,12 @@ export default async function ContaPage() {
             pricePerSeatCents={PRICE_PER_SEAT_CENTS}
             defaultSeats={Math.max(MIN_SEATS, org?.seats ?? MIN_SEATS)}
             minSeats={MIN_SEATS}
-            appliedCoupon={coupon ? { code: coupon.code, percentOff: Number(coupon.percent_off) } : null}
+            appliedCoupon={coupon?.percent_off != null ? { code: coupon.code, percentOff: Number(coupon.percent_off) } : null}
           />
+          <div className="border-t border-line">
+            <p className="px-5 pt-5 text-sm font-medium sm:px-6">Cupom</p>
+            <CouponForm />
+          </div>
         </Card>
       ) : null}
     </div>

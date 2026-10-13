@@ -69,16 +69,16 @@ const sections: LegalSection[] = [
     ),
   },
   {
-    title: "Teste grátis, assinatura e cancelamento",
+    title: "Assinatura, cupons e cancelamento",
     body: (
       <>
         <p>
-          Novas contas têm 14 dias de teste grátis, sem cartão. Depois disso, o uso depende de assinatura mensal
+          O uso depende de assinatura mensal
           recorrente, cobrada pelo Asaas por Pix, boleto ou cartão, de acordo com o número de assentos (pessoas ativas na
           conta).
         </p>
         <p>
-          Com o teste encerrado ou a assinatura cancelada, os dados continuam disponíveis só para consulta. O cancelamento
+          Cupons de acesso gratuito ou de desconto são oferecidos a critério da DomuTech, valem uma vez por imobiliária e podem ter prazo. Sem assinatura ativa ou com o acesso gratuito encerrado, os dados continuam disponíveis só para consulta. O cancelamento
           pode ser pedido a qualquer momento e vale ao fim do período já pago, sem reembolso proporcional, salvo obrigação
           legal. Reajustes de preço para assinantes são avisados por e-mail com pelo menos 30 dias de antecedência.
         </p>

@@ -7,11 +7,12 @@ import { notifyRoles } from "@/lib/notify";
 import { orgOwnerContact } from "@/lib/org-owner";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const REMIND_DAYS_BEFORE = 3;
+// Teste de 3 dias: avisa no último dia.
+const REMIND_DAYS_BEFORE = 1;
 
 /**
  * Uma vez por dia: avisa o administrador quando faltam 3 dias para o teste
- * acabar e quando ele acaba. Cada aviso é "reservado" no banco antes de sair,
+ * acabar (1 dia antes) e quando ele acaba. Cada aviso é "reservado" no banco antes de sair,
  * então rodar duas vezes no mesmo dia não manda e-mail repetido.
  */
 export async function GET(request: NextRequest) {
@@ -52,7 +53,7 @@ async function run() {
   for (const org of endingOrgs ?? []) {
     await notifyRoles(org.id, ["owner"], {
       kind: "trial_ending",
-      title: "Teste grátis acabando",
+      title: "Acesso gratuito acabando",
       body: "Ative a assinatura para a equipe continuar sem interrupção.",
       url: "/conta#assinatura",
     });
@@ -76,7 +77,7 @@ async function run() {
   for (const org of endedOrgs ?? []) {
     await notifyRoles(org.id, ["owner"], {
       kind: "trial_ended",
-      title: "Teste grátis encerrado",
+      title: "Acesso gratuito encerrado",
       body: "Os dados seguem salvos. Ative a assinatura para voltar a lançar.",
       url: "/conta#assinatura",
     });

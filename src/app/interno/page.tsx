@@ -118,9 +118,9 @@ async function Overview() {
           </ul>
         </Card>
         <Card>
-          <CardHeader title="Testes acabando" description="Próximos 3 dias: bom momento para um contato comercial" />
+          <CardHeader title="Acessos gratuitos acabando" description="Próximos 3 dias: bom momento para um contato comercial" />
           <ul className="flex flex-col gap-1 p-4 sm:p-5">
-            {o.endingSoon.length === 0 ? <li className="px-3 py-6 text-center text-sm text-muted">Nenhum teste acabando.</li> : null}
+            {o.endingSoon.length === 0 ? <li className="px-3 py-6 text-center text-sm text-muted">Nenhum acesso gratuito acabando.</li> : null}
             {o.endingSoon.map((org) => (
               <li key={org.id} className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-surface-2">
                 <span className="truncate text-sm font-medium">{org.name}</span>
@@ -241,8 +241,8 @@ async function Errors({ status, level }: { status: "open" | "resolved"; level: s
 }
 
 const STATUS: Record<OrgStatusView, { label: string; tone: "neutral" | "brand" | "warn" | "danger" }> = {
-  trial: { label: "Em teste", tone: "neutral" },
-  trial_expired: { label: "Teste vencido", tone: "warn" },
+  trial: { label: "Acesso gratuito", tone: "neutral" },
+  trial_expired: { label: "Aguardando ativação", tone: "warn" },
   active: { label: "Ativa", tone: "brand" },
   past_due: { label: "Fatura em aberto", tone: "warn" },
   canceled: { label: "Cancelada", tone: "danger" },
@@ -287,7 +287,7 @@ async function Orgs({ search }: { search: string }) {
                 {org.activeMembers} de {org.seats} assentos em uso
                 {org.subscribed_seats && org.subscribed_seats !== org.seats ? ` (${org.subscribed_seats} pedidos)` : ""}, criada em{" "}
                 {formatDate(org.created_at.slice(0, 10))}
-                {org.view === "trial" || org.view === "trial_expired" ? `, teste até ${formatDate(org.trial_ends_at.slice(0, 10))}` : ""}
+                {org.view === "trial" || org.view === "trial_expired" ? `, acesso gratuito até ${formatDate(org.trial_ends_at.slice(0, 10))}` : ""}
                 {org.lastReport ? `, último relatório em ${formatDate(org.lastReport)}` : ", nenhum relatório ainda"}
               </p>
             </div>
@@ -342,7 +342,7 @@ async function Commercial() {
             <thead>
               <tr className="text-left text-xs text-muted">
                 <th className="px-5 py-3 font-medium sm:px-6">Código</th>
-                <th className="px-3 py-3 font-medium">Desconto</th>
+                <th className="px-3 py-3 font-medium">Benefício</th>
                 <th className="px-3 py-3 font-medium">Usos</th>
                 <th className="px-3 py-3 font-medium">Validade</th>
                 <th className="px-5 py-3 sm:px-6" />
@@ -362,7 +362,7 @@ async function Commercial() {
                     <span className="font-semibold">{c.code}</span>
                     {c.description ? <span className="block text-xs text-muted">{c.description}</span> : null}
                   </td>
-                  <td className="px-3 py-3 tabular-nums">{Number(c.percent_off)}%</td>
+                  <td className="px-3 py-3 tabular-nums">{c.free_days ? `${c.free_days} dias grátis` : `${Number(c.percent_off)}% de desconto`}</td>
                   <td className="px-3 py-3 tabular-nums">
                     {c.redemption_count}
                     {c.max_redemptions ? ` de ${c.max_redemptions}` : ""}
@@ -382,7 +382,7 @@ async function Commercial() {
         </div>
       </Card>
       <Card className="self-start">
-        <CardHeader title="Novo cupom" description="O desconto vale em todas as faturas da assinatura" />
+        <CardHeader title="Novo cupom" description="Dias grátis liberam a conta sem pagamento; desconto vale em todas as faturas" />
         <CouponForm />
       </Card>
     </div>

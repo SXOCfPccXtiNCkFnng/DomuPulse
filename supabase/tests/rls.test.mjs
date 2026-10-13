@@ -44,7 +44,7 @@ await db.exec(`
     ('${uid("b1")}'), ('${uid("b2")}'), ('${uid("b3")}'), ('${uid("bOff")}'),
     ('${uid("ownerB")}'), ('${uid("bB")}');
 
-  insert into organizations (id, name) values ('${uid("orgA")}', 'Imob A'), ('${uid("orgB")}', 'Imob B');
+  insert into organizations (id, name, status) values ('${uid("orgA")}', 'Imob A', 'active'), ('${uid("orgB")}', 'Imob B', 'active');
   insert into organizations (id, name, status, trial_ends_at) values ('${uid("orgC")}', 'Imob Expirada', 'trialing', now() - interval '1 day');
   insert into divisions (id, org_id, name) values ('${uid("d1")}', '${uid("orgA")}', 'Diretoria'), ('${uid("dB")}', '${uid("orgB")}', 'Diretoria');
   insert into teams (id, org_id, division_id, name) values
@@ -246,7 +246,7 @@ for (const table of ["rate_limits", "ops_alerts", "system_heartbeats", "coupons"
   await expectError(`cliente não lê ${table}`, "ownerA", `select * from ${table}`, /permission denied/);
 }
 await expectError("cliente não chama o limitador", "ownerA", "select * from hit_rate_limit('x', 60)", /permission denied/);
-await expectError("anon não resgata cupom", null, "select redeem_coupon('X')", /permission denied/, [], "anon");
+await expectError("anon não resgata cupom", null, "select redeem_coupon('X', null)", /permission denied/, [], "anon");
 await expectError("cliente não registra erro", "ownerA", "select record_ops_event('f','s','error','m',null,'{}',1)", /permission denied/);
 await expectError("dona não aplica cupom direto na organização", "ownerA", "update organizations set coupon_code = 'X'", /permission denied/);
 await expectError("membro não grava o próprio aceite dos termos", "b1", "update members set terms_accepted_at = now()", /permission denied/);
@@ -268,10 +268,22 @@ await as(null, "select record_heartbeat('cron.x', false, '{}', 'caiu')", [], "se
 const hb = (await as(null, "select run_count, last_error, last_ok_at is not null as ok_before from system_heartbeats where name = 'cron.x'", [], "service_role")).rows[0];
 check("batimento guarda a falha sem perder o último sucesso", hb.run_count === 2 && hb.last_error === "caiu" && hb.ok_before, JSON.stringify(hb));
 
+const redeem = async (code, org) =>
+  (await as(null, `select * from redeem_coupon('${code}', '${uid(org)}')`, [], "service_role")).rows[0] ?? null;
 await as(null, "insert into coupons (code, percent_off, max_redemptions) values ('PILOTO', 20, 1)", [], "service_role");
-const r1 = (await as(null, "select redeem_coupon('piloto') as p", [], "service_role")).rows[0].p;
-const r2 = (await as(null, "select redeem_coupon('PILOTO') as p", [], "service_role")).rows[0].p;
-check("cupom respeita o limite de usos", Number(r1) === 20 && r2 === null, `${r1} ${r2}`);
+const r1 = await redeem("piloto", "orgA");
+const r2 = await redeem("PILOTO", "orgB");
+check("cupom respeita o limite de usos", Number(r1?.percent_off) === 20 && r2 === null, `${JSON.stringify(r1)} ${JSON.stringify(r2)}`);
+
+await as(null, "insert into coupons (code, free_days) values ('AMIGO30', 30)", [], "service_role");
+const d1 = await redeem("AMIGO30", "orgA");
+const d2 = await redeem("AMIGO30", "orgA");
+const d3 = await redeem("AMIGO30", "orgB");
+check("cupom de dias grátis devolve os dias", d1?.free_days === 30 && d1?.percent_off === null, JSON.stringify(d1));
+check("a mesma imobiliária não usa o cupom duas vezes", d2 === null, JSON.stringify(d2));
+check("outra imobiliária usa normalmente", d3?.free_days === 30, JSON.stringify(d3));
+check("cupom inexistente não devolve nada", (await redeem("NAOEXISTE", "orgA")) === null);
+await expectError("cupom precisa de exatamente um benefício", null, "insert into coupons (code, percent_off, free_days) values ('DUPLO', 10, 10)", /coupons_one_benefit/, [], "service_role");
 
 console.log(`\n${passed} passaram, ${failed} falharam`);
 process.exit(failed ? 1 : 0);

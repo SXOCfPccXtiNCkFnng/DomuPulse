@@ -93,7 +93,7 @@ export function SignUpForm() {
       <TermsCheckbox error={state.fieldErrors?.acceptTerms} />
       <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending} className="mt-1">
-        {pending ? "Criando conta..." : "Começar teste grátis"}
+        {pending ? "Criando conta..." : "Criar conta"}
       </Button>
     </form>
   );

@@ -89,3 +89,9 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
 export function isLeader(role: Role) {
   return role !== "broker";
 }
+
+/** A organização pode lançar dados? Assinatura em dia ou acesso gratuito valendo. */
+export function orgCanWrite(org: Pick<CurrentMember["org"], "status" | "trialEndsAt">) {
+  if (org.status === "active" || org.status === "past_due") return true;
+  return org.status === "trialing" && Date.parse(org.trialEndsAt) > Date.now();
+}

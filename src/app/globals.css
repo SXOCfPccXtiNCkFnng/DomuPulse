@@ -72,6 +72,12 @@
   color-scheme: dark;
 }
 
+/* Página de vendas: cantos retos e as mesmas cores do tema escolhido. */
+.landing {
+  background: var(--bg);
+  color: var(--ink);
+}
+
 /* Impressão e PDF sempre no tema claro: fundo escuro gasta tinta. */
 @media print {
   /* Mesma especificidade das regras do tema escuro, e vem depois: vence. */
