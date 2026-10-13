@@ -1,28 +1,19 @@
 import clsx from "clsx";
+import Image from "next/image";
+import mark from "../../../public/brand/mark.png";
+import markWhite from "../../../public/brand/mark-white.png";
 
-export function PulseMark({ className, animated = false }: { className?: string; animated?: boolean }) {
-  return (
-    <svg viewBox="0 0 32 32" className={clsx("shrink-0", className)} aria-hidden="true">
-      <rect width="32" height="32" rx="9" fill="var(--brand)" />
-      <path
-        d="M5 17h5.5l2.5-6 4 12 3-9 1.8 3H27"
-        fill="none"
-        stroke="var(--brand-ink)"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={animated ? "animate-trace" : undefined}
-      />
-    </svg>
-  );
+/** O "D" da DomuTech. `white` para usar sobre fundo azul-marinho. */
+export function BrandMark({ className, white = false }: { className?: string; white?: boolean }) {
+  return <Image src={white ? markWhite : mark} alt="" aria-hidden="true" className={clsx("shrink-0 object-contain", className)} priority />;
 }
 
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={clsx("inline-flex items-center gap-2.5", className)}>
-      <PulseMark className="size-8" />
+      <BrandMark className="size-7" />
       <span className="font-display text-[1.15rem] font-semibold tracking-tight leading-none">
-        <span className="text-muted font-medium">Domu</span> Pulse
+        <span className="font-medium text-muted">Domu</span> Pulse
       </span>
     </span>
   );

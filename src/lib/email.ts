@@ -92,7 +92,7 @@ export function brandedEmail({
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px">
         <tr><td style="background:#0f2a5f;border-radius:16px 16px 0 0;padding:22px 32px">
-          <img src="${siteUrl("/icons/icon-192.png")}" width="28" height="28" alt="" style="vertical-align:middle;border:0;border-radius:7px">
+          <img src="${siteUrl("/brand/mark-white.png")}" width="26" height="26" alt="" style="vertical-align:middle;border:0">
           <span style="vertical-align:middle;margin-left:10px;color:#ffffff;font-size:17px;font-weight:bold">Domu Pulse</span>
         </td></tr>
         <tr><td style="background:#ffffff;border:1px solid #e2e7f0;border-top:0;border-radius:0 0 16px 16px;padding:32px">

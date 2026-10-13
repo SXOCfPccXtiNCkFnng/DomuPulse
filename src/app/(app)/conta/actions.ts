@@ -51,3 +51,11 @@ export async function sendTestNotification() {
   });
   return { sent };
 }
+
+/** Liga ou desliga o resumo semanal por e-mail (só liderança recebe). */
+export async function setWeeklyDigest(enabled: boolean) {
+  const me = await getCurrentMember();
+  if (me.role === "broker") return { ok: false };
+  const { error } = await createAdminClient().from("members").update({ weekly_digest: enabled }).eq("id", me.id);
+  return { ok: !error };
+}

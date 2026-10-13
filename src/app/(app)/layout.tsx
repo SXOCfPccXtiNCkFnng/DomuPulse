@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { SideNav, TabBar } from "@/components/app-nav";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeSwitcher, ThemeToggle } from "@/components/theme";
-import { Logo, PulseMark } from "@/components/ui/logo";
+import { BrandMark, Logo } from "@/components/ui/logo";
 import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
@@ -33,7 +33,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/85 px-4 backdrop-blur-xl lg:hidden print:hidden">
           <Link href="/painel" aria-label="Painel">
-            <PulseMark className="size-8" />
+            <BrandMark className="size-8" />
           </Link>
           <span className="flex items-center gap-1">
             <Suspense>

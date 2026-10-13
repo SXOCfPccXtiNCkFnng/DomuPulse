@@ -11,7 +11,7 @@
   --surface-3: #e1e7f1;
   --line: #e2e7f0;
   --line-strong: #c8d1e0;
-  --ink: #0b1b36;
+  --ink: #040c30;
   --ink-2: #2b3a56;
   --muted: #5d6983;
   --brand: #0f2a5f;
@@ -37,7 +37,7 @@
     --ink: #e9eef8;
     --ink-2: #bcc8de;
     --muted: #8291ae;
-    --brand: #2556c9;
+    --brand: #0259f3;
     --brand-ink: #ffffff;
     --brand-text: #8fb2ff;
     --brand-soft: #112450;
@@ -60,7 +60,7 @@
   --ink: #e9eef8;
   --ink-2: #bcc8de;
   --muted: #8291ae;
-  --brand: #2556c9;
+  --brand: #0259f3;
   --brand-ink: #ffffff;
   --brand-text: #8fb2ff;
   --brand-soft: #112450;
@@ -143,12 +143,6 @@ body {
   outline-offset: 2px;
 }
 
-/* Linha de pulso que percorre a marca. */
-@keyframes pulse-trace {
-  from { stroke-dashoffset: 120; }
-  to { stroke-dashoffset: 0; }
-}
-
 @keyframes live-dot {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand-text) 60%, transparent); }
   50% { box-shadow: 0 0 0 6px transparent; }
@@ -163,11 +157,6 @@ body {
 @keyframes flash {
   0% { background-color: color-mix(in oklab, var(--brand-text) 22%, transparent); }
   100% { background-color: transparent; }
-}
-
-@utility animate-trace {
-  stroke-dasharray: 120;
-  animation: pulse-trace 1.6s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 
 @utility animate-live {

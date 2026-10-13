@@ -1,6 +1,15 @@
+import { Check, Clock, Timer } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme";
 import { Logo } from "@/components/ui/logo";
+
+// Prévia do que a liderança vê: os horários do dia e quem já entregou.
+const SLOTS = [
+  { time: "12h", label: "Entregue", Icon: Check, tone: "bg-[#8fb2ff] text-[#071633]" },
+  { time: "15h", label: "Aberto", Icon: Timer, tone: "bg-white/15 text-white" },
+  { time: "18h", label: "Em breve", Icon: Clock, tone: "bg-white/[0.06] text-[#9fb0cf]" },
+  { time: "21h", label: "Em breve", Icon: Clock, tone: "bg-white/[0.06] text-[#9fb0cf]" },
+];
 
 const FEED = [
   { name: "Marina", action: "entregou o relatório das 15h", value: "4 visitas" },
@@ -43,28 +52,37 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
 
         <div className="relative">
           <p className="font-display text-[2.6rem] font-semibold leading-[1.05] tracking-tight">
-            Sua operação
+            Cada relatório
             <br />
-            batendo em
+            da equipe, no seu
             <br />
-            <span className="text-[#8fb2ff]">tempo real.</span>
+            painel, <span className="text-[#8fb2ff]">na hora.</span>
           </p>
           <p className="mt-5 max-w-sm text-[15px] text-[#9fb0cf]">
             Cada relatório, visita e venda aparece no painel da liderança no momento em que acontece.
           </p>
         </div>
 
-        <svg viewBox="0 0 600 120" className="relative w-full" fill="none">
-          <path
-            d="M0 70 H150 L175 70 L195 30 L220 105 L245 15 L268 85 L285 70 H420 L440 70 L455 48 L472 92 L490 70 H600"
-            stroke="#8fb2ff"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ strokeDasharray: 120, animation: "pulse-trace 2.4s cubic-bezier(.65,0,.35,1) both" }}
-            pathLength={120}
-          />
-        </svg>
+        <div className="relative rounded-2xl border border-white/[0.08] bg-white/[0.04] p-5 backdrop-blur">
+          <div className="flex items-baseline justify-between gap-4">
+            <p className="text-sm text-[#9fb0cf]">Relatório das 15h</p>
+            <p className="font-display text-sm font-semibold tabular-nums">14 de 18 entregues</p>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full w-[78%] rounded-full bg-[#8fb2ff]" />
+          </div>
+          <ul className="mt-4 grid grid-cols-4 gap-2">
+            {SLOTS.map(({ time, label, Icon, tone }) => (
+              <li key={time} className="flex flex-col items-start gap-2 rounded-xl bg-white/[0.03] p-3">
+                <span className="font-display text-lg font-semibold">{time}</span>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>
+                  <Icon className="size-3" strokeWidth={2.5} />
+                  {label}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         <ul className="relative space-y-3">
           {FEED.map((item, i) => (

@@ -9,6 +9,7 @@ import { describeError, logger } from "@/lib/logger";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { IMPORT_MAX_ROWS, normalize, roleFromText } from "@/lib/team-import";
 import { emailSchema, fieldErrors, nameSchema, type FormState } from "@/lib/validation";
 
 function orgWritable(org: CurrentMember["org"]) {
@@ -68,50 +69,65 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
     return { error: `Todos os ${org.seats} assentos do plano estão em uso. Desative alguém ou aumente o plano.` };
   }
 
-  // Cria o usuário e o link de convite sem o Supabase mandar e-mail: o
-  // convite sai pelo nosso e-mail, com a marca do Pulse.
+  const result = await createInvite(me, { fullName, email, role, teamId, divisionId });
+  if (!result.ok) return result.field ? { fieldErrors: { [result.field]: result.error } } : { error: result.error };
+
+  revalidatePath("/equipe");
+  return { success: `Convite enviado para ${email}.` };
+}
+
+type InviteResult = { ok: true } | { ok: false; error: string; field?: "email" };
+
+/**
+ * Cria o usuário e o membro e envia o convite pelo nosso e-mail, com a
+ * marca do Pulse. Usado pelo convite manual e pela importação. Quem chama
+ * já conferiu permissão, escopo e assentos.
+ */
+async function createInvite(
+  me: CurrentMember,
+  input: { fullName: string; email: string; role: Role; teamId: string | null; divisionId: string | null },
+): Promise<InviteResult> {
+  const admin = createAdminClient();
   const { data: invited, error: inviteError } = await admin.auth.admin.generateLink({
     type: "invite",
-    email,
-    options: { data: { full_name: fullName } },
+    email: input.email,
+    options: { data: { full_name: input.fullName } },
   });
   const hash = invited?.properties?.hashed_token;
   if (inviteError || !invited.user || !hash) {
-    if (inviteError?.code === "email_exists") return { fieldErrors: { email: "Este e-mail já tem conta no Pulse." } };
+    if (inviteError?.code === "email_exists") return { ok: false, field: "email", error: "Este e-mail já tem conta no Pulse." };
     logger.error("team.invite_link", { message: describeError(inviteError), orgId: me.org.id });
-    return { error: "Não foi possível enviar o convite. Tente novamente." };
+    return { ok: false, error: "Não foi possível enviar o convite. Tente novamente." };
   }
 
   const { error: memberError } = await admin.from("members").insert({
     org_id: me.org.id,
     user_id: invited.user.id,
-    full_name: fullName,
-    role,
-    team_id: teamId,
-    division_id: divisionId,
+    full_name: input.fullName,
+    role: input.role,
+    team_id: input.teamId,
+    division_id: input.divisionId,
   });
   if (memberError) {
     await admin.auth.admin.deleteUser(invited.user.id);
     logger.error("team.invite_member", { message: describeError(memberError), orgId: me.org.id });
-    return { error: "Não foi possível cadastrar o membro. Tente novamente." };
+    return { ok: false, error: "Não foi possível cadastrar o membro. Tente novamente." };
   }
 
   const sent = await sendInviteEmail({
-    to: email,
-    fullName,
+    to: input.email,
+    fullName: input.fullName,
     orgName: me.org.name,
-    roleLabel: ROLE_LABEL[role],
+    roleLabel: ROLE_LABEL[input.role],
     invitedBy: me.fullName,
     link: siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=invite`),
   });
   if (!sent.ok) {
     // Sem e-mail o convite não serve: desfaz para poder tentar de novo.
     await admin.auth.admin.deleteUser(invited.user.id);
-    return { error: "Não foi possível enviar o e-mail de convite. Tente novamente em instantes." };
+    return { ok: false, error: "Não foi possível enviar o e-mail de convite. Tente novamente em instantes." };
   }
-
-  revalidatePath("/equipe");
-  return { success: `Convite enviado para ${email}.` };
+  return { ok: true };
 }
 
 export async function setMemberActive(memberId: string, active: boolean): Promise<FormState> {
@@ -335,4 +351,85 @@ export async function renameDivision(divisionId: string, _: FormState, formData:
   if (error || !data?.length) return { error: "Sem permissão ou diretoria inexistente." };
   revalidatePath("/equipe");
   return { success: "Diretoria renomeada." };
+}
+
+
+// --------------------------------------------------------------------------
+// Importação por planilha
+// --------------------------------------------------------------------------
+
+export type ImportResult = { line: number; email: string; ok: boolean; error?: string };
+
+const importRowSchema = z.object({
+  line: z.number().int(),
+  fullName: z.string(),
+  email: z.string(),
+  role: z.string(),
+  team: z.string(),
+});
+
+/**
+ * Convida várias pessoas de uma vez. Valida tudo de novo no servidor (a
+ * prévia da tela é só conveniência), confere assentos antes de enviar
+ * qualquer convite e devolve o resultado de cada linha.
+ */
+export async function importMembers(rawRows: unknown): Promise<{ error?: string; results?: ImportResult[] }> {
+  const me = await getCurrentMember();
+  if (me.role === "broker") return { error: "Sem permissão." };
+  if (!orgWritable(me.org)) return READ_ONLY;
+
+  const parsed = z.array(importRowSchema).min(1).max(IMPORT_MAX_ROWS).safeParse(rawRows);
+  if (!parsed.success) return { error: `Envie de 1 a ${IMPORT_MAX_ROWS} pessoas por planilha.` };
+
+  const limit = await rateLimit(`import:user:${me.userId}`, 5, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec) };
+
+  // Equipes no escopo de quem importa, lidas com o cliente do usuário (RLS).
+  const supabase = await createClient();
+  const { data: teams } = await supabase.from("teams").select("id, name, division_id");
+  const scoped = (teams ?? []).filter(
+    (t) => me.role === "owner" || (me.role === "director" ? t.division_id === me.divisionId : t.id === me.teamId),
+  );
+  const byName = new Map(scoped.map((t) => [normalize(t.name), t]));
+
+  const results: ImportResult[] = [];
+  const valid: { line: number; fullName: string; email: string; role: Role; teamId: string; divisionId: string }[] = [];
+  const seen = new Set<string>();
+
+  for (const row of parsed.data) {
+    const fail = (error: string) => results.push({ line: row.line, email: row.email, ok: false, error });
+    const name = nameSchema.safeParse(row.fullName);
+    const email = emailSchema.safeParse(row.email);
+    const role = roleFromText(row.role);
+    const team = row.team ? byName.get(normalize(row.team)) : scoped.length === 1 ? scoped[0] : undefined;
+    if (!name.success) fail("Nome inválido.");
+    else if (!email.success) fail("E-mail inválido.");
+    else if (seen.has(email.data)) fail("E-mail repetido na planilha.");
+    else if (!role) fail("Cargo deve ser corretor ou gerente.");
+    else if (RANK[role] <= RANK[me.role]) fail("Cargo acima do que você pode convidar.");
+    else if (!team) fail(row.team ? `Equipe "${row.team}" não encontrada.` : "Informe a equipe.");
+    else {
+      seen.add(email.data);
+      valid.push({ line: row.line, fullName: name.data, email: email.data, role, teamId: team.id, divisionId: team.division_id });
+    }
+  }
+
+  const admin = createAdminClient();
+  const [{ count }, { data: org }] = await Promise.all([
+    admin.from("members").select("id", { count: "exact", head: true }).eq("org_id", me.org.id).eq("active", true),
+    admin.from("organizations").select("seats").eq("id", me.org.id).single(),
+  ]);
+  const free = Math.max(0, (org?.seats ?? 0) - (count ?? 0));
+  if (valid.length > free) {
+    return { error: `São ${valid.length} convites válidos, mas há só ${free} assentos livres. Aumente o plano ou importe menos pessoas.` };
+  }
+
+  // Um por vez: o provedor de e-mail limita envios em rajada.
+  for (const v of valid) {
+    const r = await createInvite(me, { fullName: v.fullName, email: v.email, role: v.role, teamId: v.teamId, divisionId: v.divisionId });
+    results.push(r.ok ? { line: v.line, email: v.email, ok: true } : { line: v.line, email: v.email, ok: false, error: r.error });
+  }
+
+  revalidatePath("/equipe");
+  return { results: results.sort((a, b) => a.line - b.line) };
 }

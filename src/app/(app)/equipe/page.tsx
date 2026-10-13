@@ -5,6 +5,7 @@ import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { getCurrentMember, ROLE_LABEL, ROLE_RANK, type Role } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { InviteForm, MemberActions, RenameDivision, TeamActions, TeamForm } from "./forms";
+import { ImportMembers } from "./import";
 
 export const metadata: Metadata = { title: "Equipe" };
 
@@ -104,6 +105,13 @@ export default async function EquipePage() {
             <CardHeader title="Convidar pessoa" description="Ela recebe um e-mail para criar a senha" />
             <InviteForm myRole={me.role} teams={teamOptions} divisions={divisionOptions} />
           </Card>
+
+          {teamOptions.length ? (
+            <Card>
+              <CardHeader title="Importar planilha" description="Convide várias pessoas de uma vez" />
+              <ImportMembers teams={teamOptions.map((t) => t.name)} canInviteManagers={me.role === "owner" || me.role === "director"} />
+            </Card>
+          ) : null}
 
           {canEditTeams ? (
             <Card>

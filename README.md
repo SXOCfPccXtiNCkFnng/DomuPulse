@@ -39,7 +39,7 @@ Endereço de produção: `pulse.domutech.digital`
 | Comando | O que faz |
 |---|---|
 | `npm test` | Testes de unidade: senha, nome, telefone, CPF e CNPJ, redirecionamento, fuso, ranking, preço, registro de erros |
-| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (83 cenários) |
+| `npm run test:db` | Aplica as migrações num Postgres embutido e tenta quebrar as permissões de cada cargo (95 cenários) |
 | `npm run typecheck` | Tipos do TypeScript |
 | `npm run lint` | Lint |
 
@@ -102,6 +102,7 @@ O plano gratuito da Vercel só roda cron uma vez por dia, então as rotinas fica
 | `https://pulse.domutech.digital/api/cron/reminders` | a cada 5 minutos | Lembretes de relatório no celular |
 | `https://pulse.domutech.digital/api/cron/billing` | 1 vez por dia, de manhã | Avisos de teste acabando e encerrado |
 | `https://pulse.domutech.digital/api/cron/cleanup` | 1 vez por dia, de madrugada | Apaga registros técnicos antigos |
+| `https://pulse.domutech.digital/api/cron/weekly` | toda segunda, às 8h | Resumo da semana por e-mail para a liderança |
 
 Cada execução fica registrada. Se uma tarefa parar, a aba Saúde do sistema do painel interno mostra.
 
@@ -133,6 +134,20 @@ O sininho (barra lateral no computador, topo no celular) mostra avisos que chega
 | Teste acabando ou encerrado | Administrador |
 
 Avisos lidos somem em 60 dias; não lidos, em 180 (rotina de limpeza).
+
+## Carteira de clientes
+
+Página **Clientes**: cada cliente num quadro por etapa (novo lead, em conversa, visita agendada, visitou, proposta, pré-venda, venda, perdido). Arrastar entre colunas no computador; no celular, a etapa muda na ficha. A ficha tem WhatsApp e ligação a um toque, valor do negócio, origem, anotações, motivo da perda e botão para agendar visita (que aparece na Agenda e avança o cliente para "Visita agendada"). Mesmas regras de acesso da agenda.
+
+O quadro não altera os números dos relatórios por horário: são registros separados.
+
+## Resumo semanal
+
+Toda segunda, cada pessoa da liderança recebe por e-mail (e no sininho) o resumo da semana anterior do seu escopo: leads, agendamentos, visitas e vendas com a comparação com a semana anterior, taxa de entrega dos relatórios, destaques e quem precisa de atenção. Dá para desligar em Conta, Notificações.
+
+## Importar equipe por planilha
+
+Em **Equipe, Importar planilha**: CSV com nome, e-mail, cargo (corretor ou gerente) e equipe. Até 200 pessoas por vez. A tela mostra o problema de cada linha antes de enviar; o servidor confere tudo de novo e checa os assentos antes de mandar qualquer convite. Planilha do Excel: salve como CSV.
 
 ## Configurações e equipe
 
@@ -179,7 +194,7 @@ O plano Hobby da Vercel é para uso não comercial. Para validar está ótimo; a
 src/
   app/
     (auth)/          entrar, criar conta, recuperar e definir senha
-    (app)/           painel, relatórios, metas, agenda, equipe, conta (exigem login)
+    (app)/           painel, clientes, relatórios, metas, agenda, equipe, conta (exigem login)
     interno/         painel interno da DomuTech
     termos/          Termos de Uso
     privacidade/     Política de Privacidade

@@ -6,7 +6,7 @@ import { Suspense, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme";
 import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
-import { PulseMark } from "@/components/ui/logo";
+import { BrandMark } from "@/components/ui/logo";
 import { StatTile } from "@/components/live/viz";
 import { loadAlerts, loadCoupons, loadHealth, loadOrgs, loadOverview, type HealthStatus, type OrgStatusView } from "@/lib/interno";
 import { formatMoney, formatNumber } from "@/lib/metrics";
@@ -52,7 +52,7 @@ async function Gate({ searchParams }: { searchParams: PageProps<"/interno">["sea
       <header className="sticky top-0 z-30 border-b border-line bg-bg/85 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
           <span className="flex items-center gap-2.5">
-            <PulseMark className="size-7" />
+            <BrandMark className="size-7" />
             <span className="font-display font-semibold tracking-tight">Painel interno</span>
           </span>
           <span className="flex items-center gap-2">
@@ -393,7 +393,7 @@ function EnableMfa() {
   return (
     <main className="grid min-h-dvh place-items-center px-5">
       <Card className="max-w-md p-8 text-center">
-        <PulseMark className="mx-auto size-10" />
+        <BrandMark className="mx-auto size-10" />
         <h1 className="mt-5 font-display text-2xl font-semibold tracking-tight">Ative a verificação em duas etapas</h1>
         <p className="mt-2 text-sm text-muted">
           O painel interno mexe em todas as imobiliárias. Para abrir, sua conta precisa da verificação em duas etapas e da sessão confirmada com o código.

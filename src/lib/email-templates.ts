@@ -63,6 +63,69 @@ export function sendPasswordResetEmail(input: { to: string; link: string }) {
   });
 }
 
+export type DigestData = {
+  to: string;
+  fullName: string;
+  scopeLabel: string;
+  weekLabel: string;
+  link: string;
+  metrics: { label: string; value: number; previous: number }[];
+  delivery: { delivered: number; expected: number };
+  top: { name: string; sales: number; visits: number }[];
+  attention: { name: string; reason: string }[];
+};
+
+function delta(value: number, previous: number) {
+  if (previous === 0) return value === 0 ? "igual à semana anterior" : "sem base na semana anterior";
+  const pct = Math.round(((value - previous) / previous) * 100);
+  if (pct === 0) return "igual à semana anterior";
+  return `${pct > 0 ? "+" : ""}${pct}% sobre a semana anterior`;
+}
+
+export function sendWeeklyDigestEmail(d: DigestData) {
+  const name = firstName(d.fullName);
+  const rate = d.delivery.expected ? Math.round((d.delivery.delivered / d.delivery.expected) * 100) : null;
+  const cell = "padding:12px;border:1px solid #e2e7f0;border-radius:12px";
+
+  const stats = d.metrics
+    .map(
+      (m) => `<td style="${cell};width:25%;vertical-align:top">
+        <div style="font-size:12px;color:#5d6983">${escapeHtml(m.label)}</div>
+        <div style="font-size:22px;font-weight:bold;color:#040c30;margin-top:2px">${m.value}</div>
+        <div style="font-size:11px;color:#5d6983;margin-top:2px">${delta(m.value, m.previous)}</div>
+      </td>`,
+    )
+    .join('<td style="width:8px"></td>');
+
+  const list = (items: string[]) =>
+    items.length ? `<ol style="margin:0;padding-left:20px">${items.map((i) => `<li style="margin:2px 0">${i}</li>`).join("")}</ol>` : "";
+
+  const top = list(d.top.map((t) => `<strong>${escapeHtml(t.name)}</strong>: ${t.sales} vendas, ${t.visits} visitas`));
+  const attention = list(d.attention.map((a) => `<strong>${escapeHtml(a.name)}</strong>: ${escapeHtml(a.reason)}`));
+
+  const html = brandedEmail({
+    heading: `Sua semana, ${name}`,
+    preheader: `${d.scopeLabel}, ${d.weekLabel}`,
+    bodyHtml:
+      p(`Resumo de <strong>${escapeHtml(d.scopeLabel)}</strong> na semana de ${escapeHtml(d.weekLabel)}.`) +
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 16px"><tr>${stats}</tr></table>` +
+      (rate !== null ? p(`Relatórios entregues: <strong>${rate}%</strong> (${d.delivery.delivered} de ${d.delivery.expected} esperados).`) : "") +
+      (top ? p("<strong>Destaques</strong>") + top : "") +
+      (attention ? `<div style="height:12px"></div>` + p("<strong>Precisam de atenção</strong>") + attention : ""),
+    cta: { label: "Ver relatório completo", url: d.link },
+  });
+
+  const text =
+    `Sua semana, ${name}\n\nResumo de ${d.scopeLabel} na semana de ${d.weekLabel}.\n\n` +
+    d.metrics.map((m) => `${m.label}: ${m.value} (${delta(m.value, m.previous)})`).join("\n") +
+    (rate !== null ? `\n\nRelatórios entregues: ${rate}% (${d.delivery.delivered} de ${d.delivery.expected})` : "") +
+    (d.top.length ? `\n\nDestaques:\n${d.top.map((t, i) => `${i + 1}. ${t.name}: ${t.sales} vendas, ${t.visits} visitas`).join("\n")}` : "") +
+    (d.attention.length ? `\n\nPrecisam de atenção:\n${d.attention.map((a) => `${a.name}: ${a.reason}`).join("\n")}` : "") +
+    `\n\nRelatório completo: ${d.link}${contactFooterText()}`;
+
+  return sendEmail({ to: d.to, subject: `Resumo da semana: ${d.weekLabel}`, html, text });
+}
+
 export function sendPasswordChangedEmail(input: { to: string }) {
   const when = new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",

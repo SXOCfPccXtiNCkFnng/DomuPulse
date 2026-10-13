@@ -9,7 +9,7 @@ import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
-import { InstallGuide, PushSettings, SubscriptionForm } from "./client";
+import { InstallGuide, PushSettings, SubscriptionForm, WeeklyDigestToggle } from "./client";
 import { OrgSettingsForm } from "./org-settings";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
@@ -26,6 +26,7 @@ export default async function ContaPage() {
   const me = await getCurrentMember();
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
+  const { data: digest } = await supabase.from("members").select("weekly_digest").eq("id", me.id).maybeSingle();
   const { data: org } = await supabase.from("organizations").select("seats, coupon_code").single();
   // A tabela de cupons é só do servidor: o percentual é lido com a chave de serviço.
   const { data: coupon } =
@@ -53,6 +54,7 @@ export default async function ContaPage() {
       <Card>
         <CardHeader title="Notificações" description="Lembretes de relatório e alertas da equipe neste aparelho" />
         <PushSettings vapidKey={vapidPublicKey()} />
+        {me.role !== "broker" ? <WeeklyDigestToggle initial={digest?.weekly_digest ?? true} /> : null}
       </Card>
 
       <Card id="seguranca">

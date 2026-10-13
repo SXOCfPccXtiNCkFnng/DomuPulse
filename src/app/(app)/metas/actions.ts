@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentMember } from "@/lib/auth";
 import { GOAL_METRICS, type GoalMetric } from "@/lib/goals";
 import { describeError, logger } from "@/lib/logger";
+import { parseMoney } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
 import type { FormState } from "@/lib/validation";
 
@@ -59,15 +60,6 @@ export async function saveGoals(_: FormState, formData: FormData): Promise<FormS
 
   revalidatePath("/metas");
   return { success: memberIds.data.length > 1 ? `Metas aplicadas a ${memberIds.data.length} corretores.` : "Metas salvas." };
-}
-
-// "1.234,56", "1234,56" ou "1234.56" viram centavos.
-function parseMoney(raw: string): number | null {
-  const clean = raw.replace(/[^\d,.]/g, "");
-  if (!clean) return null;
-  const normalized = clean.includes(",") ? clean.replace(/\./g, "").replace(",", ".") : clean;
-  const value = Number(normalized);
-  return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null;
 }
 
 export async function addCommission(_: FormState, formData: FormData): Promise<FormState> {

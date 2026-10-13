@@ -86,9 +86,9 @@ function check(name, ok, detail = "") {
   console.log(`${ok ? "PASSA" : "FALHA"}  ${name}${ok ? "" : `  ${detail}`}`);
 }
 
-async function expectRows(name, user, sql, n, params, role) {
+async function expectRows(name, user, sql, n, params, role, aal) {
   try {
-    const r = await as(user, sql, params, role);
+    const r = await as(user, sql, params, role, aal);
     const count = r.affectedRows && !r.rows.length ? r.affectedRows : r.rows.length;
     check(name, count === n, `esperado ${n}, veio ${count}`);
   } catch (e) {
@@ -211,6 +211,23 @@ await expectError("cliente não cria aviso", "b2", `insert into notifications (u
 await expectRows("marca o próprio aviso como lido", "b2", "update notifications set read_at = now() returning id", 1);
 await expectError("não altera o texto do aviso", "b2", "update notifications set title = 'hack'", /permission denied/);
 await expectRows("não marca aviso dos outros", "b1", "update notifications set read_at = now() returning id", 0);
+
+// ---- Carteira de clientes ----------------------------------------------
+console.log("\nCarteira de clientes");
+await expectRows("corretor cadastra o próprio cliente", "b1", `insert into clients (member_id, name, phone) values ('${uid("m_b1")}', 'Cliente do 1', '(11) 98888-7777') returning id`, 1);
+await expectError("corretor não cadastra cliente para colega", "b1", `insert into clients (member_id, name) values ('${uid("m_b2")}', 'x')`, /row-level security/);
+await expectRows("gerente cadastra para o corretor da equipe", "mgr1", `insert into clients (member_id, name) values ('${uid("m_b2")}', 'Cliente do 2') returning id`, 1);
+await expectRows("corretor vê só a própria carteira", "b1", "select id from clients", 1);
+await expectRows("gerente vê a carteira da equipe", "mgr1", "select id from clients", 2);
+await expectRows("gerente de outra equipe não vê", "mgr2", "select id from clients", 0, [], "authenticated", "aal2");
+await expectRows("dona B não vê nada", "ownerB", "select id from clients", 0);
+await expectError("telefone inválido é recusado", "b1", `insert into clients (member_id, name, phone) values ('${uid("m_b1")}', 'x', '<b>')`, /check constraint/);
+await expectError("gerente não passa cliente para outra equipe", "mgr1", `update clients set member_id = '${uid("m_b3")}' where name = 'Cliente do 2'`, /row-level security/);
+const moved = await as("b1", "update clients set stage = 'visited' returning stage_changed_at > created_at as ok");
+check("mudar de etapa registra o momento", moved.rows[0]?.ok === true, JSON.stringify(moved.rows));
+await as(null, `insert into clients (id, org_id, member_id, name) values ('${uid("cB")}', '${uid("orgB")}', '${uid("m_bB")}', 'Cliente B')`, [], "service_role");
+await expectError("visita não liga a cliente de outra imobiliária", "b1", `insert into appointments (member_id, client_id, client_name, scheduled_at) values ('${uid("m_b1")}', '${uid("cB")}', 'x', now())`, /foreign key/);
+await expectError("membro não muda a própria preferência de resumo direto", "mgr1", "update members set weekly_digest = false", /permission denied/);
 
 // ---- Somas por período ------------------------------------------------
 console.log("\nSomas por período");

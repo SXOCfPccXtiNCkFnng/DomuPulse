@@ -5,7 +5,7 @@ import { useActionState, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { formatMoney } from "@/lib/metrics";
-import { removePushSubscription, savePushSubscription, sendTestNotification } from "./actions";
+import { removePushSubscription, savePushSubscription, sendTestNotification, setWeeklyDigest } from "./actions";
 import { startSubscription, type BillingState } from "./billing-actions";
 
 function urlBase64ToUint8Array(base64: string) {
@@ -263,5 +263,32 @@ export function SubscriptionForm({
         {pending ? "Gerando fatura..." : "Assinar com Pix, boleto ou cartão"}
       </Button>
     </form>
+  );
+}
+
+export function WeeklyDigestToggle({ initial }: { initial: boolean }) {
+  const [enabled, setEnabled] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-4 border-t border-line p-5 sm:p-6">
+      <span>
+        <span className="block text-sm font-medium">Resumo semanal por e-mail</span>
+        <span className="block text-sm text-muted">Toda segunda de manhã: funil, entregas, destaques e quem precisa de atenção.</span>
+      </span>
+      <input
+        type="checkbox"
+        checked={enabled}
+        disabled={saving}
+        onChange={async (e) => {
+          const next = e.target.checked;
+          setEnabled(next);
+          setSaving(true);
+          const { ok } = await setWeeklyDigest(next);
+          setSaving(false);
+          if (!ok) setEnabled(!next);
+        }}
+        className="mt-1 size-5 shrink-0 accent-[var(--brand)]"
+      />
+    </label>
   );
 }
