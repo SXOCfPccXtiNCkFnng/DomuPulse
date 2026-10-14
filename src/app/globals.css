@@ -54,6 +54,17 @@
   color: var(--ink);
 }
 
+/* No celular, o iPhone dá zoom na página ao tocar num campo com letra menor
+   que 16px, e a tela fica desalinhada. Campos de texto ficam com 16px em
+   telas de toque; os números grandes (relatório, código) mantêm o tamanho. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([class*="text-lg"]):not([class*="text-2xl"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 /* Impressão e PDF sempre no tema claro: fundo escuro gasta tinta. */
 @media print {
   /* Mesma especificidade da regra do tema escuro, e vem depois: vence. */

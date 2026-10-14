@@ -160,7 +160,30 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
       {leader && !broker ? (
         <Card className="min-w-0">
           <CardHeader title="Corretores" description="Ordenados por quem avançou mais no funil. Clique no nome para ver o relatório de cada um" />
-          <div className="mt-3 overflow-x-auto border-t border-line">
+          {/* No celular, um cartão por corretor com os números principais, sem rolar para o lado. */}
+          <ul className="mt-3 divide-y divide-line border-t border-line md:hidden">
+            {view.brokers.length === 0 ? <li className="px-5 py-10 text-center text-sm text-muted">Nenhum corretor nesse filtro.</li> : null}
+            {pageBrokers.map((b, i) => (
+              <li key={b.id}>
+                <Link href={brokerHref(b.id)} className={clsx("flex items-center gap-3 px-5 py-3.5 active:bg-surface-2", !b.active && "text-muted")}>
+                  <span className="w-5 shrink-0 text-xs text-muted tabular-nums">{(page - 1) * PAGE_SIZE + i + 1}</span>
+                  <Avatar name={b.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{b.name}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {formatNumber(b.totals.visits)} visitas, {formatNumber(b.totals.proposals)} propostas, {b.daysReported}{" "}
+                      {b.daysReported === 1 ? "dia" : "dias"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="block font-display text-lg leading-none font-semibold tabular-nums">{formatNumber(b.totals.sales)}</span>
+                    <span className="text-[11px] text-muted">vendas</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 hidden overflow-x-auto border-t border-line md:block">
             <table className="w-full min-w-[860px] text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted">
@@ -209,7 +232,7 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
             </table>
           </div>
           {pages > 1 ? (
-            <nav aria-label="Páginas" className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
+            <nav aria-label="Páginas" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
               <span className="text-muted">
                 {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, view.brokers.length)} de {view.brokers.length} corretores
               </span>

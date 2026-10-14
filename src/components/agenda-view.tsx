@@ -140,7 +140,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
                         </span>
                       </span>
                       {a.status === "scheduled" ? (
-                        <span className="flex gap-1">
+                        <span className="flex w-full gap-1 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
                           <Button size="sm" variant="secondary" onClick={() => setStatus(a.id, "done")}>
                             Realizada
                           </Button>

@@ -83,7 +83,7 @@ export function LandingNav() {
         </ul>
 
         <div className="flex items-center gap-1">
-          <ThemeToggle className={clsx("rounded-full", dark && "text-white/70 hover:bg-white/10 hover:text-white")} />
+          <ThemeToggle className={clsx("hidden rounded-full sm:grid", dark && "text-white/70 hover:bg-white/10 hover:text-white")} />
           <Link
             href="/entrar"
             className={clsx(

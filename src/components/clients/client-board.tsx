@@ -146,7 +146,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
 
       {error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p> : null}
 
-      <div className="-mx-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
+      <div className="-mx-4 snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0">
         <div className="flex gap-3">
           {columns.map((col) => {
             const items = visible.filter((c) => c.stage === col.id);
@@ -171,7 +171,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
                   if (id) void moveTo(id, col.id);
                 }}
                 className={clsx(
-                  "flex w-[264px] shrink-0 flex-col rounded-2xl border p-2 transition-colors",
+                  "flex w-[78vw] max-w-[264px] shrink-0 snap-start flex-col rounded-2xl border p-2 transition-colors sm:w-[264px]",
                   over === col.id ? "border-brand-text bg-brand-soft" : "border-line bg-surface-2/60",
                   col.id === "lost" && "opacity-80",
                 )}

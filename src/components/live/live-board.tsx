@@ -187,7 +187,7 @@ export function LiveBoard({ member }: { member: ClientMember }) {
           </div>
 
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[560px] border-separate border-spacing-0 text-sm">
+            <table className="w-full border-separate border-spacing-0 text-sm sm:min-w-[560px]">
               <thead>
                 <tr className="text-left text-xs text-muted">
                   <th className="sticky left-0 bg-surface px-5 py-3 font-medium sm:px-6">Corretor</th>
@@ -196,7 +196,7 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                       {slotLabel(s)}
                     </th>
                   ))}
-                  <th className="px-3 py-3 text-right font-medium">Visitas</th>
+                  <th className="hidden px-3 py-3 text-right font-medium sm:table-cell">Visitas</th>
                   <th className="py-3 pr-5 pl-3 text-right font-medium sm:pr-6">Vendas</th>
                 </tr>
               </thead>
@@ -259,7 +259,7 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                             <SlotChip status={st} compact />
                           </td>
                         ))}
-                        <td className="border-t border-line px-3 py-2.5 text-right tabular-nums">{r.totals.visits}</td>
+                        <td className="hidden border-t border-line px-3 py-2.5 text-right tabular-nums sm:table-cell">{r.totals.visits}</td>
                         <td className="border-t border-line py-2.5 pr-5 pl-3 text-right font-semibold tabular-nums sm:pr-6">
                           {r.totals.sales}
                         </td>
@@ -271,7 +271,7 @@ export function LiveBoard({ member }: { member: ClientMember }) {
             </table>
           </div>
           {pages > 1 ? (
-            <nav aria-label="Páginas" className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
+            <nav aria-label="Páginas" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
               <span className="text-muted">
                 {(currentPage - 1) * PAGE_SIZE + 1} a {Math.min(currentPage * PAGE_SIZE, visible.length)} de {visible.length} corretores
               </span>
