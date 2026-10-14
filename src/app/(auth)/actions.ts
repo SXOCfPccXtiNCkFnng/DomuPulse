@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
-import { sendPasswordChangedEmail, sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email-templates";
+import { sendPasswordChangedEmail, sendPasswordResetEmail, sendTeamWelcomeEmail, sendWelcomeEmail } from "@/lib/email-templates";
 import { siteUrl } from "@/lib/email";
 import { CAPTCHA_ERROR, verifyCaptcha } from "@/lib/captcha";
 import { findOrgByInviteCode } from "@/lib/invite-link";
@@ -219,6 +219,7 @@ export async function joinWithInvite(_: FormState, formData: FormData): Promise<
       { kind: "member_joined", title: "Novo membro na equipe", body: `${fullName} entrou pelo link de convite.`, url: "/equipe" },
     ),
   );
+  after(() => sendTeamWelcomeEmail({ to: email, fullName, orgName: org.name }));
 
   redirect("/entrar?cadastro=ok");
 }

@@ -56,22 +56,32 @@ export function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+// Fonte do sistema de cada aparelho, com Arial de reserva.
+export const EMAIL_FONT = "'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
 export function siteUrl(path = "") {
   return `${publicEnv().siteUrl.replace(/\/$/, "")}${path}`;
 }
 
 /**
- * Casca visual de todos os e-mails: topo azul-marinho com a marca, cartão
- * branco e rodapé de contato. Tabelas e estilos inline de propósito: é o que
- * Gmail e Outlook respeitam.
+ * Casca visual de todos os e-mails, no estilo da página inicial: topo preto
+ * com a marca, faixa azul-marinho com o título, corpo branco, botão azul e
+ * rodapé de ajuda. Tabelas e estilos inline de propósito: é o que Gmail,
+ * Outlook e Apple Mail respeitam.
  */
 export function brandedEmail({
   heading,
+  eyebrow,
+  intro,
   bodyHtml,
   cta,
   preheader,
 }: {
   heading: string;
+  /** Rótulo pequeno acima do título, como "Convite" ou "Segurança". */
+  eyebrow?: string;
+  /** Frase curta embaixo do título, ainda na faixa escura. Texto puro. */
+  intro?: string;
   /** HTML já montado; escape os dados dinâmicos com escapeHtml. */
   bodyHtml: string;
   cta?: { label: string; url: string };
@@ -79,35 +89,46 @@ export function brandedEmail({
   preheader?: string;
 }): string {
   const button = cta
-    ? `<tr><td style="padding-top:28px">
-        <a href="${escapeHtml(cta.url)}" style="display:inline-block;background:#0f2a5f;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;padding:14px 26px;border-radius:12px">${escapeHtml(cta.label)}</a>
-      </td></tr>`
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:28px"><tr>
+        <td bgcolor="#0259f3" style="background:#0259f3;border-radius:8px">
+          <a href="${escapeHtml(cta.url)}" style="display:inline-block;padding:15px 28px;font-family:${EMAIL_FONT};font-size:14px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#ffffff;text-decoration:none">${escapeHtml(cta.label)} &rarr;</a>
+        </td>
+      </tr></table>`
     : "";
 
   return `<!doctype html>
 <html lang="pt-BR">
-<body style="margin:0;padding:0;background:#f4f6fb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light only">
+</head>
+<body style="margin:0;padding:0;background:#eef1f7">
   ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(preheader)}</div>` : ""}
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb;padding:32px 16px;font-family:Arial,Helvetica,sans-serif">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:540px">
-        <tr><td style="background:#0f2a5f;border-radius:16px 16px 0 0;padding:22px 32px">
-          <img src="${siteUrl("/brand/mark-white.png")}" width="26" height="26" alt="" style="vertical-align:middle;border:0">
-          <span style="vertical-align:middle;margin-left:10px;color:#ffffff;font-size:17px;font-weight:bold">Domu Pulse</span>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#eef1f7" style="background:#eef1f7">
+    <tr><td align="center" style="padding:32px 12px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
+        <tr><td bgcolor="#02050b" style="background:#02050b;border-radius:14px 14px 0 0;padding:22px 36px">
+          <img src="${siteUrl("/brand/mark-white.png")}" width="24" height="24" alt="" style="vertical-align:middle;border:0">
+          <span style="vertical-align:middle;margin-left:10px;font-family:${EMAIL_FONT};font-size:16px;color:#ffffff"><span style="color:#8f9bb5">Domu</span> <strong>Pulse</strong></span>
         </td></tr>
-        <tr><td style="background:#ffffff;border:1px solid #e2e7f0;border-top:0;border-radius:0 0 16px 16px;padding:32px">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            <tr><td>
-              <h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;color:#0b1b36">${escapeHtml(heading)}</h1>
-              <div style="font-size:15px;line-height:1.65;color:#2b3a56">${bodyHtml}</div>
-            </td></tr>
-            ${button}
-          </table>
+        <tr><td bgcolor="#0a1428" style="background:#0a1428;padding:38px 36px 34px">
+          ${eyebrow ? `<div style="font-family:${EMAIL_FONT};font-size:12px;font-weight:700;letter-spacing:2.5px;color:#7ea5ff;text-transform:uppercase">&#8212;&nbsp; ${escapeHtml(eyebrow)}</div>` : ""}
+          <h1 style="margin:${eyebrow ? "16px" : "0"} 0 0;font-family:${EMAIL_FONT};font-size:28px;line-height:1.15;font-weight:800;letter-spacing:-0.6px;color:#ffffff">${escapeHtml(heading)}</h1>
+          ${intro ? `<p style="margin:14px 0 0;font-family:${EMAIL_FONT};font-size:16px;line-height:1.6;color:#c7d3ea">${escapeHtml(intro)}</p>` : ""}
         </td></tr>
-        <tr><td style="padding:22px 12px 0;text-align:center;font-size:12px;line-height:1.7;color:#5d6983">
-          Precisa de ajuda? Fale pelo
-          <a href="${contactWhatsappUrl("Olá! Preciso de ajuda com o Domu Pulse.")}" style="color:#1a3a7c;font-weight:bold;text-decoration:none">WhatsApp</a>
-          ou pelo <a href="mailto:${CONTACT_EMAIL}" style="color:#1a3a7c;font-weight:bold;text-decoration:none">e-mail</a>.<br>
+        <tr><td bgcolor="#ffffff" style="background:#ffffff;padding:34px 36px 38px">
+          <div style="font-family:${EMAIL_FONT};font-size:15px;line-height:1.65;color:#2b3a56">${bodyHtml}</div>
+          ${button}
+        </td></tr>
+        <tr><td bgcolor="#f4f6fb" style="background:#f4f6fb;border-top:1px solid #e2e7f0;border-radius:0 0 14px 14px;padding:22px 36px">
+          <p style="margin:0;font-family:${EMAIL_FONT};font-size:14px;line-height:1.6;color:#2b3a56">
+            <strong>Precisa de ajuda?</strong> Chame no
+            <a href="${contactWhatsappUrl("Olá! Preciso de ajuda com o Domu Pulse.")}" style="color:#0259f3;font-weight:700;text-decoration:none">WhatsApp</a>
+            ou escreva para <a href="mailto:${CONTACT_EMAIL}" style="color:#0259f3;font-weight:700;text-decoration:none">${CONTACT_EMAIL}</a>.
+          </p>
+        </td></tr>
+        <tr><td align="center" style="padding:22px 12px 0;font-family:${EMAIL_FONT};font-size:12px;line-height:1.7;color:#8f9bb5">
           Domu Pulse, um produto DomuTech
         </td></tr>
       </table>
