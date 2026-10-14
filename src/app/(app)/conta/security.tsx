@@ -16,7 +16,7 @@ type MfaState =
   | { kind: "enrolling"; factorId: string; qr: string; secret: string }
   | { kind: "on"; factorId: string; since: string };
 
-export function MfaSettings({ required }: { required: boolean }) {
+export function MfaSettings() {
   const supabase = useMemo(() => getBrowserClient(), []);
   const router = useRouter();
   const [state, setState] = useState<MfaState>({ kind: "loading" });
@@ -93,7 +93,6 @@ export function MfaSettings({ required }: { required: boolean }) {
           <p className="text-sm text-ink-2">
             Além da senha, o Pulse pede um código de 6 dígitos gerado no seu celular. Mesmo que alguém descubra sua senha, não
             consegue entrar.
-            {required ? " Para o painel interno, ela é obrigatória." : ""}
           </p>
           <Button onClick={start} disabled={busy} className="self-start">
             {busy ? "Preparando..." : "Ativar verificação em duas etapas"}

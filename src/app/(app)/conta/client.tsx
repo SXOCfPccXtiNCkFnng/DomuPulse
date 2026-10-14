@@ -1,11 +1,13 @@
 "use client";
 
 import { Share, SquarePlus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { formatMoney } from "@/lib/metrics";
-import { removePushSubscription, savePushSubscription, sendTestNotification, setWeeklyDigest } from "./actions";
+import type { FormState } from "@/lib/validation";
+import { removePushSubscription, savePushSubscription, sendTestNotification, setDigestEmail, setWeeklyDigest } from "./actions";
 import { redeemCoupon, startSubscription, type BillingState } from "./billing-actions";
 
 function urlBase64ToUint8Array(base64: string) {
@@ -211,7 +213,7 @@ export function SubscriptionForm({
           autoComplete="off"
           required
           value={document}
-          onChange={(e) => setDocument(e.target.value.replace(/[^d./-]/g, "").slice(0, 18))}
+          onChange={(e) => setDocument(e.target.value.replace(/[^\d./-]/g, "").slice(0, 18))}
         />
       </Field>
       {appliedCoupon ? (
@@ -230,30 +232,57 @@ export function SubscriptionForm({
   );
 }
 
-export function WeeklyDigestToggle({ initial }: { initial: boolean }) {
+export function WeeklyDigestToggle({ initial, digestEmail, loginEmail }: { initial: boolean; digestEmail: string | null; loginEmail: string }) {
   const [enabled, setEnabled] = useState(initial);
   const [saving, setSaving] = useState(false);
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 border-t border-line p-5 sm:p-6">
-      <span>
-        <span className="block text-sm font-medium">Resumo semanal por e-mail</span>
-        <span className="block text-sm text-muted">Toda segunda de manhã: funil, entregas, destaques e quem precisa de atenção.</span>
-      </span>
-      <input
-        type="checkbox"
-        checked={enabled}
-        disabled={saving}
-        onChange={async (e) => {
-          const next = e.target.checked;
-          setEnabled(next);
-          setSaving(true);
-          const { ok } = await setWeeklyDigest(next);
-          setSaving(false);
-          if (!ok) setEnabled(!next);
-        }}
-        className="mt-1 size-5 shrink-0 accent-[var(--brand)]"
-      />
-    </label>
+    <div className="border-t border-line">
+      <label className="flex cursor-pointer items-start justify-between gap-4 p-5 sm:p-6">
+        <span>
+          <span className="block text-sm font-medium">Resumo semanal por e-mail</span>
+          <span className="block text-sm text-muted">Toda segunda de manhã: funil, entregas, destaques e quem precisa de atenção.</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={saving}
+          onChange={async (e) => {
+            const next = e.target.checked;
+            setEnabled(next);
+            setSaving(true);
+            const { ok } = await setWeeklyDigest(next);
+            setSaving(false);
+            if (!ok) setEnabled(!next);
+          }}
+          className="mt-1 size-5 shrink-0 accent-[var(--brand)]"
+        />
+      </label>
+      {enabled ? <DigestEmailForm initial={digestEmail} loginEmail={loginEmail} /> : null}
+    </div>
+  );
+}
+
+function DigestEmailForm({ initial, loginEmail }: { initial: string | null; loginEmail: string }) {
+  const [state, action, pending] = useActionState(setDigestEmail, {} as FormState);
+  const current = state.values?.digestEmail ?? initial ?? "";
+  return (
+    <form action={action} className="flex flex-col gap-3 px-5 pb-5 sm:px-6 sm:pb-6" noValidate>
+      {state.error ? <FormMessage>{state.error}</FormMessage> : null}
+      {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
+      <div className="flex flex-wrap items-start gap-2">
+        <Field
+          label="Receber em"
+          hint={`Deixe vazio para receber no e-mail de login (${loginEmail}).`}
+          error={state.fieldErrors?.digestEmail}
+          className="min-w-56 flex-1"
+        >
+          <Input name="digestEmail" type="email" inputMode="email" autoComplete="email" placeholder={loginEmail} defaultValue={current} key={current} />
+        </Field>
+        <Button type="submit" variant="secondary" disabled={pending} className="mt-6 h-11">
+          {pending ? "Salvando..." : "Salvar e-mail"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -286,4 +315,16 @@ export function CouponForm() {
       </div>
     </form>
   );
+}
+
+// Links antigos (e-mails já enviados) usam /conta#assinatura: leva para a aba certa.
+const HASH_TABS: Record<string, string> = { "#assinatura": "assinatura", "#seguranca": "seguranca", "#imobiliaria": "imobiliaria" };
+
+export function HashToTab() {
+  const router = useRouter();
+  useEffect(() => {
+    const tab = HASH_TABS[window.location.hash];
+    if (tab) router.replace(`/conta?aba=${tab}`, { scroll: false });
+  }, [router]);
+  return null;
 }

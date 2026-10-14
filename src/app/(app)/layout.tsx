@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { SideNav, TabBar } from "@/components/app-nav";
 import { NotificationBell } from "@/components/notification-bell";
+import { PageSkeleton } from "@/components/page-skeleton";
 import { ThemeSwitcher, ThemeToggle } from "@/components/theme";
 import { BrandMark, Logo } from "@/components/ui/logo";
 import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
@@ -10,7 +11,8 @@ import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex print:hidden">
+      {/* z-40: a barra fixa é uma camada própria; sem isso a caixa de avisos fica atrás da página. */}
+      <aside className="sticky top-0 z-40 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex print:hidden">
         <div className="flex items-center justify-between px-2">
           <Link href="/painel">
             <Logo />
@@ -124,7 +126,7 @@ async function BillingBanner() {
     <div className="flex items-center justify-between gap-4 bg-brand px-4 py-2.5 print:hidden text-[13px] text-brand-ink sm:px-6 lg:px-10">
       <span>{text}</span>
       {role === "owner" ? (
-        <Link href={org.status === "trialing" ? "/ativar" : "/conta#assinatura"} className="shrink-0 font-semibold underline underline-offset-4">
+        <Link href={org.status === "trialing" ? "/ativar" : "/conta?aba=assinatura"} className="shrink-0 font-semibold underline underline-offset-4">
           {org.status === "trialing" ? "Ativar conta" : "Ver assinatura"}
         </Link>
       ) : null}
@@ -138,20 +140,6 @@ function NavSkeleton() {
       {Array.from({ length: 4 }, (_, i) => (
         <span key={i} className="h-10 animate-pulse rounded-xl bg-surface-2" />
       ))}
-    </div>
-  );
-}
-
-function PageSkeleton() {
-  return (
-    <div className="flex flex-col gap-5">
-      <span className="h-10 w-56 animate-pulse rounded-xl bg-surface-2" />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {Array.from({ length: 5 }, (_, i) => (
-          <span key={i} className="h-24 animate-pulse rounded-2xl bg-surface-2" />
-        ))}
-      </div>
-      <span className="h-96 animate-pulse rounded-card bg-surface-2" />
     </div>
   );
 }

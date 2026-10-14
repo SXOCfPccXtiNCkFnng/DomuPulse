@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { InviteLink } from "@/components/invite-link";
 import { Card, CardHeader } from "@/components/ui/card";
-import { getCurrentMember, orgCanWrite } from "@/lib/auth";
+import { getCurrentMember, needsActivation } from "@/lib/auth";
 import { formatMoney } from "@/lib/metrics";
 import { inviteUrl, getInviteCode } from "@/lib/invite-link";
 import { PLAN_FEATURES } from "@/lib/plans";
@@ -42,7 +42,7 @@ function AtivarSkeleton() {
 
 async function Ativar() {
   const me = await getCurrentMember();
-  if (orgCanWrite(me.org)) redirect("/painel");
+  if (!needsActivation(me.org)) redirect("/painel");
 
   if (me.role !== "owner") {
     return (

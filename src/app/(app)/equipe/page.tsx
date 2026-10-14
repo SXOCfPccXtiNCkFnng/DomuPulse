@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { InviteLink } from "@/components/invite-link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
-import { getCurrentMember, ROLE_LABEL, ROLE_RANK, type Role } from "@/lib/auth";
+import { requireActivatedMember, ROLE_LABEL, ROLE_RANK, type Role } from "@/lib/auth";
 import { getInviteCode, inviteUrl } from "@/lib/invite-link";
 import { createClient } from "@/lib/supabase/server";
 import { InviteForm, MemberActions, RenameDivision, TeamActions, TeamForm } from "./forms";
@@ -23,7 +23,7 @@ type MemberRow = {
 type Option = { id: string; name: string };
 
 export default async function EquipePage() {
-  const me = await getCurrentMember();
+  const me = await requireActivatedMember();
   if (me.role === "broker") redirect("/painel");
 
   const supabase = await createClient();
@@ -38,6 +38,7 @@ export default async function EquipePage() {
 
   const list = (members ?? []) as MemberRow[];
   const activeCount = list.filter((m) => m.active).length;
+  const plural = (n: number) => `${n} ${n === 1 ? "pessoa ativa" : "pessoas ativas"}`;
   const totalTeams = (teams ?? []).length;
   const scopedTeams = (teams ?? []).filter(
     (t) => me.role === "owner" || (me.role === "director" ? t.division_id === me.divisionId : t.id === me.teamId),
@@ -67,7 +68,7 @@ export default async function EquipePage() {
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Equipe</h1>
         </div>
         <Badge className="h-8 px-3 text-[13px]">
-          {activeCount} {activeCount === 1 ? "pessoa ativa" : "pessoas ativas"}
+          {plural(activeCount)}
         </Badge>
       </header>
 
@@ -84,7 +85,7 @@ export default async function EquipePage() {
             <Card key={team.id}>
               <CardHeader
                 title={team.name}
-                description={`${people.filter((p) => p.active).length} pessoas ativas`}
+                description={plural(people.filter((p) => p.active).length)}
                 action={canEditTeams ? <TeamActions teamId={team.id} name={team.name} hasPeople={people.length > 0} /> : null}
               />
               <ul className="mt-3 divide-y divide-line border-t border-line">

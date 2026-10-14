@@ -14,6 +14,7 @@ type Member = {
   team_id: string | null;
   division_id: string | null;
   weekly_digest: boolean;
+  digest_email: string | null;
 };
 type ReportRow = Totals & { member_id: string; report_date: string };
 
@@ -56,7 +57,7 @@ export async function sendWeeklyDigests(org: { id: string; name: string; timezon
 
   const { data: memberRows } = await admin
     .from("members")
-    .select("id, user_id, full_name, role, team_id, division_id, weekly_digest")
+    .select("id, user_id, full_name, role, team_id, division_id, weekly_digest, digest_email")
     .eq("org_id", org.id)
     .eq("active", true);
   const members = (memberRows ?? []) as Member[];
@@ -145,8 +146,8 @@ export async function sendWeeklyDigests(org: { id: string; name: string; timezon
           : ((teams ?? []).find((t) => t.id === leader.team_id)?.name ?? "sua equipe");
     const link = siteUrl(`/relatorios?periodo=intervalo&de=${weekStart}&ate=${weekEnd}`);
 
-    const { data: auth } = await admin.auth.admin.getUserById(leader.user_id);
-    const email = auth.user?.email;
+    // E-mail escolhido na Conta; sem ele, o de login.
+    const email = leader.digest_email || (await admin.auth.admin.getUserById(leader.user_id)).data.user?.email;
     if (!email) continue;
 
     const result = await sendWeeklyDigestEmail({

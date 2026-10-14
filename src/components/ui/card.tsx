@@ -40,7 +40,7 @@ export function Badge({
   return (
     <span
       className={clsx(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 h-6 text-xs font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-md px-2.5 h-6 text-xs font-medium whitespace-nowrap",
         tone === "neutral" && "bg-surface-2 text-ink-2",
         tone === "brand" && "bg-brand-soft text-brand-text",
         tone === "danger" && "bg-danger-soft text-danger",

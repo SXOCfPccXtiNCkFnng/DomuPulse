@@ -25,7 +25,7 @@ export type DailyStatus = {
 export type ConnectionState = "connecting" | "live" | "reconnecting";
 
 const REPORT_COLUMNS =
-  "id, member_id, report_date, report_slot, leads, interactions, negotiations, appointments, visits, proposals, presales, sales, updated_at";
+  "id, member_id, report_date, report_slot, leads, interactions, negotiations, appointments, visits, proposals, presales, sales, notes, updated_at";
 
 const reportKey = (r: Pick<Report, "member_id" | "report_slot">) => `${r.member_id}|${r.report_slot.slice(0, 5)}`;
 

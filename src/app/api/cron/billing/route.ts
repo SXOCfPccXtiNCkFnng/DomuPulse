@@ -55,7 +55,7 @@ async function run() {
       kind: "trial_ending",
       title: "Acesso gratuito acabando",
       body: "Ative a assinatura para a equipe continuar sem interrupção.",
-      url: "/conta#assinatura",
+      url: "/conta?aba=assinatura",
     });
     const owner = await orgOwnerContact(org.id);
     if (!owner) continue;
@@ -79,7 +79,7 @@ async function run() {
       kind: "trial_ended",
       title: "Acesso gratuito encerrado",
       body: "Os dados seguem salvos. Ative a assinatura para voltar a lançar.",
-      url: "/conta#assinatura",
+      url: "/conta?aba=assinatura",
     });
     const owner = await orgOwnerContact(org.id);
     if (!owner) continue;

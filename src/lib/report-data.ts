@@ -24,15 +24,43 @@ export type BrokerLine = {
   slotsReported: number;
 };
 
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Soma por dia de um corretor só. O Supabase devolve até 1.000 linhas por vez. */
+async function brokerDays(supabase: SupabaseClient, period: Period, memberId: string) {
+  const byDate = new Map<string, Totals>();
+  for (let page = 0; page < 20; page++) {
+    const { data, error } = await supabase
+      .from("reports")
+      .select(`report_date, ${METRIC_KEYS.join(", ")}`)
+      .eq("member_id", memberId)
+      .gte("report_date", period.from)
+      .lte("report_date", period.to)
+      .order("report_date")
+      .range(page * 1000, page * 1000 + 999);
+    if (error) return { data: null, error };
+    for (const row of (data ?? []) as unknown as DayRow[]) {
+      const day = (byDate.get(row.report_date) ?? emptyTotals()) as Totals;
+      for (const k of METRIC_KEYS) day[k] += Number(row[k] ?? 0);
+      byDate.set(row.report_date, day);
+    }
+    if (!data || data.length < 1000) break;
+  }
+  return { data: [...byDate].map(([report_date, t]) => ({ report_date, ...t })), error: null };
+}
+
 /**
  * Tudo que a página de Relatórios mostra, para o período e (opcionalmente)
- * uma equipe. Usa o cliente do usuário: o RLS decide o que entra na soma.
+ * uma equipe ou um corretor. Usa o cliente do usuário: o RLS decide o que
+ * entra na soma.
  */
-export async function loadReportData(period: Period, teamId: string | null) {
+export async function loadReportData(period: Period, teamId: string | null, brokerId: string | null = null) {
   const supabase = await createClient();
   const [byMember, byDay, members, teams] = await Promise.all([
     supabase.rpc("report_totals_by_member", { p_from: period.from, p_to: period.to }),
-    supabase.rpc("report_totals_by_day", { p_from: period.from, p_to: period.to, p_team: teamId }),
+    brokerId
+      ? brokerDays(supabase, period, brokerId)
+      : supabase.rpc("report_totals_by_day", { p_from: period.from, p_to: period.to, p_team: teamId }),
     supabase.from("members").select("id, full_name, role, team_id, active").eq("role", "broker").order("full_name"),
     supabase.from("teams").select("id, name").order("name"),
   ]);
@@ -42,7 +70,7 @@ export async function loadReportData(period: Period, teamId: string | null) {
 
   // Corretor desativado só aparece se tiver lançamento no período.
   const brokers: BrokerLine[] = ((members.data ?? []) as MemberRow[])
-    .filter((m) => (!teamId || m.team_id === teamId) && (m.active || totalsByMember.has(m.id)))
+    .filter((m) => (brokerId ? m.id === brokerId : (!teamId || m.team_id === teamId) && (m.active || totalsByMember.has(m.id))))
     .map((m) => {
       const row = totalsByMember.get(m.id);
       return {

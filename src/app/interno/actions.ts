@@ -72,7 +72,7 @@ const priceSchema = z.object({
   price: z
     .string()
     .trim()
-    .regex(/^d{1,7}([.,]d{1,2})?$/, "Digite o valor em reais, como 500 ou 499,90.")
+    .regex(/^\d{1,7}([.,]\d{1,2})?$/, "Digite o valor em reais, como 500 ou 499,90.")
     .transform((v) => Math.round(Number(v.replace(",", ".")) * 100))
     .refine((c) => c >= 100, "Mínimo de R$ 1,00."),
 });

@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
         org.id,
         ["owner"],
         body.event === "PAYMENT_OVERDUE"
-          ? { kind: "payment_overdue", title: "Fatura em aberto", body: "A fatura venceu e o pagamento ainda não foi identificado.", url: "/conta#assinatura" }
-          : { kind: "payment_confirmed", title: "Pagamento confirmado", body: "Assinatura ativa.", url: "/conta#assinatura" },
+          ? { kind: "payment_overdue", title: "Fatura em aberto", body: "A fatura venceu e o pagamento ainda não foi identificado.", url: "/conta?aba=assinatura" }
+          : { kind: "payment_confirmed", title: "Pagamento confirmado", body: "Assinatura ativa.", url: "/conta?aba=assinatura" },
       );
       const owner = await orgOwnerContact(org.id);
       if (!owner) return;

@@ -5,6 +5,7 @@ import { getCurrentMember } from "@/lib/auth";
 import { sendToUsers } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { emailSchema, type FormState } from "@/lib/validation";
 
 const subscriptionSchema = z.object({
   endpoint: z.url().startsWith("https://").max(1000),
@@ -58,4 +59,17 @@ export async function setWeeklyDigest(enabled: boolean) {
   if (me.role === "broker") return { ok: false };
   const { error } = await createAdminClient().from("members").update({ weekly_digest: enabled }).eq("id", me.id);
   return { ok: !error };
+}
+
+/** E-mail para receber o resumo semanal. Vazio volta para o e-mail de login. */
+export async function setDigestEmail(_: FormState, formData: FormData): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role === "broker") return { error: "Sem permissão." };
+  const raw = String(formData.get("digestEmail") ?? "").trim();
+  const parsed = raw ? emailSchema.safeParse(raw) : null;
+  if (parsed && !parsed.success) return { fieldErrors: { digestEmail: "E-mail inválido." }, values: { digestEmail: raw } };
+  const digestEmail = parsed?.data ?? null;
+  const { error } = await createAdminClient().from("members").update({ digest_email: digestEmail }).eq("id", me.id);
+  if (error) return { error: "Não foi possível salvar. Tente de novo.", values: { digestEmail: raw } };
+  return { success: digestEmail ? `O resumo vai chegar em ${digestEmail}.` : "O resumo vai chegar no seu e-mail de login.", values: { digestEmail: digestEmail ?? "" } };
 }

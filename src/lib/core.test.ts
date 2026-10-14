@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareRank, conversion, emptyTotals } from "@/lib/metrics";
 import { fingerprintOf, sanitizeMeta } from "@/lib/ops";
+import { maskMoneyInput, parseMoney } from "@/lib/money";
 import { DEFAULT_MONTHLY_PRICE_CENTS, monthlyPriceCents } from "@/lib/plans";
 import { minutesNowIn, slotState, startOfWeek, todayIn, zonedToIso } from "@/lib/time";
 
@@ -42,6 +43,14 @@ describe("preço", () => {
   it("aplica o desconto do cupom", () => {
     expect(monthlyPriceCents(DEFAULT_MONTHLY_PRICE_CENTS)).toBe(50000);
     expect(monthlyPriceCents(DEFAULT_MONTHLY_PRICE_CENTS, 20)).toBe(40000);
+  });
+
+  it("formata o valor do negócio enquanto digita", () => {
+    expect(maskMoneyInput("500000")).toBe("500.000");
+    expect(maskMoneyInput("R$ 450.000,00")).toBe("450.000,00");
+    expect(maskMoneyInput("1234,5")).toBe("1.234,5");
+    expect(parseMoney(maskMoneyInput("500000"))).toBe(50000000);
+    expect(parseMoney(maskMoneyInput("1234,56"))).toBe(123456);
   });
 });
 

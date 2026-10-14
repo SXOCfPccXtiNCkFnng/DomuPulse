@@ -12,6 +12,17 @@ export type PushPayload = {
   tag?: string;
 };
 
+/** As chaves VAPID estão no ambiente? Sem elas não há como mandar push. */
+export function pushConfigured() {
+  try {
+    pushEnv();
+    vapidPublicKey();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 let configured = false;
 function configure() {
   if (configured) return;

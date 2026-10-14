@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DailyChart, PrintButton } from "@/components/reports/daily-chart";
@@ -7,25 +7,36 @@ import { Funnel, StatTile } from "@/components/live/viz";
 import { Avatar } from "@/components/ui/avatar";
 import { buttonClass } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { getCurrentMember, isLeader } from "@/lib/auth";
+import { requireActivatedMember, isLeader } from "@/lib/auth";
 import { conversion, formatNumber, METRICS } from "@/lib/metrics";
 import { PERIODS, periodQuery, resolvePeriod } from "@/lib/period";
 import { loadReportData } from "@/lib/report-data";
 
 export const metadata: Metadata = { title: "Relatórios" };
 
+const PAGE_SIZE = 20;
+
 export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
-  const member = await getCurrentMember();
+  const member = await requireActivatedMember();
   const sp = await props.searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
   const period = resolvePeriod({ periodo: one(sp.periodo), de: one(sp.de), ate: one(sp.ate) }, member.org.timezone);
   const leader = isLeader(member.role);
   const data = await loadReportData(period, null);
-  const teamId = leader && data.teams.some((t) => t.id === one(sp.equipe)) ? one(sp.equipe) : null;
-  const view = teamId ? await loadReportData(period, teamId) : data;
-  const teamParam: Record<string, string> = teamId ? { equipe: teamId } : {};
+  // Corretor escolhido vale mais que a equipe: mostra só os números dele.
+  const broker = leader ? (data.brokers.find((b) => b.id === one(sp.corretor)) ?? null) : null;
+  const teamId = !broker && leader && data.teams.some((t) => t.id === one(sp.equipe)) ? one(sp.equipe) : null;
+  const view = broker || teamId ? await loadReportData(period, teamId, broker?.id ?? null) : data;
+  const teamParam: Record<string, string> = broker ? { corretor: broker.id } : teamId ? { equipe: teamId } : {};
+  const brokerOptions = data.brokers.filter((b) => !teamId || b.teamId === teamId);
   const t = view.totals;
+
+  const pages = Math.max(1, Math.ceil(view.brokers.length / PAGE_SIZE));
+  const page = Math.min(pages, Math.max(1, Number.parseInt(one(sp.pagina), 10) || 1));
+  const pageBrokers = view.brokers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageHref = (n: number) => `/relatorios?${periodQuery(period, { ...teamParam, ...(n > 1 ? { pagina: String(n) } : {}) })}`;
+  const brokerHref = (id: string) => `/relatorios?${periodQuery(period, { corretor: id })}`;
 
   return (
     <div className="flex flex-col gap-5">
@@ -82,11 +93,42 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
               </select>
             </label>
           ) : null}
+          {leader && data.brokers.length > 1 ? (
+            <label className="flex flex-col gap-1 text-[13px] text-ink-2">
+              Corretor
+              <select name="corretor" defaultValue={broker?.id ?? ""} className="h-10 max-w-56 rounded-xl border border-line bg-surface px-3 text-sm">
+                <option value="">Todos</option>
+                {brokerOptions.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button type="submit" className={buttonClass("primary", "md")}>
             Aplicar
           </button>
         </form>
       </section>
+
+      {broker ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+          <span className="flex items-center gap-3">
+            <Avatar name={broker.name} />
+            <span>
+              <span className="block text-sm font-semibold">{broker.name}</span>
+              <span className="block text-xs text-muted">
+                {broker.teamName}, {broker.daysReported} {broker.daysReported === 1 ? "dia" : "dias"} com relatório no período
+              </span>
+            </span>
+          </span>
+          <Link href={`/relatorios?${periodQuery(period)}`} className={buttonClass("ghost", "sm")}>
+            <X className="size-4" />
+            Ver todos os corretores
+          </Link>
+        </div>
+      ) : null}
 
       {view.error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{view.error}</p> : null}
 
@@ -113,11 +155,11 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
         </Card>
       </div>
 
-      {leader && !teamId && view.teamLines.length > 1 ? <TeamComparison lines={view.teamLines} /> : null}
+      {leader && !teamId && !broker && view.teamLines.length > 1 ? <TeamComparison lines={view.teamLines} /> : null}
 
-      {leader ? (
+      {leader && !broker ? (
         <Card className="min-w-0">
-          <CardHeader title="Corretores" description="Ordenados por quem avançou mais no funil" />
+          <CardHeader title="Corretores" description="Ordenados por quem avançou mais no funil. Clique no nome para ver o relatório de cada um" />
           <div className="mt-3 overflow-x-auto border-t border-line">
             <table className="w-full min-w-[860px] text-sm">
               <thead>
@@ -140,20 +182,20 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
                     </td>
                   </tr>
                 ) : null}
-                {view.brokers.map((b, i) => (
-                  <tr key={b.id} className={clsx("border-t border-line", !b.active && "text-muted")}>
-                    <td className="px-5 py-2.5 text-muted tabular-nums sm:px-6">{i + 1}</td>
+                {pageBrokers.map((b, i) => (
+                  <tr key={b.id} className={clsx("border-t border-line hover:bg-surface-2/60", !b.active && "text-muted")}>
+                    <td className="px-5 py-2.5 text-muted tabular-nums sm:px-6">{(page - 1) * PAGE_SIZE + i + 1}</td>
                     <td className="px-3 py-2.5">
-                      <span className="flex items-center gap-2.5">
+                      <Link href={brokerHref(b.id)} className="group flex items-center gap-2.5">
                         <Avatar name={b.name} />
                         <span>
-                          <span className="block font-medium">{b.name}</span>
+                          <span className="block font-medium group-hover:underline group-hover:underline-offset-4">{b.name}</span>
                           <span className="block text-xs text-muted">
                             {b.teamName}
                             {b.active ? "" : ", desativado"}
                           </span>
                         </span>
-                      </span>
+                      </Link>
                     </td>
                     {METRICS.map((m) => (
                       <td key={m.key} className={clsx("px-2 py-2.5 text-right tabular-nums", m.key === "sales" && "font-semibold")}>
@@ -166,6 +208,27 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
               </tbody>
             </table>
           </div>
+          {pages > 1 ? (
+            <nav aria-label="Páginas" className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
+              <span className="text-muted">
+                {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, view.brokers.length)} de {view.brokers.length} corretores
+              </span>
+              <span className="flex gap-1.5">
+                {page > 1 ? (
+                  <Link href={pageHref(page - 1)} className={buttonClass("secondary", "sm")}>
+                    <ChevronLeft className="size-4" />
+                    Anterior
+                  </Link>
+                ) : null}
+                {page < pages ? (
+                  <Link href={pageHref(page + 1)} className={buttonClass("secondary", "sm")}>
+                    Próxima
+                    <ChevronRight className="size-4" />
+                  </Link>
+                ) : null}
+              </span>
+            </nav>
+          ) : null}
         </Card>
       ) : null}
     </div>

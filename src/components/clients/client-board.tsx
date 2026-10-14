@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Phone, Plus, Search } from "lucide-react";
+import { Eye, Phone, Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
@@ -98,10 +98,18 @@ export function ClientBoard({ member }: { member: ClientMember }) {
           <p className="text-sm text-muted">{loading ? "Carregando" : `${visible.filter((c) => c.stage !== "lost").length} clientes em andamento`}</p>
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Clientes</h1>
         </div>
-        <Button onClick={() => setOpen("new")}>
-          <Plus className="size-4" />
-          Novo cliente
-        </Button>
+        {/* A carteira é do corretor: a liderança acompanha, mas não cadastra nem altera. */}
+        {leader ? (
+          <p className="flex items-center gap-2 text-sm text-muted">
+            <Eye className="size-4" />
+            Só visualização: cada corretor cuida da própria carteira
+          </p>
+        ) : (
+          <Button onClick={() => setOpen("new")}>
+            <Plus className="size-4" />
+            Novo cliente
+          </Button>
+        )}
       </header>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -115,7 +123,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
             className="h-10 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-sm outline-none focus:border-ink"
           />
         </label>
-        {leader && brokers.length > 1 ? (
+        {leader && brokers.length > 0 ? (
           <select
             value={owner}
             onChange={(e) => setOwner(e.target.value)}
@@ -148,6 +156,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
                 key={col.id}
                 aria-label={col.label}
                 onDragOver={(e) => {
+                  if (leader) return;
                   e.preventDefault();
                   setOver(col.id);
                 }}
@@ -155,6 +164,9 @@ export function ClientBoard({ member }: { member: ClientMember }) {
                 onDrop={(e) => {
                   e.preventDefault();
                   setOver(null);
+                  // O card muda de coluna e é recriado lá: o onDragEnd do original
+                  // não chega, e sem isto ele ficava transparente.
+                  setDragging(null);
                   const id = e.dataTransfer.getData("text/plain");
                   if (id) void moveTo(id, col.id);
                 }}
@@ -175,7 +187,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
                   {items.map((c) => (
                     <li key={c.id}>
                       <button
-                        draggable
+                        draggable={!leader}
                         onDragStart={(e) => {
                           e.dataTransfer.setData("text/plain", c.id);
                           setDragging(c.id);
@@ -200,7 +212,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
                       </button>
                     </li>
                   ))}
-                  {!loading && items.length === 0 ? <li className="px-2 py-6 text-center text-xs text-muted">Arraste um cliente para cá</li> : null}
+                  {!loading && items.length === 0 ? <li className="px-2 py-6 text-center text-xs text-muted">{leader ? "Nenhum cliente" : "Arraste um cliente para cá"}</li> : null}
                 </ul>
               </section>
             );
@@ -212,6 +224,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
         <ClientDialog
           client={open === "new" ? null : open}
           brokers={leader ? brokers : null}
+          readOnly={leader}
           selfId={member.id}
           timezone={member.org.timezone}
           onClose={() => setOpen(null)}

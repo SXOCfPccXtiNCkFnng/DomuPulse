@@ -6,16 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { CLIENT_COLUMNS, SOURCES, STAGES, whatsappLink, type Client, type Stage } from "@/lib/clients";
 import type { LiveMember } from "@/lib/live/use-live-day";
-import { centsToInput, parseMoney } from "@/lib/money";
+import { centsToInput, maskMoneyInput, parseMoney } from "@/lib/money";
 import { formatPhoneBR } from "@/lib/phone";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { todayIn, zonedToIso } from "@/lib/time";
 
 const EARLY: Stage[] = ["lead", "talking"];
+// Agendar visita só faz sentido antes de o cliente visitar.
+const CAN_SCHEDULE: Stage[] = ["lead", "talking", "scheduled"];
 
 export function ClientDialog({
   client,
   brokers,
+  readOnly = false,
   selfId,
   timezone,
   onClose,
@@ -24,6 +27,8 @@ export function ClientDialog({
 }: {
   client: Client | null;
   brokers: LiveMember[] | null;
+  /** Liderança vendo a carteira de um corretor: abre só para leitura. */
+  readOnly?: boolean;
   selfId: string;
   timezone: string;
   onClose: () => void;
@@ -50,16 +55,19 @@ export function ClientDialog({
   const [visit, setVisit] = useState({ date: todayIn(timezone), time: "", message: "" });
 
   // <dialog> nativo: foco preso dentro, Esc fecha, leitores de tela entendem.
+  // Sem close() na limpeza: o React (modo estrito) desmonta e remonta o efeito,
+  // e o close() disparava onClose, fechando a janela logo depois de abrir. Ao
+  // sair da tela, o navegador já tira o <dialog> da camada de cima sozinho.
   useEffect(() => {
     const el = dialog.current;
-    el?.showModal();
-    return () => el?.close();
+    if (el && !el.open) el.showModal();
   }, []);
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!form.name.trim()) return setError("Informe o nome do cliente.");
     const phoneDigits = form.phone.replace(/\D/g, "");
     if (phoneDigits && phoneDigits.length < 10) return setError("Telefone incompleto: inclua o DDD.");
@@ -153,7 +161,8 @@ export function ClientDialog({
 
         {error ? <FormMessage>{error}</FormMessage> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* Liderança só lê: os campos ficam travados (o banco também recusa). */}
+        <fieldset disabled={readOnly} className="m-0 grid min-w-0 gap-3 border-0 p-0 sm:grid-cols-2">
           <Field label="Nome" className="sm:col-span-2">
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} required maxLength={120} autoFocus={!client} />
           </Field>
@@ -185,8 +194,17 @@ export function ClientDialog({
           <Field label="Interesse" hint="Imóvel, bairro, tipo" className="sm:col-span-2">
             <Input value={form.interest} onChange={(e) => set("interest", e.target.value)} maxLength={200} placeholder="Apartamento 2 quartos no Centro" />
           </Field>
-          <Field label="Valor do negócio (R$)">
-            <Input value={form.value} onChange={(e) => set("value", e.target.value)} inputMode="decimal" placeholder="450.000,00" />
+          <Field label="Valor do negócio">
+            <span className="relative block">
+              <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[15px] text-muted">R$</span>
+              <Input
+                value={form.value}
+                onChange={(e) => set("value", maskMoneyInput(e.target.value))}
+                inputMode="decimal"
+                placeholder="450.000"
+                className="pl-11"
+              />
+            </span>
           </Field>
           {brokers ? (
             <Field label="Corretor responsável">
@@ -213,9 +231,9 @@ export function ClientDialog({
               className="w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] outline-none hover:border-line-strong focus:border-ink"
             />
           </Field>
-        </div>
+        </fieldset>
 
-        {client ? (
+        {client && !readOnly && CAN_SCHEDULE.includes(form.stage) ? (
           <fieldset className="rounded-xl bg-surface-2 p-4">
             <legend className="sr-only">Agendar visita</legend>
             <p className="flex items-center gap-2 text-sm font-medium">
@@ -233,29 +251,38 @@ export function ClientDialog({
           </fieldset>
         ) : null}
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          {client ? (
-            confirmDelete ? (
-              <span className="flex gap-2">
-                <Button size="sm" variant="danger" onClick={remove} disabled={pending}>
-                  Confirmar exclusão
+        {readOnly ? (
+          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            <p className="text-sm text-muted">Só o corretor responsável altera este cliente.</p>
+            <Button variant="secondary" onClick={onClose}>
+              Fechar
+            </Button>
+          </footer>
+        ) : (
+          <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            {client ? (
+              confirmDelete ? (
+                <span className="flex gap-2">
+                  <Button size="sm" variant="danger" onClick={remove} disabled={pending}>
+                    Confirmar exclusão
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                    Cancelar
+                  </Button>
+                </span>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
+                  Excluir cliente
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
-                  Cancelar
-                </Button>
-              </span>
+              )
             ) : (
-              <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(true)}>
-                Excluir cliente
-              </Button>
-            )
-          ) : (
-            <span />
-          )}
-          <Button type="submit" disabled={pending}>
-            {pending ? "Salvando..." : client ? "Salvar" : "Cadastrar cliente"}
-          </Button>
-        </footer>
+              <span />
+            )}
+            <Button type="submit" disabled={pending}>
+              {pending ? "Salvando..." : client ? "Salvar" : "Cadastrar cliente"}
+            </Button>
+          </footer>
+        )}
       </form>
     </dialog>
   );

@@ -145,6 +145,8 @@ export async function loadHealth(): Promise<HealthCheck[]> {
     ["organizations", "price_cents", "20261014000000_flat_price_invite_link.sql"],
     ["platform_settings", "monthly_price_cents", "20261014000000_flat_price_invite_link.sql"],
     ["org_invites", "code", "20261014000000_flat_price_invite_link.sql"],
+    ["reports", "notes", "20261014010000_report_notes.sql"],
+    ["members", "digest_email", "20261014020000_client_owner_digest_email.sql"],
     ["members", "terms_version", "20261013010000_platform.sql"],
     ["ops_alerts", "fingerprint", "20261013010000_platform.sql"],
     ["system_heartbeats", "name", "20261013010000_platform.sql"],

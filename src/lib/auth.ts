@@ -90,6 +90,26 @@ export function isLeader(role: Role) {
   return role !== "broker";
 }
 
+/**
+ * Conta que nunca foi ativada (ou cujo acesso gratuito acabou) ainda está no
+ * onboarding: só a tela de ativação abre. Cancelada ou em atraso continua
+ * abrindo o app, só para consulta.
+ */
+export function needsActivation(org: Pick<CurrentMember["org"], "status" | "trialEndsAt">) {
+  return org.status === "trialing" && !orgCanWrite(org);
+}
+
+/**
+ * Toda página do app começa por aqui, em vez de getCurrentMember: manda para
+ * /ativar quem ainda não ativou a conta. Fica na página, não no layout, porque
+ * o layout não roda de novo quando se navega entre páginas.
+ */
+export async function requireActivatedMember() {
+  const member = await getCurrentMember();
+  if (needsActivation(member.org)) redirect("/ativar");
+  return member;
+}
+
 /** A organização pode lançar dados? Assinatura em dia ou acesso gratuito valendo. */
 export function orgCanWrite(org: Pick<CurrentMember["org"], "status" | "trialEndsAt">) {
   if (org.status === "active" || org.status === "past_due") return true;

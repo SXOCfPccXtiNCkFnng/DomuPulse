@@ -151,7 +151,7 @@ export function sendPasswordChangedEmail(input: { to: string }) {
 export function sendTrialEndingEmail(input: { to: string; fullName: string; orgName: string; daysLeft: number }) {
   const name = firstName(input.fullName);
   const days = input.daysLeft === 1 ? "1 dia" : `${input.daysLeft} dias`;
-  const url = siteUrl("/conta#assinatura");
+  const url = siteUrl("/conta?aba=assinatura");
   return sendEmail({
     to: input.to,
     subject: `Faltam ${days} de acesso gratuito no Domu Pulse`,
@@ -168,7 +168,7 @@ export function sendTrialEndingEmail(input: { to: string; fullName: string; orgN
 
 export function sendTrialEndedEmail(input: { to: string; fullName: string; orgName: string }) {
   const name = firstName(input.fullName);
-  const url = siteUrl("/conta#assinatura");
+  const url = siteUrl("/conta?aba=assinatura");
   return sendEmail({
     to: input.to,
     subject: "Seu acesso gratuito ao Domu Pulse terminou",
@@ -202,7 +202,7 @@ export function sendPaymentConfirmedEmail(input: { to: string; fullName: string;
 
 export function sendPaymentOverdueEmail(input: { to: string; fullName: string; orgName: string }) {
   const name = firstName(input.fullName);
-  const url = siteUrl("/conta#assinatura");
+  const url = siteUrl("/conta?aba=assinatura");
   return sendEmail({
     to: input.to,
     subject: "Fatura do Domu Pulse em aberto",

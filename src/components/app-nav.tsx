@@ -53,7 +53,7 @@ export function SideNav({ role }: { role: Role }) {
 
 function TabIcon({ active, children }: { active: boolean; children: React.ReactNode }) {
   return (
-    <span className={clsx("grid h-7 w-12 place-items-center rounded-full transition-colors", active && "bg-brand text-brand-ink")}>{children}</span>
+    <span className={clsx("grid h-7 w-12 place-items-center transition-colors", active && "bg-brand text-brand-ink")}>{children}</span>
   );
 }
 

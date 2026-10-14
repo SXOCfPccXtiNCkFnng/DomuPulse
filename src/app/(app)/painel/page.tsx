@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { FirstSteps, type Step } from "@/components/first-steps";
 import { BrokerToday } from "@/components/live/broker-today";
 import { LiveBoard } from "@/components/live/live-board";
-import { getCurrentMember, isLeader, orgCanWrite, type CurrentMember } from "@/lib/auth";
+import { requireActivatedMember, isLeader, type CurrentMember } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Painel" };
 
 export default async function PainelPage() {
-  const member = await getCurrentMember();
+  const member = await requireActivatedMember();
   // Conta que ainda não foi ativada (sem assinatura nem cupom) vai para a ativação.
-  if (member.org.status === "trialing" && !orgCanWrite(member.org)) redirect("/ativar");
   if (!isLeader(member.role)) return <BrokerToday member={member} />;
 
   return (
@@ -34,7 +32,7 @@ async function OwnerSteps({ member }: { member: CurrentMember }) {
   const steps: Step[] = [
     { id: "team", label: "Criar a primeira equipe", detail: "Na aba Equipe", href: "/equipe", done: (teams.count ?? 0) > 0 },
     { id: "invite", label: "Convidar a equipe", detail: "Gerente e corretores", href: "/equipe", done: (members.count ?? 0) > 1 },
-    { id: "push", label: "Ativar notificações", detail: "Lembretes no seu celular", href: "/conta", done: (devices.count ?? 0) > 0 },
+    { id: "push", label: "Ativar notificações", detail: "Lembretes no seu celular", href: "/conta?aba=notificacoes", done: (devices.count ?? 0) > 0 },
     { id: "report", label: "Receber o primeiro relatório", detail: "Enviado por um corretor", href: "/painel", done: (reports.count ?? 0) > 0 },
   ];
 

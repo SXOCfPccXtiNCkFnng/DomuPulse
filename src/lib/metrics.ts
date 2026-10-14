@@ -22,6 +22,7 @@ export type Report = Totals & {
   member_id: string;
   report_date: string;
   report_slot: string;
+  notes?: string | null;
   updated_at: string;
 };
 

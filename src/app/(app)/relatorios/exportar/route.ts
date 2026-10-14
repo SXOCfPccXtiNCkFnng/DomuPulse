@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
     org?.timezone ?? DEFAULT_TIMEZONE,
   );
   const teamId = q.get("equipe");
+  // Mesmo filtro da tela: um corretor só. O RLS continua decidindo o que a pessoa vê.
+  const brokerId = q.get("corretor");
+  const brokerFilter = brokerId && /^[0-9a-f-]{36}$/i.test(brokerId) ? brokerId : null;
 
   const { data: teams } = await supabase.from("teams").select("id, name");
   const teamName = new Map((teams ?? []).map((t) => [t.id, t.name]));
@@ -45,20 +48,21 @@ export async function GET(request: NextRequest) {
   for (let page = 0; page < 200; page++) {
     let query = supabase
       .from("reports")
-      .select(`report_date, report_slot, ${METRICS.map((m) => m.key).join(", ")}, members!inner (full_name, team_id)`)
+      .select(`report_date, report_slot, ${METRICS.map((m) => m.key).join(", ")}, notes, members!inner (full_name, team_id)`)
       .gte("report_date", period.from)
       .lte("report_date", period.to)
       .order("report_date")
       .order("report_slot")
       .range(page * 1000, page * 1000 + 999);
-    if (teamId) query = query.eq("members.team_id", teamId);
+    if (brokerFilter) query = query.eq("member_id", brokerFilter);
+    else if (teamId) query = query.eq("members.team_id", teamId);
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: "Não foi possível exportar." }, { status: 500 });
     rows.push(...((data ?? []) as unknown as Row[]));
     if (!data || data.length < 1000) break;
   }
 
-  const header = ["Data", "Horário", "Corretor", "Equipe", ...METRICS.map((m) => m.label)];
+  const header = ["Data", "Horário", "Corretor", "Equipe", ...METRICS.map((m) => m.label), "Observação"];
   const lines = rows.map((r) =>
     [
       formatDate(r.report_date),
@@ -66,6 +70,7 @@ export async function GET(request: NextRequest) {
       r.members?.full_name ?? "",
       (r.members?.team_id && teamName.get(r.members.team_id)) || "",
       ...METRICS.map((m) => Number(r[m.key] ?? 0)),
+      String(r.notes ?? ""),
     ]
       .map(cell)
       .join(";"),

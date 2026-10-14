@@ -1,9 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquareText, Search } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader, LiveDot } from "@/components/ui/card";
 import { Funnel, SlotChip, SlotLegend, StatTile, type SlotStatus } from "@/components/live/viz";
 import type { ClientMember } from "@/components/live/types";
@@ -11,12 +13,16 @@ import { useLiveDay, type LiveMember } from "@/lib/live/use-live-day";
 import { compareRank, conversion, formatNumber, sumReports, type Report, type Totals } from "@/lib/metrics";
 import { formatLongDate, slotLabel, slotState } from "@/lib/time";
 
+const PAGE_SIZE = 20;
+
 type Row = {
   member: LiveMember;
   teamName: string;
   totals: Totals;
   statuses: SlotStatus[];
   pending: number;
+  // Observações do dia, na ordem dos horários.
+  notes: string[];
 };
 
 export function LiveBoard({ member }: { member: ClientMember }) {
@@ -27,6 +33,7 @@ export function LiveBoard({ member }: { member: ClientMember }) {
   const [teamFilter, setTeamFilter] = useState("all");
   const [onlyPending, setOnlyPending] = useState(false);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
   const teamName = useMemo(() => new Map(live.teams.map((t) => [t.id, t.name])), [live.teams]);
 
@@ -48,6 +55,7 @@ export function LiveBoard({ member }: { member: ClientMember }) {
           totals: sumReports(reports),
           statuses,
           pending: statuses.filter((s) => s === "late" || s === "open").length,
+          notes: reports.filter((r) => r.notes).map((r) => `${slotLabel(r.report_slot)}: ${r.notes}`),
         };
       });
   }, [live.members, live.reports, live.statuses, slots, clock.minutes, teamName]);
@@ -67,7 +75,11 @@ export function LiveBoard({ member }: { member: ClientMember }) {
   const delivered = expected.filter((r) => r.statuses[currentIndex] === "delivered").length;
 
   const teamsInScope = live.teams.filter((t) => rows.some((r) => r.member.team_id === t.id));
-  const grouped = groupBy(visible, (r) => r.teamName);
+  // Equipe grande: 20 corretores por página.
+  const pages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pages);
+  const pageRows = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const grouped = groupBy(pageRows, (r) => r.teamName);
 
   return (
     <div className="flex flex-col gap-5">
@@ -86,7 +98,10 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                 key={t.id}
                 role="tab"
                 aria-selected={teamFilter === t.id}
-                onClick={() => setTeamFilter(t.id)}
+                onClick={() => {
+                  setTeamFilter(t.id);
+                  setPage(1);
+                }}
                 className={clsx(
                   "h-8 shrink-0 rounded-lg px-3 text-[13px] font-medium transition-colors",
                   teamFilter === t.id ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
@@ -138,26 +153,33 @@ export function LiveBoard({ member }: { member: ClientMember }) {
         <Card className="min-w-0">
           <CardHeader
             title="Entregas do dia"
-            description={`${scoped.length} corretores no seu escopo`}
+            description={`${scoped.length} ${scoped.length === 1 ? "corretor" : "corretores"} no seu escopo`}
             action={
               <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[13px] text-ink-2">
                 <input
                   type="checkbox"
                   checked={onlyPending}
-                  onChange={(e) => setOnlyPending(e.target.checked)}
+                  onChange={(e) => {
+                    setOnlyPending(e.target.checked);
+                    setPage(1);
+                  }}
                   className="size-4 accent-[var(--ink)]"
                 />
                 Só pendentes
               </label>
             }
           />
-          <div className="px-5 pt-4 sm:px-6">
+          <div className="flex flex-col gap-3 px-5 pt-4 sm:px-6">
+            <SlotLegend />
             <label className="relative block">
               <span className="sr-only">Buscar corretor</span>
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
               <input
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Buscar corretor"
                 className="h-10 w-full rounded-xl border border-line bg-surface-2 pr-3 pl-9 text-sm outline-none focus:border-ink"
               />
@@ -211,10 +233,26 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                         className={clsx(live.pulse?.memberId === r.member.id && "animate-flash")}
                       >
                         <td className="sticky left-0 border-t border-line bg-surface px-5 py-2.5 sm:px-6">
-                          <span className="flex items-center gap-2.5">
+                          <Link
+                            href={`/relatorios?periodo=mes&corretor=${r.member.id}`}
+                            title={`Ver o relatório de ${r.member.full_name}`}
+                            className="group flex items-center gap-2.5"
+                          >
                             <Avatar name={r.member.full_name} />
-                            <span className="truncate font-medium">{r.member.full_name}</span>
-                          </span>
+                            <span className="truncate font-medium group-hover:underline group-hover:underline-offset-4">
+                              {r.member.full_name}
+                            </span>
+                          </Link>
+                          {r.notes.length ? (
+                            <span
+                              title={r.notes.join("\n")}
+                              aria-label={`Observações: ${r.notes.join(". ")}`}
+                              className="mt-1 ml-[42px] flex max-w-64 items-start gap-1.5 text-xs text-muted"
+                            >
+                              <MessageSquareText className="mt-px size-3.5 shrink-0 text-brand-text" />
+                              <span className="truncate">{r.notes[r.notes.length - 1]}</span>
+                            </span>
+                          ) : null}
                         </td>
                         {r.statuses.map((st, i) => (
                           <td key={slots[i]} className="border-t border-line px-1 py-2.5 text-center">
@@ -232,9 +270,23 @@ export function LiveBoard({ member }: { member: ClientMember }) {
               )}
             </table>
           </div>
-          <div className="border-t border-line px-5 py-4 sm:px-6">
-            <SlotLegend />
-          </div>
+          {pages > 1 ? (
+            <nav aria-label="Páginas" className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
+              <span className="text-muted">
+                {(currentPage - 1) * PAGE_SIZE + 1} a {Math.min(currentPage * PAGE_SIZE, visible.length)} de {visible.length} corretores
+              </span>
+              <span className="flex gap-1.5">
+                <Button size="sm" variant="secondary" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
+                  <ChevronLeft className="size-4" />
+                  Anterior
+                </Button>
+                <Button size="sm" variant="secondary" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>
+                  Próxima
+                  <ChevronRight className="size-4" />
+                </Button>
+              </span>
+            </nav>
+          ) : null}
         </Card>
 
         <div className="flex min-w-0 flex-col gap-5">

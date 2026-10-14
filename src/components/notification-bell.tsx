@@ -51,16 +51,19 @@ export function NotificationBell({ userId, align = "left" }: { userId: string; a
 
     const channel = supabase
       .channel(`notices-${userId}-${instance}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload) =>
-        setItems((list) => [payload.new as Notice, ...list].slice(0, 20)),
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload) => {
+        setItems((list) => [payload.new as Notice, ...list].slice(0, 20));
+        // Todo aviso vem de algo que mudou (alguém entrou, pagamento confirmou):
+        // atualiza a página aberta para mostrar sem precisar recarregar.
+        router.refresh();
+      })
       .subscribe();
 
     return () => {
       cancelled = true;
       void supabase.removeChannel(channel);
     };
-  }, [supabase, userId, instance]);
+  }, [supabase, userId, instance, router]);
 
   useEffect(() => {
     if (!open) return;

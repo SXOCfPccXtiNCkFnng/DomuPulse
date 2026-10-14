@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Card, CardHeader } from "@/components/ui/card";
-import { getCurrentMember, isLeader } from "@/lib/auth";
+import { requireActivatedMember, isLeader } from "@/lib/auth";
 import { GOAL_METRICS, projection, type GoalMetric } from "@/lib/goals";
 import { formatMoney, formatNumber, METRICS } from "@/lib/metrics";
 import { endOfMonth } from "@/lib/period";
@@ -23,7 +23,7 @@ function monthLabel(month: string) {
 }
 
 export default async function MetasPage(props: PageProps<"/metas">) {
-  const me = await getCurrentMember();
+  const me = await requireActivatedMember();
   const sp = await props.searchParams;
   const today = todayIn(me.org.timezone);
   const requested = typeof sp.mes === "string" && /^\d{4}-\d{2}$/.test(sp.mes) ? `${sp.mes}-01` : startOfMonth(today);

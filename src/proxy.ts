@@ -49,10 +49,11 @@ export async function proxy(request: NextRequest) {
     return redirect;
   };
 
-  // Painel interno: quem não está na lista recebe um 404 de verdade, antes de
-  // qualquer coisa da página ser enviada. Nem o código HTTP revela a rota.
+  // Painel interno: sem login vai para o login; logado fora da lista
+  // (PLATFORM_ADMIN_EMAILS) vê "sem acesso", antes de qualquer dado sair.
   if (matches(path, ["/interno"]) && !isPlatformAdminEmail(data?.claims?.email)) {
-    return NextResponse.rewrite(new URL("/_nao-encontrado", request.url), { status: 404 });
+    if (!signedIn) return redirectTo("/entrar");
+    return NextResponse.rewrite(new URL("/sem-acesso", request.url), { status: 403 });
   }
 
   if (!signedIn && matches(path, [...APP_ROUTES, "/verificacao"])) return redirectTo("/entrar");
