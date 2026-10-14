@@ -173,6 +173,26 @@ export function sendPasswordChangedEmail(input: { to: string }) {
   });
 }
 
+/** Aviso de segurança: o resumo semanal passou a ir para outro endereço. */
+export function sendDigestEmailChangedEmail(input: { to: string; newEmail: string | null }) {
+  const url = siteUrl("/conta?aba=notificacoes");
+  const destination = input.newEmail ?? input.to;
+  return sendEmail({
+    to: input.to,
+    subject: "O resumo semanal mudou de endereço",
+    html: brandedEmail({
+      eyebrow: "Segurança",
+      heading: "O resumo semanal mudou de endereço.",
+      intro: input.newEmail ? `Agora ele vai para ${input.newEmail}.` : "Ele voltou para o seu e-mail de login.",
+      bodyHtml:
+        p(`A partir da próxima segunda, o resumo da semana da sua equipe chega em <strong>${escapeHtml(destination)}</strong>.`) +
+        p("<strong>Se não foi você</strong>, troque sua senha agora e volte o endereço em Conta → Notificações."),
+      cta: { label: "Revisar notificações", url },
+    }),
+    text: `O resumo semanal do Domu Pulse agora vai para ${destination}.\n\nSe não foi você, troque sua senha e revise em:\n${url}${contactFooterText()}`,
+  });
+}
+
 export function sendTrialEndingEmail(input: { to: string; fullName: string; orgName: string; daysLeft: number }) {
   const name = firstName(input.fullName);
   const days = input.daysLeft === 1 ? "1 dia" : `${input.daysLeft} dias`;

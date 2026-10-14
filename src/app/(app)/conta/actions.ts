@@ -1,8 +1,11 @@
 "use server";
 
+import { after } from "next/server";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/auth";
+import { sendDigestEmailChangedEmail } from "@/lib/email-templates";
 import { sendToUsers } from "@/lib/push";
+import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { emailSchema, type FormState } from "@/lib/validation";
@@ -69,7 +72,21 @@ export async function setDigestEmail(_: FormState, formData: FormData): Promise<
   const parsed = raw ? emailSchema.safeParse(raw) : null;
   if (parsed && !parsed.success) return { fieldErrors: { digestEmail: "E-mail inválido." }, values: { digestEmail: raw } };
   const digestEmail = parsed?.data ?? null;
-  const { error } = await createAdminClient().from("members").update({ digest_email: digestEmail }).eq("id", me.id);
+
+  const limit = await rateLimit(`digest-email:${me.id}`, 10, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec), values: { digestEmail: raw } };
+
+  const admin = createAdminClient();
+  const { data: before } = await admin.from("members").select("digest_email").eq("id", me.id).single();
+  const { error } = await admin.from("members").update({ digest_email: digestEmail }).eq("id", me.id);
   if (error) return { error: "Não foi possível salvar. Tente de novo.", values: { digestEmail: raw } };
+
+  // Mudou o destino dos dados da equipe: avisa o e-mail de login, como na troca
+  // de senha. Se a conta foi invadida, o dono fica sabendo na hora.
+  if ((before?.digest_email ?? null) !== digestEmail) {
+    const { data: auth } = await (await createClient()).auth.getClaims();
+    const loginEmail = auth?.claims?.email;
+    if (loginEmail) after(() => sendDigestEmailChangedEmail({ to: loginEmail, newEmail: digestEmail }));
+  }
   return { success: digestEmail ? `O resumo vai chegar em ${digestEmail}.` : "O resumo vai chegar no seu e-mail de login.", values: { digestEmail: digestEmail ?? "" } };
 }

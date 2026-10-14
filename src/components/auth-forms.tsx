@@ -193,7 +193,6 @@ export function NewPasswordForm({ needsTerms }: { needsTerms: boolean }) {
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
-      <input type="hidden" name="needsTerms" value={needsTerms ? "1" : "0"} />
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
       <PasswordField
         name="password"

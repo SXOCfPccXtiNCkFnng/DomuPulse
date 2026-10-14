@@ -37,7 +37,8 @@ export default function InternoPage(props: PageProps<"/interno">) {
 }
 
 async function Gate({ searchParams }: { searchParams: PageProps<"/interno">["searchParams"] }) {
-  const { email } = await platformAdminSession();
+  const { email, aal2 } = await platformAdminSession();
+  if (!aal2) return <EnableMfa />;
   const sp = await searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
   const tab = (TABS.find((t) => t.id === one(sp.aba))?.id ?? "visao") as TabId;
@@ -384,6 +385,26 @@ async function Commercial() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// O painel mexe em todas as imobiliárias: só abre com a verificação em duas
+// etapas confirmada. Quem já ativou passa pela tela do código no login.
+function EnableMfa() {
+  return (
+    <main className="grid min-h-dvh place-items-center px-5">
+      <Card className="max-w-md p-8 text-center">
+        <BrandMark className="mx-auto size-10" />
+        <h1 className="mt-5 font-display text-2xl font-semibold tracking-tight">Ative a verificação em duas etapas</h1>
+        <p className="mt-2 text-sm text-muted">
+          O painel interno mexe em todas as imobiliárias. Para abrir, sua conta precisa da verificação em duas etapas, com o código
+          confirmado nesta sessão. Ative em Conta e entre de novo.
+        </p>
+        <Link href="/conta?aba=seguranca" className={buttonClass("primary", "md", "mt-6")}>
+          Ativar na minha conta
+        </Link>
+      </Card>
+    </main>
   );
 }
 

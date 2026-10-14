@@ -257,7 +257,16 @@ export async function requestPasswordReset(_: FormState, formData: FormData): Pr
 }
 
 export async function updatePassword(_: FormState, formData: FormData): Promise<FormState> {
-  const needsTerms = formData.get("needsTerms") === "1";
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (!userId) return { error: "Seu link expirou. Peça um novo link de acesso." };
+
+  // Quem ainda não aceitou os termos é decidido pelo banco, não pelo campo
+  // escondido do formulário: senão bastava mandar "0" para pular o aceite.
+  const { data: member } = await createAdminClient().from("members").select("terms_accepted_at").eq("user_id", userId).maybeSingle();
+  const needsTerms = Boolean(member) && !member?.terms_accepted_at;
+
   const parsed = z
     .object({
       password: passwordSchema,
@@ -267,11 +276,6 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
     .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "As senhas não conferem." })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
-
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getClaims();
-  const userId = auth?.claims?.sub;
-  if (!userId) return { error: "Seu link expirou. Peça um novo link de acesso." };
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) {
