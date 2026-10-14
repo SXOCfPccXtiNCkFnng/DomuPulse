@@ -216,8 +216,8 @@ async function auditMember(actor: string, orgId: string, memberId: string, actio
   });
 }
 
+// Só cargo e lugar: o nome é o que a própria pessoa cadastrou.
 const memberSchema = z.object({
-  fullName: nameSchema,
   role: z.enum(["director", "manager", "broker"]),
   scopeId: z.uuid("Escolha onde a pessoa vai atuar."),
 });
@@ -232,7 +232,7 @@ export async function updateMember(memberId: string, _: FormState, formData: For
 
   const parsed = memberSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
-  const { fullName, role, scopeId } = parsed.data;
+  const { role, scopeId } = parsed.data;
   if (RANK[role] <= RANK[me.role]) return { fieldErrors: { role: "Você só pode atribuir cargos abaixo do seu." } };
 
   // O novo lugar precisa estar dentro do escopo de quem altera.
@@ -242,13 +242,13 @@ export async function updateMember(memberId: string, _: FormState, formData: For
     if (me.role !== "owner") return { error: "Só o administrador define superintendentes." };
     const { data } = await supabase.from("divisions").select("id").eq("id", scopeId).maybeSingle();
     if (!data) return { fieldErrors: { scopeId: "Diretoria inválida." } };
-    update = { full_name: fullName, role, division_id: data.id, team_id: null };
+    update = { role, division_id: data.id, team_id: null };
   } else {
     const { data } = await supabase.from("teams").select("id, division_id").eq("id", scopeId).maybeSingle();
     if (!data) return { fieldErrors: { scopeId: "Equipe inválida." } };
     if (me.role === "director" && data.division_id !== me.divisionId) return { fieldErrors: { scopeId: "Essa equipe está fora da sua diretoria." } };
     if (me.role === "manager" && data.id !== me.teamId) return { fieldErrors: { scopeId: "Você só pode manter a pessoa na sua equipe." } };
-    update = { full_name: fullName, role, team_id: data.id, division_id: data.division_id };
+    update = { role, team_id: data.id, division_id: data.division_id };
   }
 
   const { error } = await createAdminClient().from("members").update(update).eq("id", memberId).eq("org_id", me.org.id);

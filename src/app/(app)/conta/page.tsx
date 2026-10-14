@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Bell, Building2, CreditCard, Download, Lock, Palette, ShieldCheck } from "lucide-react";
+import { Bell, Building2, CreditCard, Download, Lock, Palette, ShieldCheck, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ThemeSwitcher } from "@/components/theme";
@@ -15,6 +15,7 @@ import { formatDate } from "@/lib/time";
 import { CouponForm, DigestSettings, HashToTab, InstallGuide, PushSettings, SubscriptionForm } from "./client";
 import { OrgSettingsForm } from "./org-settings";
 import { CancelSubscriptionButton, DeleteAccountForm } from "./privacy";
+import { ProfileForm } from "./profile";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
 export const metadata: Metadata = { title: "Conta" };
@@ -28,6 +29,7 @@ const STATUS_LABEL: Record<OrgStatus, { label: string; tone: "brand" | "warn" | 
 
 // Abas da conta. As do administrador aparecem primeiro; o corretor vê só as dele.
 const TABS = [
+  { id: "perfil", label: "Perfil", Icon: UserRound, ownerOnly: false },
   { id: "imobiliaria", label: "Imobiliária", Icon: Building2, ownerOnly: true },
   { id: "assinatura", label: "Assinatura", Icon: CreditCard, ownerOnly: true },
   { id: "notificacoes", label: "Notificações", Icon: Bell, ownerOnly: false },
@@ -78,6 +80,8 @@ export default async function ContaPage(props: PageProps<"/conta">) {
           ))}
         </ul>
       </nav>
+
+      {tab === "perfil" ? <Profile name={me.fullName} /> : null}
 
       {tab === "imobiliaria" ? (
         <div className="max-w-3xl">
@@ -240,6 +244,18 @@ async function Subscription({ orgStatus, trialEndsAt, canWrite }: { orgStatus: O
       <Card>
         <CardHeader title="Cupom" description="Dias grátis liberam o acesso na hora; desconto vale em todas as faturas" />
         <CouponForm />
+      </Card>
+    </div>
+  );
+}
+
+async function Profile({ name }: { name: string }) {
+  const { data: claims } = await (await createClient()).auth.getClaims();
+  return (
+    <div className="max-w-3xl">
+      <Card>
+        <CardHeader title="Seu perfil" description="Seu nome no Pulse" />
+        <ProfileForm name={name} email={String(claims?.claims?.email ?? "")} />
       </Card>
     </div>
   );

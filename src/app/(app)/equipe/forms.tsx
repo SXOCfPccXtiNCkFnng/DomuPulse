@@ -204,17 +204,13 @@ function MemberEditForm({
   }, initial);
   const roles = INVITABLE[myRole];
   const [role, setRole] = useState<Role>(member.role);
-  const [name, setName] = useState(member.name);
   const scopes = role === "director" ? divisions : teams;
   const [scopeId, setScopeId] = useState(scopes.some((s) => s.id === member.scopeId) ? member.scopeId : (scopes[0]?.id ?? ""));
 
   return (
     <form action={action} className="mt-3 flex flex-col gap-3 rounded-xl bg-surface-2 p-4" noValidate>
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Nome" error={state.fieldErrors?.fullName}>
-          <Input name="fullName" value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Cargo" error={state.fieldErrors?.role}>
           <Select
             name="role"

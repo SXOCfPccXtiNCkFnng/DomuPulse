@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/auth";
@@ -8,7 +9,7 @@ import { sendToUsers } from "@/lib/push";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { emailSchema, type FormState } from "@/lib/validation";
+import { emailSchema, fullNameSchema, type FormState } from "@/lib/validation";
 
 const subscriptionSchema = z.object({
   endpoint: z.url().startsWith("https://").max(1000),
@@ -109,4 +110,23 @@ export async function setDigestEmail(_: FormState, formData: FormData): Promise<
     if (loginEmail) after(() => sendDigestEmailChangedEmail({ to: loginEmail, newEmail: digestEmail }));
   }
   return { success: digestEmail ? `O resumo vai chegar em ${digestEmail}.` : "O resumo vai chegar no seu e-mail de login.", values: { digestEmail: digestEmail ?? "" } };
+}
+
+/** A própria pessoa corrige o nome dela. Ninguém mais altera o nome de outro membro. */
+export async function updateMyName(_: FormState, formData: FormData): Promise<FormState> {
+  const me = await getCurrentMember();
+  const raw = String(formData.get("fullName") ?? "");
+  const parsed = fullNameSchema.safeParse(raw);
+  if (!parsed.success) return { fieldErrors: { fullName: parsed.error.issues[0].message }, values: { fullName: raw } };
+
+  const limit = await rateLimit(`my-name:${me.id}`, 10, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec), values: { fullName: raw } };
+
+  const admin = createAdminClient();
+  const { error } = await admin.from("members").update({ full_name: parsed.data }).eq("id", me.id);
+  if (error) return { error: "Não foi possível salvar. Tente de novo.", values: { fullName: raw } };
+  await admin.auth.admin.updateUserById(me.userId, { user_metadata: { full_name: parsed.data } });
+
+  revalidatePath("/", "layout");
+  return { success: "Nome atualizado.", values: { fullName: parsed.data } };
 }

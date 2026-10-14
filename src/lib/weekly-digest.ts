@@ -116,6 +116,7 @@ export async function sendPeriodDigests(
   const slotsPerDay = org.report_slots.map(normalizeSlot).length;
   const current = reports.filter((r) => r.report_date >= start);
   const before = reports.filter((r) => r.report_date < start);
+  const reported = new Set(current.map((r) => r.member_id));
   const { data: teams } = await admin.from("teams").select("id, name").eq("org_id", org.id);
   const { data: divisions } = await admin.from("divisions").select("id, name").eq("org_id", org.id);
   const kind = period === "week" ? "weekly_digest" : "monthly_digest";
@@ -123,9 +124,12 @@ export async function sendPeriodDigests(
 
   let sent = 0;
   for (const leader of leaders) {
+    // Corretores de hoje e também quem lançou relatório no período com outro
+    // cargo: mudar de cargo não apaga o histórico.
     const scope = members.filter(
       (m) =>
-        m.role === "broker" &&
+        (m.role === "broker" || reported.has(m.id)) &&
+        m.id !== leader.id &&
         (leader.role === "owner" ||
           (leader.role === "director" && m.division_id === leader.division_id) ||
           (leader.role === "manager" && m.team_id === leader.team_id)),

@@ -61,7 +61,7 @@ export async function loadReportData(period: Period, teamId: string | null, brok
     brokerId
       ? brokerDays(supabase, period, brokerId)
       : supabase.rpc("report_totals_by_day", { p_from: period.from, p_to: period.to, p_team: teamId }),
-    supabase.from("members").select("id, full_name, role, team_id, active").eq("role", "broker").order("full_name"),
+    supabase.from("members").select("id, full_name, role, team_id, active").order("full_name"),
     supabase.from("teams").select("id, name").order("name"),
   ]);
 
@@ -70,7 +70,8 @@ export async function loadReportData(period: Period, teamId: string | null, brok
 
   // Corretor desativado só aparece se tiver lançamento no período.
   const brokers: BrokerLine[] = ((members.data ?? []) as MemberRow[])
-    .filter((m) => (brokerId ? m.id === brokerId : (!teamId || m.team_id === teamId) && (m.active || totalsByMember.has(m.id))))
+    .filter((m) => (m.role === "broker" && m.active) || totalsByMember.has(m.id))
+    .filter((m) => (brokerId ? m.id === brokerId : !teamId || m.team_id === teamId))
     .map((m) => {
       const row = totalsByMember.get(m.id);
       return {

@@ -72,12 +72,16 @@ export async function sendDailyDigests(org: { id: string; name: string; timezone
   const todays = reports.filter((r) => r.report_date === today);
   const yesterdays = reports.filter((r) => r.report_date === yesterday);
   const online = new Map(statuses.map((s) => [s.member_id, s.online]));
+  const reported = new Set(todays.map((r) => r.member_id));
 
   let sent = 0;
   for (const leader of leaders) {
+    // Corretores de hoje e também quem lançou relatório no período com outro
+    // cargo: mudar de cargo não apaga o histórico.
     const scope = members.filter(
       (m) =>
-        m.role === "broker" &&
+        (m.role === "broker" || reported.has(m.id)) &&
+        m.id !== leader.id &&
         (leader.role === "owner" ||
           (leader.role === "director" && m.division_id === leader.division_id) ||
           (leader.role === "manager" && m.team_id === leader.team_id)),
