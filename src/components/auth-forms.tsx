@@ -25,12 +25,15 @@ export function SignInForm() {
   const params = useSearchParams();
   const queryError = QUERY_ERRORS[params.get("erro") ?? ""];
   const justSignedUp = params.get("cadastro") === "ok";
+  const accountDeleted = params.get("conta") === "excluida";
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
       <input type="hidden" name="proximo" value={params.get("proximo") ?? ""} />
       {state.error || queryError ? (
         <FormMessage>{state.error ?? queryError}</FormMessage>
+      ) : accountDeleted ? (
+        <FormMessage tone="success">Sua conta foi excluída. Obrigado por ter usado o Domu Pulse.</FormMessage>
       ) : justSignedUp ? (
         <FormMessage tone="success">Conta criada com sucesso. Entre com o e-mail e a senha que você cadastrou.</FormMessage>
       ) : null}

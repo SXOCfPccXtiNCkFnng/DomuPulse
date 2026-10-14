@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { AsaasError, createCustomer, createSubscription, firstPendingPayment } from "@/lib/asaas";
+import { AsaasError, createCustomer, createSubscription, deleteSubscription, firstPendingPayment, getSubscription } from "@/lib/asaas";
 import { getCurrentMember } from "@/lib/auth";
 import { isCpfOrCnpj, onlyDigits } from "@/lib/document";
 import { describeError, logger } from "@/lib/logger";
@@ -10,7 +10,7 @@ import { monthlyPriceCents } from "@/lib/plans";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { todayIn } from "@/lib/time";
+import { formatDate, todayIn, zonedToIso } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
 
 const schema = z.object({
@@ -72,7 +72,8 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
         description: `Domu Pulse${percentOff ? `, cupom ${org.coupon_code}` : ""}`,
       });
       subscriptionId = subscription.id;
-      await admin.from("organizations").update({ asaas_subscription_id: subscriptionId, price_cents: valueCents }).eq("id", org.id);
+      // Assinar de novo desfaz um cancelamento que ainda não tinha vencido.
+      await admin.from("organizations").update({ asaas_subscription_id: subscriptionId, price_cents: valueCents, cancel_at: null }).eq("id", org.id);
     }
 
     const payment = await firstPendingPayment(subscriptionId);
@@ -142,4 +143,54 @@ export async function redeemCoupon(_: BillingState, formData: FormData): Promise
   await admin.from("organizations").update({ coupon_code: code }).eq("id", me.org.id);
   revalidatePath("/", "layout");
   return { success: `Cupom aplicado: ${Number(data.percent_off)}% de desconto em todas as faturas.` };
+}
+
+/**
+ * Cancela a assinatura pelo próprio administrador. O Asaas para de cobrar na
+ * hora; o acesso continua até a data da próxima cobrança, que já estava paga.
+ * A rotina diária de cobrança encerra a conta quando essa data passa.
+ */
+export async function cancelSubscription(): Promise<BillingState> {
+  const me = await getCurrentMember();
+  if (me.role !== "owner") return { error: "Só o administrador cancela a assinatura." };
+
+  const limit = await rateLimit(`cancel:${me.org.id}`, 5, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec) };
+
+  const admin = createAdminClient();
+  const { data: org } = await admin.from("organizations").select("asaas_subscription_id").eq("id", me.org.id).single();
+  const subscriptionId = (org?.asaas_subscription_id as string | null) ?? null;
+  if (!subscriptionId) return { error: "Não há assinatura ativa para cancelar." };
+
+  let nextDueDate: string | null = null;
+  try {
+    const subscription = await getSubscription(subscriptionId);
+    nextDueDate = subscription.nextDueDate ?? null;
+    await deleteSubscription(subscriptionId);
+  } catch (error) {
+    logger.error("billing.cancel", {
+      message: error instanceof AsaasError ? `Asaas ${error.status}: ${JSON.stringify(error.details).slice(0, 500)}` : describeError(error),
+      orgId: me.org.id,
+    });
+    return { error: "Não foi possível cancelar agora. Tente em alguns minutos ou fale com a gente pelo WhatsApp." };
+  }
+
+  // Sem a data da próxima cobrança, encerra no fim do dia de hoje.
+  const until = zonedToIso(nextDueDate ?? todayIn(me.org.timezone), nextDueDate ? "00:00" : "23:59", me.org.timezone);
+  await admin.from("organizations").update({ asaas_subscription_id: null, cancel_at: until }).eq("id", me.org.id);
+  await admin.from("audit_log").insert({
+    org_id: me.org.id,
+    actor: me.userId,
+    table_name: "platform",
+    record_id: me.org.id,
+    action: "cancel_subscription",
+    new_data: { cancel_at: until },
+  });
+
+  revalidatePath("/", "layout");
+  return {
+    success: nextDueDate
+      ? `Assinatura cancelada. Nenhuma cobrança nova será feita, e a equipe usa normalmente até ${formatDate(nextDueDate)}.`
+      : "Assinatura cancelada. Nenhuma cobrança nova será feita.",
+  };
 }

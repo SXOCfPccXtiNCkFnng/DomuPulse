@@ -300,6 +300,8 @@ await expectError("dono não lê o código de convite pela API", "ownerA", "sele
 await expectError("visitante não lê o código de convite", null, "select code from org_invites", /permission denied/, [], "anon");
 await expectError("dono não muda o valor da assinatura", "ownerA", "update platform_settings set monthly_price_cents = 1", /permission denied/);
 await expectError("dono não muda o valor que assinou", "ownerA", "update organizations set price_cents = 1", /permission denied/);
+await expectError("ninguém lê os registros de acesso pela API", "ownerA", "select * from access_logs", /permission denied/);
+await expectError("dono não estende o próprio acesso após cancelar", "ownerA", "update organizations set cancel_at = now() + interval '1 year'", /permission denied/);
 await expectError("só existe uma linha de configuração", null, "insert into platform_settings (id) values (false)", /check/, [], "service_role");
 
 console.log(`\n${passed} passaram, ${failed} falharam`);

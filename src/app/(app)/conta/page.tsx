@@ -1,8 +1,9 @@
 import clsx from "clsx";
-import { Bell, Building2, CreditCard, Palette, ShieldCheck } from "lucide-react";
+import { Bell, Building2, CreditCard, Download, Lock, Palette, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ThemeSwitcher } from "@/components/theme";
+import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { requireActivatedMember, orgCanWrite, ROLE_LABEL, type OrgStatus } from "@/lib/auth";
 import { vapidPublicKeyOrNull } from "@/lib/env";
@@ -13,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
 import { CouponForm, HashToTab, InstallGuide, PushSettings, SubscriptionForm, WeeklyDigestToggle } from "./client";
 import { OrgSettingsForm } from "./org-settings";
+import { CancelSubscriptionButton, DeleteAccountForm } from "./privacy";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
 export const metadata: Metadata = { title: "Conta" };
@@ -31,6 +33,7 @@ const TABS = [
   { id: "notificacoes", label: "Notificações", Icon: Bell, ownerOnly: false },
   { id: "seguranca", label: "Segurança", Icon: ShieldCheck, ownerOnly: false },
   { id: "aparelho", label: "Aparência e app", Icon: Palette, ownerOnly: false },
+  { id: "privacidade", label: "Privacidade e dados", Icon: Lock, ownerOnly: false },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -122,6 +125,33 @@ export default async function ContaPage(props: PageProps<"/conta">) {
           </Card>
         </div>
       ) : null}
+
+      {tab === "privacidade" ? (
+        <div className="grid items-start gap-5 xl:grid-cols-2">
+          <Card>
+            <CardHeader title="Baixar meus dados" description="Uma cópia de tudo o que o Pulse guarda sobre você" />
+            <div className="flex flex-col gap-4 p-5 sm:p-6">
+              <p className="text-sm text-ink-2">
+                O arquivo traz seu cadastro, relatórios, presença, clientes, agenda, metas, comissões, avisos e aparelhos com
+                notificação. Ele sai no formato JSON, que abre em qualquer editor de texto e pode ser importado em outros sistemas.
+              </p>
+              <a href="/conta/meus-dados" download className={buttonClass("secondary", "md", "self-start")}>
+                <Download className="size-4" />
+                Baixar meus dados
+              </a>
+              <p className="text-xs text-muted">
+                Para os relatórios da equipe em planilha, use Exportar planilha em Relatórios. Termos e privacidade:{" "}
+                <Link href="/termos" className="underline underline-offset-4">Termos de Uso</Link> e{" "}
+                <Link href="/privacidade" className="underline underline-offset-4">Política de Privacidade</Link>.
+              </p>
+            </div>
+          </Card>
+          <Card>
+            <CardHeader title="Excluir minha conta" description={me.role === "owner" ? "Apaga a imobiliária inteira" : "Remove seus dados pessoais do Pulse"} />
+            <DeleteAccountForm isOwner={me.role === "owner"} orgName={me.org.name} />
+          </Card>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -156,7 +186,9 @@ async function Notifications({ showDigest, memberId }: { showDigest: boolean; me
 
 async function Subscription({ orgStatus, trialEndsAt, canWrite }: { orgStatus: OrgStatus; trialEndsAt: string; canWrite: boolean }) {
   const supabase = await createClient();
-  const { data: org } = await supabase.from("organizations").select("price_cents, coupon_code").single();
+  const { data: org } = await supabase.from("organizations").select("price_cents, coupon_code, asaas_subscription_id, cancel_at").single();
+  const subscribed = Boolean(org?.asaas_subscription_id);
+  const cancelAt = (org?.cancel_at as string | null) ?? null;
   // A tabela de cupons é só do servidor: o percentual é lido com a chave de serviço.
   const [{ data: coupon }, priceCents] = await Promise.all([
     org?.coupon_code
@@ -172,7 +204,9 @@ async function Subscription({ orgStatus, trialEndsAt, canWrite }: { orgStatus: O
         <CardHeader
           title="Assinatura"
           description={
-            orgStatus === "trialing"
+            cancelAt && orgStatus !== "canceled"
+              ? `Cancelada: a equipe usa normalmente até ${formatDate(cancelAt.slice(0, 10))}`
+              : orgStatus === "trialing"
               ? canWrite
                 ? `Acesso gratuito até ${formatDate(trialEndsAt.slice(0, 10))}`
                 : "Conta aguardando ativação"
@@ -182,10 +216,20 @@ async function Subscription({ orgStatus, trialEndsAt, canWrite }: { orgStatus: O
           }
           action={<Badge tone={status.tone}>{status.label}</Badge>}
         />
-        <SubscriptionForm
-          priceCents={priceCents}
-          appliedCoupon={coupon?.percent_off != null ? { code: coupon.code, percentOff: Number(coupon.percent_off) } : null}
-        />
+        {subscribed ? (
+          <div className="flex flex-col gap-3 border-t border-line p-5 sm:p-6">
+            <p className="text-sm text-ink-2">
+              A cobrança é mensal e automática. Se cancelar, nenhuma cobrança nova é feita e a equipe continua usando até o fim do
+              período já pago. Depois disso, os dados ficam disponíveis só para consulta.
+            </p>
+            <CancelSubscriptionButton />
+          </div>
+        ) : (
+          <SubscriptionForm
+            priceCents={priceCents}
+            appliedCoupon={coupon?.percent_off != null ? { code: coupon.code, percentOff: Number(coupon.percent_off) } : null}
+          />
+        )}
       </Card>
       <Card>
         <CardHeader title="Cupom" description="Dias grátis liberam o acesso na hora; desconto vale em todas as faturas" />

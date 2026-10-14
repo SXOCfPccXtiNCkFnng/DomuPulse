@@ -25,6 +25,10 @@ export async function GET(request: NextRequest) {
       // Avisos lidos somem em 60 dias; não lidos, em 180.
       admin.from("notifications").delete({ count: "exact" }).lt("read_at", before(60)),
       admin.from("notifications").delete({ count: "exact" }).lt("created_at", before(180)),
+      // Registro de alterações: 2 anos, o prazo prometido na Política de Privacidade.
+      admin.from("audit_log").delete({ count: "exact" }).lt("at", before(730)),
+      // Registros de acesso: 6 meses, o prazo do Marco Civil (art. 15).
+      admin.from("access_logs").delete({ count: "exact" }).lt("at", before(183)),
     ]);
     const failed = results.find((r) => r.error);
     if (failed?.error) throw failed.error;
@@ -34,6 +38,8 @@ export async function GET(request: NextRequest) {
       pushLog: results[1].count ?? 0,
       resolvedAlerts: results[2].count ?? 0,
       inAppNotices: (results[3].count ?? 0) + (results[4].count ?? 0),
+      auditLog: results[5].count ?? 0,
+      accessLogs: results[6].count ?? 0,
     };
     await recordHeartbeat("cron.cleanup", { ok: true, result });
     return NextResponse.json({ ok: true, ...result });

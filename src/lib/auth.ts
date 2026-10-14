@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { LEGAL_DOCS_VERSION } from "@/lib/legal";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/lib/roles";
 import { normalizeSlot } from "@/lib/time";
@@ -23,7 +24,11 @@ export type CurrentMember = {
     reportSlots: string[];
     status: OrgStatus;
     trialEndsAt: string;
+    /** Assinatura cancelada pelo administrador: acesso até esta data. */
+    cancelAt: string | null;
   };
+  /** Versão dos Termos que a pessoa aceitou por último (null se nunca aceitou). */
+  termsVersion: string | null;
 };
 
 type MemberRow = {
@@ -40,7 +45,9 @@ type MemberRow = {
     report_slots: string[];
     status: OrgStatus;
     trial_ends_at: string;
+    cancel_at: string | null;
   };
+  terms_version: string | null;
 };
 
 // Camada de acesso a dados: o único lugar que resolve quem é o usuário.
@@ -60,7 +67,7 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
   const { data } = await supabase
     .from("members")
     .select(
-      "id, user_id, full_name, role, team_id, division_id, organizations (id, name, timezone, report_slots, status, trial_ends_at)",
+      "id, user_id, full_name, role, team_id, division_id, terms_version, organizations (id, name, timezone, report_slots, status, trial_ends_at, cancel_at)",
     )
     .eq("user_id", userId)
     .eq("active", true)
@@ -82,7 +89,9 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
       reportSlots: data.organizations.report_slots.map(normalizeSlot),
       status: data.organizations.status,
       trialEndsAt: data.organizations.trial_ends_at,
+      cancelAt: data.organizations.cancel_at,
     },
+    termsVersion: data.terms_version,
   };
 });
 
@@ -107,6 +116,8 @@ export function needsActivation(org: Pick<CurrentMember["org"], "status" | "tria
 export async function requireActivatedMember() {
   const member = await getCurrentMember();
   if (needsActivation(member.org)) redirect("/ativar");
+  // Termos mudaram desde o último aceite: pede o novo aceite antes de seguir.
+  if (member.termsVersion !== LEGAL_DOCS_VERSION) redirect("/termos-atualizados");
   return member;
 }
 

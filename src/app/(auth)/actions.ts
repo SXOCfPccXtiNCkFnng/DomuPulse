@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { sendPasswordChangedEmail, sendPasswordResetEmail, sendTeamWelcomeEmail, sendWelcomeEmail } from "@/lib/email-templates";
 import { siteUrl } from "@/lib/email";
+import { recordAccess } from "@/lib/access-log";
 import { CAPTCHA_ERROR, verifyCaptcha } from "@/lib/captcha";
 import { findOrgByInviteCode } from "@/lib/invite-link";
 import { LEGAL_DOCS_VERSION } from "@/lib/legal";
@@ -48,13 +49,14 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data: signedIn, error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
     if (error.status === 429) return { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo.", values };
     // Mensagem única para não revelar se o e-mail existe.
     return { error: "E-mail ou senha incorretos.", values };
   }
+  if (signedIn.user) await recordAccess(signedIn.user.id, "login", ip);
 
   redirect(safeNext(formData.get("proximo")));
 }
@@ -141,6 +143,7 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
   }
 
   // Envia depois da resposta, para o cadastro não esperar o provedor de e-mail.
+  await recordAccess(user.id, "signup", ip);
   after(() => sendWelcomeEmail({ to: email, fullName, orgName }));
 
   redirect("/entrar?cadastro=ok");
@@ -219,6 +222,7 @@ export async function joinWithInvite(_: FormState, formData: FormData): Promise<
       { kind: "member_joined", title: "Novo membro na equipe", body: `${fullName} entrou pelo link de convite.`, url: "/equipe" },
     ),
   );
+  await recordAccess(data.user.id, "join", ip);
   after(() => sendTeamWelcomeEmail({ to: email, fullName, orgName: org.name }));
 
   redirect("/entrar?cadastro=ok");

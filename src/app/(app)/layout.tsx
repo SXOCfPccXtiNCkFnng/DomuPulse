@@ -7,6 +7,7 @@ import { PageSkeleton } from "@/components/page-skeleton";
 import { ThemeSwitcher, ThemeToggle } from "@/components/theme";
 import { BrandMark, Logo } from "@/components/ui/logo";
 import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
+import { formatDate } from "@/lib/time";
 
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
@@ -111,12 +112,18 @@ function SignOutButton({ compact = false }: { compact?: boolean }) {
   );
 }
 
+// Dias inteiros até a data, contando a partir de agora.
+function daysUntil(iso: string) {
+  return Math.ceil((Date.parse(iso) - Date.now()) / 86_400_000);
+}
+
 async function BillingBanner() {
   const { org, role } = await getCurrentMember();
-  const daysLeft = Math.ceil((new Date(org.trialEndsAt).getTime() - Date.now()) / 86_400_000);
+  const daysLeft = daysUntil(org.trialEndsAt);
 
   let text: string | null = null;
   if (org.status === "canceled") text = "Assinatura cancelada. Os dados estão disponíveis só para consulta.";
+  else if (org.cancelAt) text = `Assinatura cancelada. A equipe usa normalmente até ${formatDate(org.cancelAt.slice(0, 10))}.`;
   else if (org.status === "past_due") text = "Há uma fatura em aberto. Regularize para não perder o acesso.";
   else if (org.status === "trialing" && daysLeft <= 0) text = "A conta ainda não está ativa. Os dados ficam disponíveis só para consulta.";
   else if (org.status === "trialing" && daysLeft <= 5) text = `Faltam ${daysLeft} ${daysLeft === 1 ? "dia" : "dias"} de acesso gratuito.`;

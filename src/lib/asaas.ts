@@ -77,6 +77,16 @@ export function updateSubscriptionValue(subscriptionId: string, valueCents: numb
   });
 }
 
+/** Dados da assinatura; nextDueDate é a próxima cobrança (AAAA-MM-DD). */
+export function getSubscription(subscriptionId: string) {
+  return request<AsaasSubscription & { nextDueDate: string }>(`/subscriptions/${encodeURIComponent(subscriptionId)}`);
+}
+
+/** Cancela a assinatura: o Asaas para de gerar cobranças novas. */
+export function deleteSubscription(subscriptionId: string) {
+  return request<{ deleted: boolean }>(`/subscriptions/${encodeURIComponent(subscriptionId)}`, { method: "DELETE" });
+}
+
 export async function firstPendingPayment(subscriptionId: string) {
   const list = await request<{ data: AsaasPayment[] }>(
     `/subscriptions/${encodeURIComponent(subscriptionId)}/payments?status=PENDING`,

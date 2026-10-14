@@ -11,8 +11,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const REMIND_DAYS_BEFORE = 1;
 
 /**
- * Uma vez por dia: avisa o administrador quando faltam 3 dias para o teste
- * acabar (1 dia antes) e quando ele acaba. Cada aviso é "reservado" no banco antes de sair,
+ * Uma vez por dia: avisa o administrador quando o acesso gratuito está
+ * acabando (1 dia antes) e quando ele acaba, e encerra as assinaturas
+ * canceladas cujo período pago terminou. Cada aviso é "reservado" no banco antes de sair,
  * então rodar duas vezes no mesmo dia não manda e-mail repetido.
  */
 export async function GET(request: NextRequest) {
@@ -87,5 +88,25 @@ async function run() {
     if (sent.ok) ended++;
   }
 
-  return { trialEnding: ending, trialEnded: ended };
+  // Cancelamento pedido pelo administrador: o período pago acabou, a conta
+  // passa a ficar só para consulta.
+  const { data: closedOrgs, error: e3 } = await admin
+    .from("organizations")
+    .update({ status: "canceled" })
+    .in("status", ["active", "past_due"])
+    .not("cancel_at", "is", null)
+    .lte("cancel_at", now.toISOString())
+    .select("id");
+  if (e3) throw e3;
+
+  for (const org of closedOrgs ?? []) {
+    await notifyRoles(org.id, ["owner"], {
+      kind: "subscription_ended",
+      title: "Assinatura encerrada",
+      body: "O período pago terminou. Os dados seguem salvos para consulta, e dá para assinar de novo quando quiser.",
+      url: "/conta?aba=assinatura",
+    });
+  }
+
+  return { trialEnding: ending, trialEnded: ended, canceled: closedOrgs?.length ?? 0 };
 }
