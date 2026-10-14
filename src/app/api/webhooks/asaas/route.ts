@@ -6,8 +6,10 @@ import { asaasEnv } from "@/lib/env.server";
 import { recordHeartbeat } from "@/lib/heartbeat";
 import { describeError, logger } from "@/lib/logger";
 import { notifyRoles } from "@/lib/notify";
+import { formatMoney } from "@/lib/metrics";
 import { orgOwnerContact } from "@/lib/org-owner";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatDate } from "@/lib/time";
 
 function configuredToken() {
   try {
@@ -31,7 +33,14 @@ const STATUS_BY_EVENT: Record<string, "active" | "past_due" | "canceled"> = {
   PAYMENT_OVERDUE: "past_due",
   SUBSCRIPTION_DELETED: "canceled",
   SUBSCRIPTION_INACTIVATED: "canceled",
+  // Dinheiro devolvido (estorno) ou contestado no cartão (chargeback): a conta
+  // fica só para consulta até a DomuTech olhar. Para liberar de novo, use
+  // "Liberar acesso" no painel interno.
+  PAYMENT_REFUNDED: "canceled",
+  PAYMENT_CHARGEBACK_REQUESTED: "canceled",
 };
+
+const MONEY_BACK = new Set(["PAYMENT_REFUNDED", "PAYMENT_CHARGEBACK_REQUESTED"]);
 
 export async function POST(request: NextRequest) {
   // O Asaas envia o token cadastrado no painel neste cabeçalho.
@@ -54,6 +63,27 @@ export async function POST(request: NextRequest) {
 
   const status = STATUS_BY_EVENT[body.event];
   const subscriptionId = body.payment?.subscription ?? body.subscription?.id ?? null;
+
+  // Fatura nova: não muda a situação da conta, só avisa o administrador. O
+  // Asaas também manda o boleto e o Pix por e-mail e lembra antes de vencer.
+  if (body.event === "PAYMENT_CREATED" && subscriptionId) {
+    const { data: org } = await admin.from("organizations").select("id").eq("asaas_subscription_id", subscriptionId).maybeSingle();
+    if (org) {
+      const value = formatMoney(Math.round((body.payment?.value ?? 0) * 100));
+      const due = body.payment?.dueDate ? `, vence em ${formatDate(body.payment.dueDate)}` : "";
+      after(() =>
+        notifyRoles(org.id, ["owner"], {
+          kind: "invoice_created",
+          title: "Nova fatura do Pulse",
+          body: `Fatura de ${value}${due}. O boleto e o Pix também foram para o seu e-mail.`,
+          url: "/conta?aba=assinatura",
+        }),
+      );
+    }
+    await recordHeartbeat("webhook.asaas", { ok: true, result: { event: body.event, orphan: !org } });
+    return NextResponse.json({ ok: true });
+  }
+
   if (!status || !subscriptionId) {
     await recordHeartbeat("webhook.asaas", { ok: true, result: { event: body.event, ignored: true } });
     return NextResponse.json({ ok: true, ignored: true });
@@ -65,7 +95,9 @@ export async function POST(request: NextRequest) {
     .eq("asaas_subscription_id", subscriptionId)
     .maybeSingle();
   if (!org) {
-    logger.warn("webhook.asaas", { message: `Assinatura ${subscriptionId} sem organização no Pulse`, event: body.event });
+    // Conta do Asaas compartilhada com o PainelDomu: cobranças de lá também chegam
+    // aqui. É esperado, então fica só no log, sem virar aviso no painel interno.
+    logger.info("webhook.asaas", { message: `Assinatura ${subscriptionId} sem organização no Pulse`, event: body.event });
     await recordHeartbeat("webhook.asaas", { ok: true, result: { event: body.event, orphan: true } });
     return NextResponse.json({ ok: true, ignored: true });
   }
@@ -80,6 +112,15 @@ export async function POST(request: NextRequest) {
   }
 
   await recordHeartbeat("webhook.asaas", { ok: true, result: { event: body.event } });
+
+  // Vira alerta na aba Erros do painel interno (e e-mail para a equipe DomuTech).
+  if (MONEY_BACK.has(body.event)) {
+    logger.error("billing.money_back", {
+      message: `${body.event === "PAYMENT_REFUNDED" ? "Estorno" : "Chargeback"} em ${org.name}: conta suspensa. Confira no Asaas.`,
+      orgId: org.id,
+      event: body.event,
+    });
+  }
 
   // Cartão gera CONFIRMED na hora e RECEIVED dias depois: avisa uma vez só.
   const payment = body.payment;

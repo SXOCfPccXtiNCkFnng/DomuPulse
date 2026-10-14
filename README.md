@@ -183,7 +183,7 @@ Os erros do servidor chegam sozinhos: tudo que passa por `logger.error` vai para
 1. Crie a chave de API (comece pelo sandbox) e coloque em `ASAAS_API_KEY`, com `ASAAS_ENV=sandbox`.
 2. Em **Integrações > Webhooks**, cadastre `https://pulse.domutech.digital/api/webhooks/asaas`, defina um token de autenticação (mínimo 32 caracteres) e coloque o mesmo valor em `ASAAS_WEBHOOK_TOKEN`.
 3. Eventos usados: `PAYMENT_CONFIRMED`, `PAYMENT_RECEIVED`, `PAYMENT_OVERDUE`, `SUBSCRIPTION_DELETED`, `SUBSCRIPTION_INACTIVATED`.
-4. O preço por assento fica em `src/lib/plans.ts`. Os assentos pedidos só passam a valer quando o pagamento confirma.
+4. O valor é fixo por conta (R$ 500 por mês, sem limite de pessoas) e muda no painel interno, aba Comercial. O novo valor só vale para quem assinar depois.
 
 ## Termos e privacidade
 
