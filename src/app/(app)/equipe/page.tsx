@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { InviteLink } from "@/components/invite-link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { getCurrentMember, ROLE_LABEL, ROLE_RANK, type Role } from "@/lib/auth";
+import { getInviteCode, inviteUrl } from "@/lib/invite-link";
 import { createClient } from "@/lib/supabase/server";
 import { InviteForm, MemberActions, RenameDivision, TeamActions, TeamForm } from "./forms";
 import { ImportMembers } from "./import";
@@ -25,21 +27,23 @@ export default async function EquipePage() {
   if (me.role === "broker") redirect("/painel");
 
   const supabase = await createClient();
-  const [{ data: members }, { data: teams }, { data: divisions }, { data: org }] = await Promise.all([
+  const canEditTeams = me.role === "owner" || me.role === "director";
+  const [{ data: members }, { data: teams }, { data: divisions }, inviteCode] = await Promise.all([
     supabase.from("members").select("id, full_name, role, team_id, division_id, active, terms_accepted_at").order("full_name"),
     supabase.from("teams").select("id, name, division_id").order("name"),
     supabase.from("divisions").select("id, name").order("name"),
-    supabase.from("organizations").select("seats").single(),
+    // O link deixa a pessoa escolher qualquer equipe: só a liderança de cima vê.
+    canEditTeams ? getInviteCode(me.org.id) : null,
   ]);
 
   const list = (members ?? []) as MemberRow[];
   const activeCount = list.filter((m) => m.active).length;
+  const totalTeams = (teams ?? []).length;
   const scopedTeams = (teams ?? []).filter(
     (t) => me.role === "owner" || (me.role === "director" ? t.division_id === me.divisionId : t.id === me.teamId),
   );
   const teamOptions: Option[] = scopedTeams.map((t) => ({ id: t.id, name: t.name }));
   const divisionOptions: Option[] = (divisions ?? []).map((d) => ({ id: d.id, name: d.name }));
-  const canEditTeams = me.role === "owner" || me.role === "director";
 
   const leadership = list.filter((m) => m.role === "owner" || m.role === "director");
   const byTeam = scopedTeams.map((t) => ({ team: t, people: list.filter((m) => m.team_id === t.id) }));
@@ -62,11 +66,9 @@ export default async function EquipePage() {
           <p className="text-sm text-muted">{me.org.name}</p>
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Equipe</h1>
         </div>
-        {me.role === "owner" && org ? (
-          <Badge tone={activeCount >= org.seats ? "warn" : "neutral"} className="h-8 px-3 text-[13px]">
-            {activeCount} de {org.seats} assentos em uso
-          </Badge>
-        ) : null}
+        <Badge className="h-8 px-3 text-[13px]">
+          {activeCount} {activeCount === 1 ? "pessoa ativa" : "pessoas ativas"}
+        </Badge>
       </header>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -101,6 +103,20 @@ export default async function EquipePage() {
         </div>
 
         <div className="flex flex-col gap-5">
+          {inviteCode ? (
+            <Card>
+              <CardHeader
+                title="Link de convite"
+                description={
+                  totalTeams
+                    ? "Quem abrir cria a senha, escolhe a equipe e entra como corretor"
+                    : "Crie a primeira equipe para o link começar a funcionar"
+                }
+              />
+              <InviteLink url={inviteUrl(inviteCode)} orgName={me.org.name} canRegenerate={me.role === "owner"} />
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader title="Convidar pessoa" description="Ela recebe um e-mail para criar a senha" />
             <InviteForm myRole={me.role} teams={teamOptions} divisions={divisionOptions} />

@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import type { FormState } from "@/lib/validation";
-import { createCoupon } from "./actions";
+import { createCoupon, setMonthlyPrice } from "./actions";
 
 // Ações que mexem no acesso de um cliente pedem um segundo clique.
 export function ConfirmButton({ label, confirmLabel, danger = false }: { label: string; confirmLabel: string; danger?: boolean }) {
@@ -61,6 +61,25 @@ export function CouponForm() {
       <Button type="submit" disabled={pending}>
         {pending ? "Criando..." : "Criar cupom"}
       </Button>
+    </form>
+  );
+}
+
+export function PriceForm({ currentCents }: { currentCents: number }) {
+  const [state, action, pending] = useActionState(setMonthlyPrice, {} as FormState);
+  const current = (currentCents / 100).toFixed(2).replace(".", ",").replace(/,00$/, "");
+  return (
+    <form action={action} className="flex flex-col gap-3 p-5 sm:p-6" noValidate>
+      {state.error ? <FormMessage>{state.error}</FormMessage> : null}
+      {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
+      <div className="flex items-start gap-2">
+        <Field label="Valor em reais" error={state.fieldErrors?.price} className="flex-1">
+          <Input name="price" inputMode="decimal" defaultValue={current} key={current} required />
+        </Field>
+        <Button type="submit" disabled={pending} className="mt-6 h-11">
+          {pending ? "Salvando..." : "Salvar"}
+        </Button>
+      </div>
     </form>
   );
 }

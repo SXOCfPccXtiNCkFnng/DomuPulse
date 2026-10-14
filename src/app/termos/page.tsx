@@ -74,8 +74,8 @@ const sections: LegalSection[] = [
       <>
         <p>
           O uso depende de assinatura mensal
-          recorrente, cobrada pelo Asaas por Pix, boleto ou cartão, de acordo com o número de assentos (pessoas ativas na
-          conta).
+          recorrente, cobrada pelo Asaas por Pix, boleto ou cartão, em valor fixo por conta, sem limite de pessoas. O valor é o vigente
+          no momento da assinatura.
         </p>
         <p>
           Cupons de acesso gratuito ou de desconto são oferecidos a critério da DomuTech, valem uma vez por imobiliária e podem ter prazo. Sem assinatura ativa ou com o acesso gratuito encerrado, os dados continuam disponíveis só para consulta. O cancelamento

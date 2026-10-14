@@ -5,10 +5,10 @@ import { Check, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useActionState, useState } from "react";
-import { requestPasswordReset, signIn, signUp, updatePassword } from "@/app/(auth)/actions";
+import { joinWithInvite, requestPasswordReset, signIn, signUp, updatePassword } from "@/app/(auth)/actions";
 import { Captcha } from "@/components/captcha";
 import { Button } from "@/components/ui/button";
-import { Field, FormMessage, Input } from "@/components/ui/field";
+import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { PASSWORD_RULES } from "@/lib/password";
 import { formatPhoneBR } from "@/lib/phone";
 import type { FormState } from "@/lib/validation";
@@ -24,11 +24,16 @@ export function SignInForm() {
   const [state, action, pending] = useActionState(signIn, initial);
   const params = useSearchParams();
   const queryError = QUERY_ERRORS[params.get("erro") ?? ""];
+  const justSignedUp = params.get("cadastro") === "ok";
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
       <input type="hidden" name="proximo" value={params.get("proximo") ?? ""} />
-      {state.error || queryError ? <FormMessage>{state.error ?? queryError}</FormMessage> : null}
+      {state.error || queryError ? (
+        <FormMessage>{state.error ?? queryError}</FormMessage>
+      ) : justSignedUp ? (
+        <FormMessage tone="success">Conta criada com sucesso. Entre com o e-mail e a senha que você cadastrou.</FormMessage>
+      ) : null}
       <Field label="E-mail" error={state.fieldErrors?.email}>
         <Input
           name="email"
@@ -94,6 +99,62 @@ export function SignUpForm() {
       <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending} className="mt-1">
         {pending ? "Criando conta..." : "Criar conta"}
+      </Button>
+    </form>
+  );
+}
+
+/** Corretor entrando pelo link de convite da conta. */
+export function JoinForm({ code, teams }: { code: string; teams: { id: string; name: string }[] }) {
+  const [state, action, pending] = useActionState(joinWithInvite, initial);
+  const v = state.values ?? {};
+  const k = JSON.stringify(v);
+
+  return (
+    <form action={action} className="relative flex flex-col gap-4" noValidate>
+      {state.error ? <FormMessage>{state.error}</FormMessage> : null}
+      <input type="hidden" name="code" value={code} />
+      <input
+        type="text"
+        name="website"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        className="absolute -left-[9999px] h-0 w-0 opacity-0"
+      />
+      <Field label="Nome e sobrenome" error={state.fieldErrors?.fullName}>
+        <Input name="fullName" autoComplete="name" required autoFocus defaultValue={v.fullName} key={`n${k}`} />
+      </Field>
+      <Field label="E-mail" error={state.fieldErrors?.email}>
+        <Input name="email" type="email" autoComplete="email" inputMode="email" required defaultValue={v.email} key={`e${k}`} />
+      </Field>
+      {teams.length === 1 ? (
+        <input type="hidden" name="teamId" value={teams[0].id} />
+      ) : (
+        <Field label="Sua equipe" error={state.fieldErrors?.teamId}>
+          <Select name="teamId" required defaultValue={v.teamId ?? ""} key={`t${k}`}>
+            <option value="" disabled>
+              Escolha a equipe
+            </option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      <PasswordField
+        name="password"
+        label="Crie uma senha"
+        autoComplete="new-password"
+        error={state.fieldErrors?.password}
+        showRules
+      />
+      <TermsCheckbox error={state.fieldErrors?.acceptTerms} />
+      <Captcha resetKey={state} />
+      <Button type="submit" size="lg" disabled={pending} className="mt-1">
+        {pending ? "Entrando na equipe..." : "Entrar na equipe"}
       </Button>
     </form>
   );

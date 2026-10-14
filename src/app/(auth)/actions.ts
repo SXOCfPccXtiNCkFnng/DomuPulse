@@ -6,6 +6,7 @@ import { z } from "zod";
 import { sendPasswordChangedEmail, sendPasswordResetEmail, sendWelcomeEmail } from "@/lib/email-templates";
 import { siteUrl } from "@/lib/email";
 import { CAPTCHA_ERROR, verifyCaptcha } from "@/lib/captcha";
+import { findOrgByInviteCode } from "@/lib/invite-link";
 import { LEGAL_DOCS_VERSION } from "@/lib/legal";
 import { notifyLeadersOf } from "@/lib/notify";
 import { describeError, logger } from "@/lib/logger";
@@ -70,7 +71,7 @@ const signUpSchema = z.object({
 const GENERIC_SIGNUP_ERROR = { error: "Não foi possível criar a conta agora. Tente novamente." };
 
 // Cadastro sem confirmação de e-mail: a conta já nasce confirmada, a pessoa
-// entra direto no painel e recebe um e-mail de boas-vindas.
+// vai para o login com um aviso de sucesso e recebe um e-mail de boas-vindas.
 export async function signUp(_: FormState, formData: FormData): Promise<FormState> {
   // Campo invisível: pessoas não preenchem, robôs costumam preencher.
   if (formData.get("website")) return GENERIC_SIGNUP_ERROR;
@@ -142,11 +143,84 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
   // Envia depois da resposta, para o cadastro não esperar o provedor de e-mail.
   after(() => sendWelcomeEmail({ to: email, fullName, orgName }));
 
-  const supabase = await createClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-  if (signInError) redirect("/entrar");
+  redirect("/entrar?cadastro=ok");
+}
 
-  redirect("/ativar");
+const joinSchema = z.object({
+  code: z.string(),
+  fullName: fullNameSchema,
+  email: emailSchema,
+  teamId: z.uuid("Escolha sua equipe."),
+  password: passwordSchema,
+  acceptTerms: acceptTermsSchema,
+});
+
+/**
+ * Entrada pelo link de convite da conta: cria o usuário já como corretor da
+ * equipe escolhida. O código é conferido de novo aqui, não só na página.
+ */
+export async function joinWithInvite(_: FormState, formData: FormData): Promise<FormState> {
+  if (formData.get("website")) return GENERIC_SIGNUP_ERROR;
+  const values = keep(formData, ["fullName", "email", "teamId"]);
+
+  const ip = await clientIp();
+  const limit = await rateLimit(`join:ip:${ip}`, 8, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec), values };
+
+  const parsed = joinSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
+  if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
+
+  const { code, fullName, email, teamId, password } = parsed.data;
+  const org = await findOrgByInviteCode(code);
+  if (!org) return { error: "Este link de convite não vale mais. Peça um novo ao seu gestor." };
+
+  const admin = createAdminClient();
+  const { data: team } = await admin.from("teams").select("id, division_id").eq("id", teamId).eq("org_id", org.id).maybeSingle();
+  if (!team) return { fieldErrors: { teamId: "Escolha sua equipe." }, values };
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+  });
+  if (error || !data.user) {
+    if (error?.code === "email_exists") {
+      return { fieldErrors: { email: "Este e-mail já tem conta. Entre ou recupere a senha." }, values };
+    }
+    if (error?.code === "weak_password") {
+      return { fieldErrors: { password: "Senha fraca. Siga os requisitos abaixo do campo." }, values };
+    }
+    logger.error("auth.join_create_user", { message: describeError(error), orgId: org.id });
+    return { ...GENERIC_SIGNUP_ERROR, values };
+  }
+
+  const { error: memberError } = await admin.from("members").insert({
+    org_id: org.id,
+    user_id: data.user.id,
+    full_name: fullName,
+    role: "broker",
+    team_id: team.id,
+    division_id: team.division_id,
+    terms_accepted_at: new Date().toISOString(),
+    terms_version: LEGAL_DOCS_VERSION,
+    terms_accepted_ip: ip.slice(0, 64),
+  });
+  if (memberError) {
+    logger.error("auth.join_member", { message: describeError(memberError), orgId: org.id });
+    await admin.auth.admin.deleteUser(data.user.id);
+    return { ...GENERIC_SIGNUP_ERROR, values };
+  }
+
+  after(() =>
+    notifyLeadersOf(
+      { orgId: org.id, teamId: team.id, divisionId: team.division_id },
+      { kind: "member_joined", title: "Novo membro na equipe", body: `${fullName} entrou pelo link de convite.`, url: "/equipe" },
+    ),
+  );
+
+  redirect("/entrar?cadastro=ok");
 }
 
 const RESET_SENT = {

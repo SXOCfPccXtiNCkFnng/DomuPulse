@@ -44,7 +44,7 @@ const FAQ = [
   },
   {
     q: "Como funciona a contratação?",
-    a: "Você cria a conta, escolhe quantas pessoas vão usar e ativa por Pix, boleto ou cartão. A cobrança é mensal, por pessoa ativa. Cancela quando quiser.",
+    a: "Cada gestor cria a própria conta e ativa por Pix, boleto ou cartão. O valor é fixo por mês, com quantos corretores quiser. Cancela quando quiser.",
   },
   {
     q: "Os horários de relatório são fixos?",

@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { NewPasswordForm } from "@/components/auth-forms";
 import { createClient } from "@/lib/supabase/server";
+import { AuthHeading } from "@/components/auth-heading";
 
 export const metadata: Metadata = { title: "Definir senha" };
 
 export default function NewPasswordPage() {
   return (
     <>
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Crie sua senha</h1>
-      <p className="mt-2 mb-8 text-muted">Você vai usar esta senha para entrar no Pulse.</p>
+      <AuthHeading eyebrow="Primeiro acesso" title={<>Crie sua <span className="text-brand-text">senha.</span></>}>
+        Você vai usar esta senha para entrar no Pulse.
+      </AuthHeading>
       <Suspense>
         <Form />
       </Suspense>

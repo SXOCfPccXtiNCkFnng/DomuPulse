@@ -11,10 +11,10 @@ import { StatTile } from "@/components/live/viz";
 import { loadAlerts, loadCoupons, loadHealth, loadOrgs, loadOverview, type HealthStatus, type OrgStatusView } from "@/lib/interno";
 import { formatMoney, formatNumber } from "@/lib/metrics";
 import { platformAdminSession } from "@/lib/platform-admin";
-import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
+import { getMonthlyPriceCents } from "@/lib/pricing";
 import { formatDate } from "@/lib/time";
 import { extendTrial, grantAccess, resolveAlertsBySource, setAlertResolved, setCouponActive, suspendAccess } from "./actions";
-import { ConfirmButton, CouponForm } from "./client";
+import { ConfirmButton, CouponForm, PriceForm } from "./client";
 
 // Título neutro: a página não se anuncia para quem não tem acesso.
 export const metadata: Metadata = { title: "Pulse", robots: { index: false, follow: false } };
@@ -284,8 +284,8 @@ async function Orgs({ search }: { search: string }) {
                 {org.contact_phone ? `, WhatsApp ${org.contact_phone}` : ""}
               </p>
               <p className="mt-0.5 text-xs text-muted">
-                {org.activeMembers} de {org.seats} assentos em uso
-                {org.subscribed_seats && org.subscribed_seats !== org.seats ? ` (${org.subscribed_seats} pedidos)` : ""}, criada em{" "}
+                {org.activeMembers} {org.activeMembers === 1 ? "pessoa ativa" : "pessoas ativas"}
+                {org.price_cents ? `, assinou por ${formatMoney(org.price_cents)}` : ""}, criada em{" "}
                 {formatDate(org.created_at.slice(0, 10))}
                 {org.view === "trial" || org.view === "trial_expired" ? `, acesso gratuito até ${formatDate(org.trial_ends_at.slice(0, 10))}` : ""}
                 {org.lastReport ? `, último relatório em ${formatDate(org.lastReport)}` : ", nenhum relatório ainda"}
@@ -306,18 +306,11 @@ async function Orgs({ search }: { search: string }) {
                   </form>
                 </>
               ) : null}
-              <form action={grantAccess.bind(null, org.id)} className="flex items-center gap-1.5">
-                <input
-                  name="seats"
-                  type="number"
-                  min={1}
-                  max={500}
-                  defaultValue={Math.max(org.seats, MIN_SEATS)}
-                  aria-label="Assentos"
-                  className="h-8 w-16 rounded-lg border border-line bg-surface-2 px-2 text-sm tabular-nums"
-                />
-                <ConfirmButton label={org.view === "active" ? "Ajustar assentos" : "Liberar acesso"} confirmLabel="Confirmar" />
-              </form>
+              {org.view !== "active" ? (
+                <form action={grantAccess.bind(null, org.id)}>
+                  <ConfirmButton label="Liberar acesso" confirmLabel="Confirmar" />
+                </form>
+              ) : null}
               {org.view !== "canceled" ? (
                 <form action={suspendAccess.bind(null, org.id)}>
                   <ConfirmButton label="Suspender" confirmLabel="Confirmar suspensão" danger />
@@ -332,11 +325,11 @@ async function Orgs({ search }: { search: string }) {
 }
 
 async function Commercial() {
-  const coupons = await loadCoupons();
+  const [coupons, priceCents] = await Promise.all([loadCoupons(), getMonthlyPriceCents()]);
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <Card className="min-w-0">
-        <CardHeader title="Cupons" description={`Preço atual: ${formatMoney(PRICE_PER_SEAT_CENTS)} por assento, mínimo de ${MIN_SEATS}`} />
+        <CardHeader title="Cupons" description={`Valor atual: ${formatMoney(priceCents)} por conta, por mês`} />
         <div className="mt-3 overflow-x-auto border-t border-line">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
@@ -381,10 +374,16 @@ async function Commercial() {
           </table>
         </div>
       </Card>
-      <Card className="self-start">
-        <CardHeader title="Novo cupom" description="Dias grátis liberam a conta sem pagamento; desconto vale em todas as faturas" />
-        <CouponForm />
-      </Card>
+      <div className="flex flex-col gap-5 self-start">
+        <Card>
+          <CardHeader title="Valor da assinatura" description="Por conta, por mês. Vale para novas assinaturas; quem já assina continua no valor dela" />
+          <PriceForm currentCents={priceCents} />
+        </Card>
+        <Card>
+          <CardHeader title="Novo cupom" description="Dias grátis liberam a conta sem pagamento; desconto vale em todas as faturas" />
+          <CouponForm />
+        </Card>
+      </div>
     </div>
   );
 }

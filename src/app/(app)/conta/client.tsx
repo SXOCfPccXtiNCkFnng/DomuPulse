@@ -185,24 +185,16 @@ function Step({ n }: { n: number }) {
 }
 
 export function SubscriptionForm({
-  pricePerSeat,
-  pricePerSeatCents,
-  defaultSeats,
-  minSeats,
+  priceCents,
   appliedCoupon,
 }: {
-  pricePerSeat: string;
-  pricePerSeatCents: number;
-  defaultSeats: number;
-  minSeats: number;
+  priceCents: number;
   appliedCoupon: { code: string; percentOff: number } | null;
 }) {
   const [state, action, pending] = useActionState(startSubscription, {} as BillingState);
-  const [seats, setSeats] = useState(defaultSeats);
-  // Controlados: continuam preenchidos se o servidor devolver um erro.
+  // Controlado: continua preenchido se o servidor devolver um erro.
   const [document, setDocument] = useState("");
-  const gross = Math.max(minSeats, seats || 0) * pricePerSeatCents;
-  const total = appliedCoupon ? Math.round(gross * (1 - appliedCoupon.percentOff / 100)) : gross;
+  const total = appliedCoupon ? Math.round(priceCents * (1 - appliedCoupon.percentOff / 100)) : priceCents;
 
   useEffect(() => {
     if (state.url) window.location.assign(state.url);
@@ -212,33 +204,16 @@ export function SubscriptionForm({
     <form action={action} className="flex flex-col gap-4 p-5 sm:p-6" noValidate>
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
       {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="Assentos"
-          hint={`${pricePerSeat} por pessoa ativa, por mês`}
-          error={state.fieldErrors?.seats}
-        >
-          <Input
-            name="seats"
-            type="number"
-            min={minSeats}
-            max={500}
-            value={seats}
-            onChange={(e) => setSeats(Number(e.target.value))}
-            required
-          />
-        </Field>
-        <Field label="CPF ou CNPJ" error={state.fieldErrors?.cpfCnpj}>
-          <Input
-            name="cpfCnpj"
-            inputMode="numeric"
-            autoComplete="off"
-            required
-            value={document}
-            onChange={(e) => setDocument(e.target.value.replace(/[^\d./-]/g, "").slice(0, 18))}
-          />
-        </Field>
-      </div>
+      <Field label="CPF ou CNPJ" hint="De quem vai receber as faturas" error={state.fieldErrors?.cpfCnpj}>
+        <Input
+          name="cpfCnpj"
+          inputMode="numeric"
+          autoComplete="off"
+          required
+          value={document}
+          onChange={(e) => setDocument(e.target.value.replace(/[^d./-]/g, "").slice(0, 18))}
+        />
+      </Field>
       {appliedCoupon ? (
         <p className="text-sm text-ink-2">
           Cupom <strong>{appliedCoupon.code}</strong> aplicado: {appliedCoupon.percentOff}% de desconto em todas as faturas.

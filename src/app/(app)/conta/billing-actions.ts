@@ -2,24 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import {
-  AsaasError,
-  createCustomer,
-  createSubscription,
-  firstPendingPayment,
-  updateSubscriptionValue,
-} from "@/lib/asaas";
+import { AsaasError, createCustomer, createSubscription, firstPendingPayment } from "@/lib/asaas";
 import { getCurrentMember } from "@/lib/auth";
 import { isCpfOrCnpj, onlyDigits } from "@/lib/document";
 import { describeError, logger } from "@/lib/logger";
-import { MAX_SEATS, MIN_SEATS, monthlyPriceCents } from "@/lib/plans";
+import { monthlyPriceCents } from "@/lib/plans";
+import { getMonthlyPriceCents } from "@/lib/pricing";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { todayIn } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
 
 const schema = z.object({
-  seats: z.coerce.number().int().min(MIN_SEATS).max(MAX_SEATS),
   cpfCnpj: z.string().refine(isCpfOrCnpj, "CPF ou CNPJ inválido."),
 });
 
@@ -50,7 +44,7 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
   if (!org) return { error: "Organização não encontrada." };
 
   const percentOff = await appliedPercent(org.coupon_code as string | null);
-  const valueCents = monthlyPriceCents(parsed.data.seats, percentOff);
+  const valueCents = monthlyPriceCents(await getMonthlyPriceCents(), percentOff);
 
   try {
     const { data: auth } = await admin.auth.admin.getUserById(me.userId);
@@ -66,27 +60,24 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
       await admin.from("organizations").update({ asaas_customer_id: customerId }).eq("id", org.id);
     }
 
+    // Assinatura já criada mantém o valor com que foi feita: mudar o preço
+    // vigente só vale para quem assinar depois.
     let subscriptionId = org.asaas_subscription_id as string | null;
-    if (subscriptionId) {
-      await updateSubscriptionValue(subscriptionId, valueCents);
-    } else {
+    if (!subscriptionId) {
       const subscription = await createSubscription({
         customerId,
         valueCents,
         orgId: org.id,
         nextDueDate: todayIn(me.org.timezone),
-        description: `Domu Pulse, ${parsed.data.seats} assentos${percentOff ? `, cupom ${org.coupon_code}` : ""}`,
+        description: `Domu Pulse${percentOff ? `, cupom ${org.coupon_code}` : ""}`,
       });
       subscriptionId = subscription.id;
-      await admin.from("organizations").update({ asaas_subscription_id: subscriptionId }).eq("id", org.id);
+      await admin.from("organizations").update({ asaas_subscription_id: subscriptionId, price_cents: valueCents }).eq("id", org.id);
     }
-
-    // Assentos pedidos viram ativos quando o pagamento confirmar (webhook).
-    await admin.from("organizations").update({ subscribed_seats: parsed.data.seats }).eq("id", org.id);
 
     const payment = await firstPendingPayment(subscriptionId);
     if (payment?.invoiceUrl?.startsWith("https://")) return { url: payment.invoiceUrl };
-    return { success: "Assinatura atualizada. O novo valor vale a partir da próxima fatura." };
+    return { success: "Sua assinatura já está criada. A próxima fatura chega pelo e-mail cadastrado." };
   } catch (error) {
     logger.error("billing.asaas", {
       message: error instanceof AsaasError ? `Asaas ${error.status}: ${JSON.stringify(error.details).slice(0, 500)}` : describeError(error),

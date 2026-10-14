@@ -285,5 +285,15 @@ check("outra imobiliária usa normalmente", d3?.free_days === 30, JSON.stringify
 check("cupom inexistente não devolve nada", (await redeem("NAOEXISTE", "orgA")) === null);
 await expectError("cupom precisa de exatamente um benefício", null, "insert into coupons (code, percent_off, free_days) values ('DUPLO', 10, 10)", /coupons_one_benefit/, [], "service_role");
 
+// ---- Valor fixo e link de convite --------------------------------------
+await expectRows("conta existente ganha link de convite", null, "select code from org_invites where code ~ '^[0-9a-f]{32}$'", 3, [], "service_role");
+await expectRows("valor padrão de R$ 500", null, "select 1 from platform_settings where monthly_price_cents = 50000", 1, [], "service_role");
+await expectError("corretor não lê o código de convite", "b1", "select code from org_invites", /permission denied/);
+await expectError("dono não lê o código de convite pela API", "ownerA", "select code from org_invites", /permission denied/);
+await expectError("visitante não lê o código de convite", null, "select code from org_invites", /permission denied/, [], "anon");
+await expectError("dono não muda o valor da assinatura", "ownerA", "update platform_settings set monthly_price_cents = 1", /permission denied/);
+await expectError("dono não muda o valor que assinou", "ownerA", "update organizations set price_cents = 1", /permission denied/);
+await expectError("só existe uma linha de configuração", null, "insert into platform_settings (id) values (false)", /check/, [], "service_role");
+
 console.log(`\n${passed} passaram, ${failed} falharam`);
 process.exit(failed ? 1 : 0);

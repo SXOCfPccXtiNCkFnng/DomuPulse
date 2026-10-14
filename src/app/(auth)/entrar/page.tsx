@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { SignInForm } from "@/components/auth-forms";
+import { AuthHeading } from "@/components/auth-heading";
 
 export const metadata: Metadata = { title: "Entrar" };
 
 export default function SignInPage() {
   return (
     <>
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Bem-vindo de volta</h1>
-      <p className="mt-2 mb-8 text-muted">Entre para acompanhar sua equipe ao vivo.</p>
+      <AuthHeading eyebrow="Acesse sua conta" title={<>Bem-vindo <span className="text-brand-text">de volta.</span></>}>
+        Entre para acompanhar sua equipe ao vivo.
+      </AuthHeading>
       <Suspense>
         <SignInForm />
       </Suspense>

@@ -1,7 +1,7 @@
 import "server-only";
 import { publicEnv, vapidPublicKey } from "@/lib/env";
 import { HEARTBEATS } from "@/lib/heartbeat";
-import { monthlyPriceCents } from "@/lib/plans";
+import { getMonthlyPriceCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_TIMEZONE, todayIn } from "@/lib/time";
 
@@ -14,8 +14,7 @@ type OrgRow = {
   name: string;
   status: "trialing" | "active" | "past_due" | "canceled";
   trial_ends_at: string;
-  seats: number;
-  subscribed_seats: number | null;
+  price_cents: number | null;
   coupon_code: string | null;
   contact_phone: string | null;
   created_at: string;
@@ -26,24 +25,19 @@ export function statusView(org: Pick<OrgRow, "status" | "trial_ends_at">): OrgSt
   return org.status;
 }
 
-async function couponPercents() {
-  const { data } = await createAdminClient().from("coupons").select("code, percent_off");
-  return new Map((data ?? []).map((c) => [c.code as string, Number(c.percent_off)]));
-}
-
 export async function loadOverview() {
   const admin = createAdminClient();
   const today = todayIn(DEFAULT_TIMEZONE);
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
 
-  const [{ data: orgs }, { count: activeMembers }, { count: brokers }, { count: reportsToday }, { count: openErrors }, percents] =
+  const [{ data: orgs }, { count: activeMembers }, { count: brokers }, { count: reportsToday }, { count: openErrors }, currentPrice] =
     await Promise.all([
-      admin.from("organizations").select("id, name, status, trial_ends_at, seats, coupon_code, created_at"),
+      admin.from("organizations").select("id, name, status, trial_ends_at, price_cents, coupon_code, created_at"),
       admin.from("members").select("id", { count: "exact", head: true }).eq("active", true),
       admin.from("members").select("id", { count: "exact", head: true }).eq("active", true).eq("role", "broker"),
       admin.from("reports").select("id", { count: "exact", head: true }).eq("report_date", today),
       admin.from("ops_alerts").select("id", { count: "exact", head: true }).is("resolved_at", null).eq("level", "error"),
-      couponPercents(),
+      getMonthlyPriceCents(),
     ]);
 
   const list = (orgs ?? []) as OrgRow[];
@@ -53,7 +47,8 @@ export async function loadOverview() {
     const view = statusView(org);
     byStatus[view]++;
     if (view === "active" || view === "past_due") {
-      mrrCents += monthlyPriceCents(org.seats, org.coupon_code ? (percents.get(org.coupon_code) ?? 0) : 0);
+      // Valor gravado na assinatura. Acesso liberado à mão conta pelo valor vigente.
+      mrrCents += org.price_cents ?? currentPrice;
     }
   }
 
@@ -147,6 +142,9 @@ export async function loadHealth(): Promise<HealthCheck[]> {
   // Banco: cada migração deixa uma marca que o código usa.
   const marks: [string, string, string][] = [
     ["organizations", "subscribed_seats, coupon_code", "20261013010000_platform.sql"],
+    ["organizations", "price_cents", "20261014000000_flat_price_invite_link.sql"],
+    ["platform_settings", "monthly_price_cents", "20261014000000_flat_price_invite_link.sql"],
+    ["org_invites", "code", "20261014000000_flat_price_invite_link.sql"],
     ["members", "terms_version", "20261013010000_platform.sql"],
     ["ops_alerts", "fingerprint", "20261013010000_platform.sql"],
     ["system_heartbeats", "name", "20261013010000_platform.sql"],
@@ -226,7 +224,7 @@ export async function loadOrgs(search: string) {
   const admin = createAdminClient();
   let query = admin
     .from("organizations")
-    .select("id, name, status, trial_ends_at, seats, subscribed_seats, coupon_code, contact_phone, created_at")
+    .select("id, name, status, trial_ends_at, price_cents, coupon_code, contact_phone, created_at")
     .order("created_at", { ascending: false })
     .limit(100);
   if (search) query = query.ilike("name", `%${search.replace(/[%_]/g, "")}%`);

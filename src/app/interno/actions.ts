@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { describeError } from "@/lib/logger";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
-import { MAX_SEATS } from "@/lib/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { FormState } from "@/lib/validation";
 
@@ -60,13 +59,36 @@ export async function extendTrial(orgId: string, days: number) {
 }
 
 // Cortesia ou acerto manual: ativa sem passar pelo Asaas.
-export async function grantAccess(orgId: string, formData: FormData) {
+export async function grantAccess(orgId: string) {
   const { userId } = await requirePlatformAdmin();
-  const seats = Number(formData.get("seats"));
-  if (!z.uuid().safeParse(orgId).success || !Number.isInteger(seats) || seats < 1 || seats > MAX_SEATS) return;
-  await createAdminClient().from("organizations").update({ status: "active", seats }).eq("id", orgId);
-  await audit(userId, orgId, "grant_access", { seats });
+  if (!z.uuid().safeParse(orgId).success) return;
+  await createAdminClient().from("organizations").update({ status: "active" }).eq("id", orgId);
+  await audit(userId, orgId, "grant_access", {});
   revalidatePath("/interno");
+}
+
+// Valor em reais digitado no painel, como "500" ou "499,90".
+const priceSchema = z.object({
+  price: z
+    .string()
+    .trim()
+    .regex(/^d{1,7}([.,]d{1,2})?$/, "Digite o valor em reais, como 500 ou 499,90.")
+    .transform((v) => Math.round(Number(v.replace(",", ".")) * 100))
+    .refine((c) => c >= 100, "Mínimo de R$ 1,00."),
+});
+
+/** Muda o valor mensal das novas assinaturas. Quem já assinou continua no valor dela. */
+export async function setMonthlyPrice(_: FormState, formData: FormData): Promise<FormState> {
+  const { userId } = await requirePlatformAdmin();
+  const parsed = priceSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { fieldErrors: { price: parsed.error.issues[0].message } };
+  const { error } = await createAdminClient()
+    .from("platform_settings")
+    .upsert({ id: true, monthly_price_cents: parsed.data.price, updated_at: new Date().toISOString() });
+  if (error) return { error: describeError(error) };
+  await audit(userId, null, "set_monthly_price", { monthly_price_cents: parsed.data.price });
+  revalidatePath("/interno");
+  return { success: "Valor atualizado. Vale para as próximas assinaturas." };
 }
 
 export async function suspendAccess(orgId: string) {

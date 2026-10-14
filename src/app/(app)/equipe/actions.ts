@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentMember, ROLE_LABEL, ROLE_RANK as RANK, type CurrentMember, type Role } from "@/lib/auth";
 import { siteUrl } from "@/lib/email";
 import { sendInviteEmail } from "@/lib/email-templates";
+import { inviteUrl, regenerateInviteCode } from "@/lib/invite-link";
 import { describeError, logger } from "@/lib/logger";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -59,16 +60,6 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
     teamId = data.id;
   }
 
-  const admin = createAdminClient();
-
-  const [{ count }, { data: org }] = await Promise.all([
-    admin.from("members").select("id", { count: "exact", head: true }).eq("org_id", me.org.id).eq("active", true),
-    admin.from("organizations").select("seats").eq("id", me.org.id).single(),
-  ]);
-  if (org && (count ?? 0) >= org.seats) {
-    return { error: `Todos os ${org.seats} assentos do plano estão em uso. Desative alguém ou aumente o plano.` };
-  }
-
   const result = await createInvite(me, { fullName, email, role, teamId, divisionId });
   if (!result.ok) return result.field ? { fieldErrors: { [result.field]: result.error } } : { error: result.error };
 
@@ -81,7 +72,7 @@ type InviteResult = { ok: true } | { ok: false; error: string; field?: "email" }
 /**
  * Cria o usuário e o membro e envia o convite pelo nosso e-mail, com a
  * marca do Pulse. Usado pelo convite manual e pela importação. Quem chama
- * já conferiu permissão, escopo e assentos.
+ * já conferiu permissão e escopo.
  */
 async function createInvite(
   me: CurrentMember,
@@ -414,16 +405,6 @@ export async function importMembers(rawRows: unknown): Promise<{ error?: string;
     }
   }
 
-  const admin = createAdminClient();
-  const [{ count }, { data: org }] = await Promise.all([
-    admin.from("members").select("id", { count: "exact", head: true }).eq("org_id", me.org.id).eq("active", true),
-    admin.from("organizations").select("seats").eq("id", me.org.id).single(),
-  ]);
-  const free = Math.max(0, (org?.seats ?? 0) - (count ?? 0));
-  if (valid.length > free) {
-    return { error: `São ${valid.length} convites válidos, mas há só ${free} assentos livres. Aumente o plano ou importe menos pessoas.` };
-  }
-
   // Um por vez: o provedor de e-mail limita envios em rajada.
   for (const v of valid) {
     const r = await createInvite(me, { fullName: v.fullName, email: v.email, role: v.role, teamId: v.teamId, divisionId: v.divisionId });
@@ -432,4 +413,22 @@ export async function importMembers(rawRows: unknown): Promise<{ error?: string;
 
   revalidatePath("/equipe");
   return { results: results.sort((a, b) => a.line - b.line) };
+}
+
+/** Troca o link de convite da conta. O antigo para de funcionar na hora. */
+export async function regenerateInviteLink(): Promise<{ url?: string; error?: string }> {
+  const me = await getCurrentMember();
+  if (me.role !== "owner") return { error: "Só o administrador troca o link de convite." };
+  const limit = await rateLimit(`invite-link:${me.org.id}`, 10, 60 * 60);
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec) };
+  const code = await regenerateInviteCode(me.org.id);
+  await createAdminClient().from("audit_log").insert({
+    org_id: me.org.id,
+    actor: me.userId,
+    table_name: "platform",
+    record_id: me.org.id,
+    action: "regenerate_invite_link",
+    new_data: {},
+  });
+  return { url: inviteUrl(code) };
 }

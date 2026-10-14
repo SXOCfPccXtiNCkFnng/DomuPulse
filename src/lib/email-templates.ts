@@ -183,7 +183,7 @@ export function sendTrialEndedEmail(input: { to: string; fullName: string; orgNa
   });
 }
 
-export function sendPaymentConfirmedEmail(input: { to: string; fullName: string; orgName: string; seats: number; valueCents: number }) {
+export function sendPaymentConfirmedEmail(input: { to: string; fullName: string; orgName: string; valueCents: number }) {
   const name = firstName(input.fullName);
   const value = formatMoney(input.valueCents);
   return sendEmail({
@@ -193,10 +193,10 @@ export function sendPaymentConfirmedEmail(input: { to: string; fullName: string;
       heading: `Pagamento confirmado, ${name}`,
       bodyHtml:
         p(`Recebemos o pagamento de <strong>${value}</strong> da <strong>${escapeHtml(input.orgName)}</strong>.`) +
-        p(`A assinatura está ativa com <strong>${input.seats} assentos</strong>. Obrigado por confiar no Domu Pulse.`),
+        p("A assinatura está ativa. Obrigado por confiar no Domu Pulse."),
       cta: { label: "Acessar o painel", url: siteUrl("/painel") },
     }),
-    text: `Pagamento confirmado, ${name}\n\nRecebemos o pagamento de ${value} da ${input.orgName}. A assinatura está ativa com ${input.seats} assentos.${contactFooterText()}`,
+    text: `Pagamento confirmado, ${name}\n\nRecebemos o pagamento de ${value} da ${input.orgName}. A assinatura está ativa.${contactFooterText()}`,
   });
 }
 

@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { MfaVerifyForm } from "@/components/mfa-verify";
+import { AuthHeading } from "@/components/auth-heading";
 
 export const metadata: Metadata = { title: "Verificação" };
 
 export default function VerificationPage() {
   return (
     <>
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Verificação em duas etapas</h1>
-      <p className="mt-2 mb-8 text-muted">Digite o código que aparece no seu aplicativo autenticador.</p>
+      <AuthHeading eyebrow="Segurança" title={<>Verificação em <span className="text-brand-text">duas etapas.</span></>}>
+        Digite o código que aparece no seu aplicativo autenticador.
+      </AuthHeading>
       <Suspense>
         <MfaVerifyForm />
       </Suspense>

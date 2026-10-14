@@ -114,6 +114,12 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* O Tailwind 4 tirou o cursor de mãozinha dos botões. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 ::selection {
   background: var(--brand);
   color: var(--brand-ink);

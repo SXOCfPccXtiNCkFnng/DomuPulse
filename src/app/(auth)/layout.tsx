@@ -1,107 +1,73 @@
-import { Check, Clock, Timer } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme";
 import { Logo } from "@/components/ui/logo";
 
-// Prévia do que a liderança vê: os horários do dia e quem já entregou.
-const SLOTS = [
-  { time: "12h", label: "Entregue", Icon: Check, tone: "bg-[#8fb2ff] text-[#071633]" },
-  { time: "15h", label: "Aberto", Icon: Timer, tone: "bg-white/15 text-white" },
-  { time: "18h", label: "Em breve", Icon: Clock, tone: "bg-white/[0.06] text-[#9fb0cf]" },
-  { time: "21h", label: "Em breve", Icon: Clock, tone: "bg-white/[0.06] text-[#9fb0cf]" },
+// Do cadastro ao primeiro relatório: o caminho que a pessoa vai seguir.
+const STEPS = [
+  { title: "Crie a conta", text: "Nome da imobiliária, seu e-mail e uma senha. Leva um minuto." },
+  { title: "Convide a equipe", text: "Um a um ou todos de uma vez com uma planilha." },
+  { title: "Receba o primeiro relatório", text: "Seus corretores lançam pelo celular e você acompanha ao vivo." },
 ];
 
-const FEED = [
-  { name: "Marina", action: "entregou o relatório das 15h", value: "4 visitas" },
-  { name: "Rafael", action: "registrou uma venda", value: "R$ 780 mil" },
-  { name: "Equipe Norte", action: "bateu a meta da semana", value: "112%" },
-];
+const NOTES = ["Sem instalar nada", "Pix, boleto ou cartão", "Cancela quando quiser"];
 
 export default function AuthLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh">
-      <div className="flex w-full flex-col px-5 py-6 sm:px-10 lg:w-[46%] lg:px-16">
+      <div className="flex w-full flex-col bg-surface px-5 py-6 sm:px-10 lg:w-[52%] lg:px-16">
         <div className="flex items-center justify-between">
           <Link href="/" aria-label="Domu Pulse, página inicial">
             <Logo />
           </Link>
           <ThemeToggle />
         </div>
-        <main className="flex flex-1 items-center py-10">
-          <div className="w-full max-w-[400px] animate-rise">{children}</div>
+        <main className="flex flex-1 items-center justify-center py-10">
+          <div className="w-full max-w-[420px] animate-rise">{children}</div>
         </main>
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+        <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted">
           <span>Domu Pulse, um produto DomuTech</span>
           <Link href="/termos" className="hover:text-ink">Termos de Uso</Link>
           <Link href="/privacidade" className="hover:text-ink">Privacidade</Link>
         </p>
       </div>
 
-      <aside
-        aria-hidden="true"
-        className="relative hidden flex-1 overflow-hidden bg-[linear-gradient(160deg,#0f2a5f_0%,#071633_55%,#02050b_100%)] text-[#eef2fa] lg:flex lg:flex-col lg:justify-between lg:p-14"
-      >
+      <aside aria-hidden="true" className="relative hidden flex-1 overflow-hidden bg-[#02050b] text-white lg:flex lg:items-center lg:p-14 xl:p-20">
+        {/* Um brilho azul discreto, como na chamada final da página inicial. */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "linear-gradient(#8fb2ff 1px, transparent 1px), linear-gradient(90deg, #8fb2ff 1px, transparent 1px)",
-            backgroundSize: "48px 48px",
-          }}
+          className="pointer-events-none absolute -top-1/3 -right-1/4 size-[44rem] rounded-full blur-3xl"
+          style={{ background: "radial-gradient(closest-side, rgb(2 89 243 / 0.22), transparent)" }}
         />
 
-        <div className="relative">
-          <p className="font-display text-[2.6rem] font-semibold leading-[1.05] tracking-tight">
-            Cada relatório
-            <br />
-            da equipe, no seu
-            <br />
-            painel, <span className="text-[#8fb2ff]">na hora.</span>
+        <div className="relative w-full max-w-md">
+          <p className="flex items-center gap-3 text-[12px] font-semibold tracking-[0.18em] text-[#7ea5ff] uppercase">
+            <span className="h-px w-8 bg-[#7ea5ff]" />
+            Como começa
           </p>
-          <p className="mt-5 max-w-sm text-[15px] text-[#9fb0cf]">
-            Cada relatório, visita e venda aparece no painel da liderança no momento em que acontece.
+          <p className="mt-6 font-display text-[2.5rem] leading-[1.04] font-bold tracking-[-0.03em]">
+            Sua equipe usando <span className="text-[#7ea5ff]">no mesmo dia.</span>
           </p>
-        </div>
 
-        <div className="relative rounded-2xl border border-white/[0.08] bg-white/[0.04] p-5 backdrop-blur">
-          <div className="flex items-baseline justify-between gap-4">
-            <p className="text-sm text-[#9fb0cf]">Relatório das 15h</p>
-            <p className="font-display text-sm font-semibold tabular-nums">14 de 18 entregues</p>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full w-[78%] rounded-full bg-[#8fb2ff]" />
-          </div>
-          <ul className="mt-4 grid grid-cols-4 gap-2">
-            {SLOTS.map(({ time, label, Icon, tone }) => (
-              <li key={time} className="flex flex-col items-start gap-2 rounded-xl bg-white/[0.03] p-3">
-                <span className="font-display text-lg font-semibold">{time}</span>
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${tone}`}>
-                  <Icon className="size-3" strokeWidth={2.5} />
-                  {label}
-                </span>
+          <ol className="mt-12 border-t border-white/10">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="flex gap-5 border-b border-white/10 py-6">
+                <span className="font-display text-sm font-semibold text-[#7ea5ff] tabular-nums">0{i + 1}</span>
+                <div>
+                  <p className="font-display text-lg font-semibold tracking-tight">{step.title}</p>
+                  <p className="mt-1 text-[15px] leading-relaxed text-white/60">{step.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-white/50">
+            {NOTES.map((note) => (
+              <li key={note} className="flex items-center gap-2">
+                <span className="size-1 rounded-full bg-[#7ea5ff]" />
+                {note}
               </li>
             ))}
           </ul>
         </div>
-
-        <ul className="relative space-y-3">
-          {FEED.map((item, i) => (
-            <li
-              key={item.name}
-              className="flex items-center justify-between gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 backdrop-blur animate-rise"
-              style={{ animationDelay: `${0.4 + i * 0.15}s` }}
-            >
-              <span className="flex items-center gap-3 text-sm">
-                <span className="size-2 rounded-full bg-[#8fb2ff] animate-live" />
-                <span>
-                  <span className="font-medium">{item.name}</span>{" "}
-                  <span className="text-[#9fb0cf]">{item.action}</span>
-                </span>
-              </span>
-              <span className="font-display text-sm font-semibold tabular-nums">{item.value}</span>
-            </li>
-          ))}
-        </ul>
       </aside>
     </div>
   );

@@ -5,7 +5,7 @@ import { getCurrentMember, orgCanWrite, ROLE_LABEL, type OrgStatus } from "@/lib
 import { vapidPublicKey } from "@/lib/env";
 import { formatMoney } from "@/lib/metrics";
 import { isPlatformAdminEmail } from "@/lib/platform-admins";
-import { MIN_SEATS, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
+import { getMonthlyPriceCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
@@ -27,12 +27,13 @@ export default async function ContaPage() {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const { data: digest } = await supabase.from("members").select("weekly_digest").eq("id", me.id).maybeSingle();
-  const { data: org } = await supabase.from("organizations").select("seats, coupon_code").single();
+  const { data: org } = await supabase.from("organizations").select("price_cents, coupon_code").single();
   // A tabela de cupons é só do servidor: o percentual é lido com a chave de serviço.
   const { data: coupon } =
     me.role === "owner" && org?.coupon_code
       ? await createAdminClient().from("coupons").select("code, percent_off").eq("code", org.coupon_code).maybeSingle()
       : { data: null };
+  const priceCents = me.role === "owner" ? await getMonthlyPriceCents() : 0;
   const status = STATUS_LABEL[me.org.status];
 
   return (
@@ -93,15 +94,14 @@ export default async function ContaPage() {
                 ? orgCanWrite(me.org)
                   ? `Acesso gratuito até ${formatDate(me.org.trialEndsAt.slice(0, 10))}`
                   : "Conta aguardando ativação"
-                : `${org?.seats ?? 0} assentos contratados`
+                : org?.price_cents
+                  ? `${formatMoney(org.price_cents)} por mês, corretores sem limite`
+                  : "Corretores sem limite"
             }
             action={<Badge tone={status.tone}>{status.label}</Badge>}
           />
           <SubscriptionForm
-            pricePerSeat={formatMoney(PRICE_PER_SEAT_CENTS)}
-            pricePerSeatCents={PRICE_PER_SEAT_CENTS}
-            defaultSeats={Math.max(MIN_SEATS, org?.seats ?? MIN_SEATS)}
-            minSeats={MIN_SEATS}
+            priceCents={priceCents}
             appliedCoupon={coupon?.percent_off != null ? { code: coupon.code, percentOff: Number(coupon.percent_off) } : null}
           />
           <div className="border-t border-line">

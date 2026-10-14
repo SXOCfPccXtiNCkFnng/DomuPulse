@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compareRank, conversion, emptyTotals } from "@/lib/metrics";
 import { fingerprintOf, sanitizeMeta } from "@/lib/ops";
-import { monthlyPriceCents, PRICE_PER_SEAT_CENTS } from "@/lib/plans";
+import { DEFAULT_MONTHLY_PRICE_CENTS, monthlyPriceCents } from "@/lib/plans";
 import { minutesNowIn, slotState, startOfWeek, todayIn, zonedToIso } from "@/lib/time";
 
 describe("fuso horário", () => {
@@ -40,8 +40,8 @@ describe("métricas", () => {
 
 describe("preço", () => {
   it("aplica o desconto do cupom", () => {
-    expect(monthlyPriceCents(10)).toBe(10 * PRICE_PER_SEAT_CENTS);
-    expect(monthlyPriceCents(10, 20)).toBe(Math.round(10 * PRICE_PER_SEAT_CENTS * 0.8));
+    expect(monthlyPriceCents(DEFAULT_MONTHLY_PRICE_CENTS)).toBe(50000);
+    expect(monthlyPriceCents(DEFAULT_MONTHLY_PRICE_CENTS, 20)).toBe(40000);
   });
 });
 

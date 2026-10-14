@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   const { data: org } = await admin
     .from("organizations")
-    .select("id, name, seats, subscribed_seats")
+    .select("id, name")
     .eq("asaas_subscription_id", subscriptionId)
     .maybeSingle();
   if (!org) {
@@ -70,10 +70,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  // Assentos só aumentam com pagamento confirmado: o pedido fica em
-  // subscribed_seats até o dinheiro entrar.
-  const seats = status === "active" ? (org.subscribed_seats ?? org.seats) : org.seats;
-  const { error } = await admin.from("organizations").update({ status, seats }).eq("id", org.id);
+  const { error } = await admin.from("organizations").update({ status }).eq("id", org.id);
   if (error) {
     logger.error("webhook.asaas", { message: describeError(error), orgId: org.id });
     await recordHeartbeat("webhook.asaas", { ok: false, error: describeError(error) });
@@ -96,7 +93,7 @@ export async function POST(request: NextRequest) {
         ["owner"],
         body.event === "PAYMENT_OVERDUE"
           ? { kind: "payment_overdue", title: "Fatura em aberto", body: "A fatura venceu e o pagamento ainda não foi identificado.", url: "/conta#assinatura" }
-          : { kind: "payment_confirmed", title: "Pagamento confirmado", body: `Assinatura ativa com ${seats} assentos.`, url: "/conta#assinatura" },
+          : { kind: "payment_confirmed", title: "Pagamento confirmado", body: "Assinatura ativa.", url: "/conta#assinatura" },
       );
       const owner = await orgOwnerContact(org.id);
       if (!owner) return;
@@ -107,7 +104,6 @@ export async function POST(request: NextRequest) {
           to: owner.email,
           fullName: owner.fullName,
           orgName: org.name,
-          seats,
           valueCents: Math.round((payment?.value ?? 0) * 100),
         });
       }

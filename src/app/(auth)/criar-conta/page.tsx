@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SignUpForm } from "@/components/auth-forms";
+import { AuthHeading } from "@/components/auth-heading";
 
 export const metadata: Metadata = { title: "Criar conta" };
 
 export default function SignUpPage() {
   return (
     <>
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Crie a conta da sua imobiliária</h1>
-      <p className="mt-2 mb-8 text-muted">Em poucos minutos sua equipe está lançando relatórios.</p>
+      <AuthHeading eyebrow="Nova conta" title={<>Crie a conta da sua <span className="text-brand-text">imobiliária.</span></>}>
+        Em poucos minutos sua equipe está lançando relatórios.
+      </AuthHeading>
       <SignUpForm />
       <p className="mt-8 text-sm text-muted">
         Já tem conta?{" "}
