@@ -22,10 +22,16 @@ export const HEARTBEATS = [
     fix: "No cron-job.org, confira a tarefa de /api/cron/cleanup (1 vez por dia).",
   },
   {
+    name: "cron.daily",
+    label: "Resumo do dia",
+    everyMin: 60,
+    fix: "No cron-job.org, confira a tarefa de /api/cron/daily (a cada 1 hora, com o cabeçalho Authorization).",
+  },
+  {
     name: "cron.weekly",
     label: "Resumo semanal",
     everyMin: 7 * 24 * 60,
-    fix: "No cron-job.org, confira a tarefa de /api/cron/weekly (toda segunda, de manhã).",
+    fix: "O resumo semanal sai pela tarefa de /api/cron/daily (a cada 1 hora). Confira essa tarefa no cron-job.org.",
   },
   {
     name: "webhook.asaas",

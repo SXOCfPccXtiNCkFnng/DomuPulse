@@ -6,6 +6,10 @@ import { formatMoney } from "@/lib/metrics";
 
 const p = (html: string) => `<p style="margin:0 0 12px">${html}</p>`;
 
+// Espaço entre os quadros de números. O Gmail descarta colunas vazias, então
+// esta leva um espaço e largura fixa.
+const STAT_GAP = '<td width="10" style="width:10px;min-width:10px;font-size:1px;line-height:1px">&nbsp;</td>';
+
 function firstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
@@ -88,7 +92,10 @@ export type DigestData = {
   to: string;
   fullName: string;
   scopeLabel: string;
+  /** "05/10 a 11/10" no resumo semanal, "setembro de 2026" no mensal. */
   weekLabel: string;
+  /** Semana (padrão) ou mês: muda título, comparação e assunto. */
+  period?: "week" | "month";
   link: string;
   metrics: { label: string; value: number; previous: number }[];
   delivery: { delivered: number; expected: number };
@@ -96,14 +103,18 @@ export type DigestData = {
   attention: { name: string; reason: string }[];
 };
 
-function delta(value: number, previous: number) {
-  if (previous === 0) return value === 0 ? "igual à semana anterior" : "sem base na semana anterior";
+function delta(value: number, previous: number, monthly = false) {
+  const [equal, noBase, over] = monthly
+    ? ["igual ao mês anterior", "sem base no mês anterior", "sobre o mês anterior"]
+    : ["igual à semana anterior", "sem base na semana anterior", "sobre a semana anterior"];
+  if (previous === 0) return value === 0 ? equal : noBase;
   const pct = Math.round(((value - previous) / previous) * 100);
-  if (pct === 0) return "igual à semana anterior";
-  return `${pct > 0 ? "+" : ""}${pct}% sobre a semana anterior`;
+  if (pct === 0) return equal;
+  return `${pct > 0 ? "+" : ""}${pct}% ${over}`;
 }
 
 export function sendWeeklyDigestEmail(d: DigestData) {
+  const monthly = d.period === "month";
   const name = firstName(d.fullName);
   const rate = d.delivery.expected ? Math.round((d.delivery.delivered / d.delivery.expected) * 100) : null;
   const cell = "padding:14px;border:1px solid #e2e7f0;border-radius:8px;background:#f8f9fc";
@@ -113,10 +124,10 @@ export function sendWeeklyDigestEmail(d: DigestData) {
       (m) => `<td style="${cell};width:25%;vertical-align:top">
         <div style="font-size:12px;color:#5d6983">${escapeHtml(m.label)}</div>
         <div style="font-size:24px;font-weight:800;color:#040c30;margin-top:2px">${m.value}</div>
-        <div style="font-size:11px;color:#5d6983;margin-top:2px">${delta(m.value, m.previous)}</div>
+        <div style="font-size:11px;color:#5d6983;margin-top:2px">${delta(m.value, m.previous, monthly)}</div>
       </td>`,
     )
-    .join('<td style="width:8px"></td>');
+    .join(STAT_GAP);
 
   const list = (items: string[]) =>
     items.length ? `<ol style="margin:0;padding-left:20px">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ol>` : "";
@@ -127,9 +138,9 @@ export function sendWeeklyDigestEmail(d: DigestData) {
     `<div style="margin:22px 0 8px;font-size:12px;font-weight:700;letter-spacing:2px;color:#1a3a7c;text-transform:uppercase">&#8212;&nbsp; ${title}</div>`;
 
   const html = brandedEmail({
-    eyebrow: "Resumo da semana",
-    heading: `Sua semana, ${name}.`,
-    intro: `${d.scopeLabel}, de ${d.weekLabel}.`,
+    eyebrow: monthly ? "Resumo do mês" : "Resumo da semana",
+    heading: monthly ? `Seu mês, ${name}.` : `Sua semana, ${name}.`,
+    intro: `${d.scopeLabel}, ${monthly ? "em" : "de"} ${d.weekLabel}.`,
     preheader: `${d.scopeLabel}, ${d.weekLabel}`,
     bodyHtml:
       `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 4px"><tr>${stats}</tr></table>` +
@@ -140,14 +151,89 @@ export function sendWeeklyDigestEmail(d: DigestData) {
   });
 
   const text =
-    `Sua semana, ${name}\n\nResumo de ${d.scopeLabel} na semana de ${d.weekLabel}.\n\n` +
-    d.metrics.map((m) => `${m.label}: ${m.value} (${delta(m.value, m.previous)})`).join("\n") +
+    `${monthly ? "Seu mês" : "Sua semana"}, ${name}\n\nResumo de ${d.scopeLabel} ${monthly ? "em" : "na semana de"} ${d.weekLabel}.\n\n` +
+    d.metrics.map((m) => `${m.label}: ${m.value} (${delta(m.value, m.previous, monthly)})`).join("\n") +
     (rate !== null ? `\n\nRelatórios entregues: ${rate}% (${d.delivery.delivered} de ${d.delivery.expected})` : "") +
     (d.top.length ? `\n\nDestaques:\n${d.top.map((t, i) => `${i + 1}. ${t.name}: ${t.sales} vendas, ${t.visits} visitas`).join("\n")}` : "") +
     (d.attention.length ? `\n\nPrecisam de atenção:\n${d.attention.map((a) => `${a.name}: ${a.reason}`).join("\n")}` : "") +
     `\n\nRelatório completo: ${d.link}${contactFooterText()}`;
 
-  return sendEmail({ to: d.to, subject: `Resumo da semana: ${d.weekLabel}`, html, text });
+  return sendEmail({ to: d.to, subject: `${monthly ? "Resumo do mês" : "Resumo da semana"}: ${d.weekLabel}`, html, text });
+}
+
+export type DailyDigestData = {
+  to: string;
+  fullName: string;
+  dayLabel: string;
+  link: string;
+  metrics: { label: string; value: number; previous: number }[];
+  delivery: { delivered: number; expected: number };
+  top: { name: string; sales: number; visits: number }[];
+  pending: { name: string; reason: string }[];
+  notes: { name: string; slot: string; text: string }[];
+};
+
+function vsYesterday(value: number, previous: number) {
+  const diff = value - previous;
+  if (diff === 0) return "igual a ontem";
+  return `${diff > 0 ? "+" : ""}${diff} em relação a ontem`;
+}
+
+export function sendDailyDigestEmail(d: DailyDigestData) {
+  const name = firstName(d.fullName);
+  const rate = d.delivery.expected ? Math.round((d.delivery.delivered / d.delivery.expected) * 100) : null;
+  const cell = "padding:14px;border:1px solid #e2e7f0;border-radius:8px;background:#f8f9fc";
+  const stats = d.metrics
+    .map(
+      (m) => `<td style="${cell};width:25%;vertical-align:top">
+        <div style="font-size:12px;color:#5d6983">${escapeHtml(m.label)}</div>
+        <div style="font-size:24px;font-weight:800;color:#040c30;margin-top:2px">${m.value}</div>
+        <div style="font-size:11px;color:#5d6983;margin-top:2px">${vsYesterday(m.value, m.previous)}</div>
+      </td>`,
+    )
+    .join(STAT_GAP);
+  const list = (items: string[]) =>
+    items.length ? `<ol style="margin:0;padding-left:20px">${items.map((i) => `<li style="margin:3px 0">${i}</li>`).join("")}</ol>` : "";
+  const section = (title: string) =>
+    `<div style="margin:22px 0 8px;font-size:12px;font-weight:700;letter-spacing:2px;color:#1a3a7c;text-transform:uppercase">&#8212;&nbsp; ${title}</div>`;
+
+  const top = list(d.top.map((t) => `<strong>${escapeHtml(t.name)}</strong>: ${t.sales} vendas, ${t.visits} visitas`));
+  const pending = list(d.pending.map((a) => `<strong>${escapeHtml(a.name)}</strong>: ${escapeHtml(a.reason)}`));
+  const notes = d.notes.length
+    ? d.notes
+        .map(
+          (n) => `<div style="margin:0 0 8px;padding:10px 12px;border-left:3px solid #7ea5ff;background:#f8f9fc">
+            <div style="font-size:12px;color:#5d6983"><strong style="color:#040c30">${escapeHtml(n.name)}</strong>, relatório das ${escapeHtml(n.slot)}</div>
+            <div style="margin-top:2px">${escapeHtml(n.text)}</div>
+          </div>`,
+        )
+        .join("")
+    : "";
+
+  const html = brandedEmail({
+    eyebrow: "Resumo do dia",
+    heading: `O dia fechou, ${name}.`,
+    intro: `Como foi a equipe em ${d.dayLabel}.`,
+    preheader: rate !== null ? `${rate}% dos relatórios entregues hoje.` : `Resumo de ${d.dayLabel}.`,
+    bodyHtml:
+      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 4px"><tr>${stats}</tr></table>` +
+      (rate !== null ? section("Entregas") + p(`<strong>${rate}%</strong> dos relatórios entregues (${d.delivery.delivered} de ${d.delivery.expected} esperados).`) : "") +
+      (top ? section("Destaques do dia") + top : "") +
+      (pending ? section("Ficaram devendo") + pending : "") +
+      (notes ? section("Observações da equipe") + notes : ""),
+    cta: { label: "Ver o dia completo", url: d.link },
+  });
+
+  const text =
+    `O dia fechou, ${name}.\n\nResumo de ${d.dayLabel}.\n\n` +
+    d.metrics.map((m) => `${m.label}: ${m.value} (${vsYesterday(m.value, m.previous)})`).join("\n") +
+    (rate !== null ? `\n\nRelatórios entregues: ${rate}% (${d.delivery.delivered} de ${d.delivery.expected})` : "") +
+    (d.top.length ? `\n\nDestaques:\n${d.top.map((t, i) => `${i + 1}. ${t.name}: ${t.sales} vendas, ${t.visits} visitas`).join("\n")}` : "") +
+    (d.pending.length ? `\n\nFicaram devendo:\n${d.pending.map((a) => `${a.name}: ${a.reason}`).join("\n")}` : "") +
+    (d.notes.length ? `\n\nObservações:\n${d.notes.map((n) => `${n.name} (${n.slot}): ${n.text}`).join("\n")}` : "") +
+    `\n\nVer o dia completo: ${d.link}${contactFooterText()}`;
+
+  return sendEmail({ to: d.to, subject: `Resumo do dia: ${d.dayLabel}`, html, text });
 }
 
 export function sendPasswordChangedEmail(input: { to: string }) {

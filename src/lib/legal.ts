@@ -20,9 +20,9 @@ export const COMPANY = {
   /** CNPJ no formato 00.000.000/0001-00. */
   cnpj: "63.032.580/0001-19",
   /** Endereço da sede: rua, número, bairro, cidade, UF e CEP. */
-  address: "N/A",
+  address: "São Roque - SP",
   /** Cidade e UF do foro escolhido para disputas, por exemplo "São Paulo/SP". */
-  forumCity: "N/A",
+  forumCity: "",
   /** Nome do encarregado de dados (LGPD, art. 41). Vazio usa o e-mail de contato. */
   dpoName: "",
 };

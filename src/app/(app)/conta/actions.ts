@@ -56,11 +56,31 @@ export async function sendTestNotification() {
   return { sent };
 }
 
-/** Liga ou desliga o resumo semanal por e-mail (só liderança recebe). */
-export async function setWeeklyDigest(enabled: boolean) {
+const digestScheduleSchema = z.object({
+  daily: z.boolean(),
+  dailyHour: z.number().int().min(0).max(23).nullable(),
+  weekly: z.boolean(),
+  weeklyWeekday: z.number().int().min(0).max(6),
+  monthly: z.boolean(),
+});
+
+/** Quais resumos por e-mail a pessoa recebe e quando (só liderança recebe). */
+export async function setDigestSchedule(input: unknown) {
   const me = await getCurrentMember();
   if (me.role === "broker") return { ok: false };
-  const { error } = await createAdminClient().from("members").update({ weekly_digest: enabled }).eq("id", me.id);
+  const parsed = digestScheduleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false };
+  const v = parsed.data;
+  const { error } = await createAdminClient()
+    .from("members")
+    .update({
+      daily_digest: v.daily,
+      daily_digest_hour: v.dailyHour,
+      weekly_digest: v.weekly,
+      weekly_digest_weekday: v.weeklyWeekday,
+      monthly_digest: v.monthly,
+    })
+    .eq("id", me.id);
   return { ok: !error };
 }
 

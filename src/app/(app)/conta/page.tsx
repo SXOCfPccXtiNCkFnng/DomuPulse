@@ -12,7 +12,7 @@ import { getMonthlyPriceCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/time";
-import { CouponForm, HashToTab, InstallGuide, PushSettings, SubscriptionForm, WeeklyDigestToggle } from "./client";
+import { CouponForm, DigestSettings, HashToTab, InstallGuide, PushSettings, SubscriptionForm } from "./client";
 import { OrgSettingsForm } from "./org-settings";
 import { CancelSubscriptionButton, DeleteAccountForm } from "./privacy";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
@@ -160,7 +160,7 @@ async function Notifications({ showDigest, memberId }: { showDigest: boolean; me
   const vapidKey = vapidPublicKeyOrNull();
   const supabase = await createClient();
   const [{ data: digest }, { data: claims }] = await Promise.all([
-    showDigest ? supabase.from("members").select("weekly_digest, digest_email").eq("id", memberId).maybeSingle() : Promise.resolve({ data: null }),
+    showDigest ? supabase.from("members").select("weekly_digest, weekly_digest_weekday, daily_digest, daily_digest_hour, monthly_digest, digest_email").eq("id", memberId).maybeSingle() : Promise.resolve({ data: null }),
     supabase.auth.getClaims(),
   ]);
   return (
@@ -173,8 +173,14 @@ async function Notifications({ showDigest, memberId }: { showDigest: boolean; me
           <p className="p-5 text-sm text-muted sm:p-6">As notificações no celular ainda não foram configuradas neste ambiente.</p>
         )}
         {showDigest ? (
-          <WeeklyDigestToggle
-            initial={digest?.weekly_digest ?? true}
+          <DigestSettings
+            initial={{
+              daily: digest?.daily_digest ?? true,
+              dailyHour: digest?.daily_digest_hour ?? null,
+              weekly: digest?.weekly_digest ?? true,
+              weeklyWeekday: digest?.weekly_digest_weekday ?? 1,
+              monthly: digest?.monthly_digest ?? true,
+            }}
             digestEmail={digest?.digest_email ?? null}
             loginEmail={String(claims?.claims?.email ?? "")}
           />

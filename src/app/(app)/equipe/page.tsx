@@ -1,4 +1,6 @@
+import { BarChart3 } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { InviteLink } from "@/components/invite-link";
 import { Avatar } from "@/components/ui/avatar";
@@ -181,6 +183,15 @@ function MemberLine({
         </div>
         {!person.active ? <Badge>Inativo</Badge> : null}
         {pending ? <Badge tone="warn">Convite pendente</Badge> : null}
+        {person.role === "broker" ? (
+          <Link
+            href={`/relatorios?periodo=mes&corretor=${person.id}`}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-brand-text hover:bg-surface-2"
+          >
+            <BarChart3 className="size-4" />
+            <span className="hidden sm:inline">Ver relatório</span>
+          </Link>
+        ) : null}
       </div>
       {canManage ? (
         <MemberActions

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { formatMoney } from "@/lib/metrics";
 import type { FormState } from "@/lib/validation";
-import { removePushSubscription, savePushSubscription, sendTestNotification, setDigestEmail, setWeeklyDigest } from "./actions";
+import { removePushSubscription, savePushSubscription, sendTestNotification, setDigestEmail, setDigestSchedule } from "./actions";
 import { redeemCoupon, startSubscription, type BillingState } from "./billing-actions";
 
 function urlBase64ToUint8Array(base64: string) {
@@ -232,32 +232,105 @@ export function SubscriptionForm({
   );
 }
 
-export function WeeklyDigestToggle({ initial, digestEmail, loginEmail }: { initial: boolean; digestEmail: string | null; loginEmail: string }) {
-  const [enabled, setEnabled] = useState(initial);
+export type DigestSchedule = {
+  daily: boolean;
+  dailyHour: number | null;
+  weekly: boolean;
+  weeklyWeekday: number;
+  monthly: boolean;
+};
+
+const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
+const selectClass = "h-9 rounded-lg border border-line bg-surface px-2.5 text-sm disabled:opacity-50";
+
+/**
+ * Os três resumos por e-mail da liderança: cada um liga e desliga e tem o seu
+ * momento de chegar. Salva sozinho a cada mudança.
+ */
+export function DigestSettings({ initial, digestEmail, loginEmail }: { initial: DigestSchedule; digestEmail: string | null; loginEmail: string }) {
+  const [value, setValue] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function update(patch: Partial<DigestSchedule>) {
+    const previous = value;
+    const next = { ...value, ...patch };
+    setValue(next);
+    setSaving(true);
+    setError(null);
+    const { ok } = await setDigestSchedule(next);
+    setSaving(false);
+    if (!ok) {
+      setValue(previous);
+      setError("Não foi possível salvar. Tente de novo.");
+    }
+  }
+
+  const row = "flex flex-col gap-3 border-t border-line p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6";
+  const check = "size-5 shrink-0 accent-[var(--brand)]";
+
   return (
-    <div className="border-t border-line">
-      <label className="flex cursor-pointer items-start justify-between gap-4 p-5 sm:p-6">
-        <span>
-          <span className="block text-sm font-medium">Resumo semanal por e-mail</span>
-          <span className="block text-sm text-muted">Toda segunda de manhã: funil, entregas, destaques e quem precisa de atenção.</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={saving}
-          onChange={async (e) => {
-            const next = e.target.checked;
-            setEnabled(next);
-            setSaving(true);
-            const { ok } = await setWeeklyDigest(next);
-            setSaving(false);
-            if (!ok) setEnabled(!next);
-          }}
-          className="mt-1 size-5 shrink-0 accent-[var(--brand)]"
-        />
-      </label>
-      {enabled ? <DigestEmailForm initial={digestEmail} loginEmail={loginEmail} /> : null}
+    <div>
+      <div className={row}>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input type="checkbox" checked={value.daily} disabled={saving} onChange={(e) => update({ daily: e.target.checked })} className={`mt-0.5 ${check}`} />
+          <span>
+            <span className="block text-sm font-medium">Resumo do dia</span>
+            <span className="block text-sm text-muted">Números do dia, entregas, quem ficou devendo e as observações da equipe.</span>
+          </span>
+        </label>
+        <select
+          aria-label="Horário do resumo do dia"
+          value={value.dailyHour ?? ""}
+          disabled={saving || !value.daily}
+          onChange={(e) => update({ dailyHour: e.target.value === "" ? null : Number(e.target.value) })}
+          className={selectClass}
+        >
+          <option value="">1 h depois do último horário</option>
+          {HOURS.map((h) => (
+            <option key={h} value={h}>
+              Às {h}h
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={row}>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input type="checkbox" checked={value.weekly} disabled={saving} onChange={(e) => update({ weekly: e.target.checked })} className={`mt-0.5 ${check}`} />
+          <span>
+            <span className="block text-sm font-medium">Resumo da semana</span>
+            <span className="block text-sm text-muted">A semana anterior completa, comparada com a de antes. Chega às 8h.</span>
+          </span>
+        </label>
+        <select
+          aria-label="Dia do resumo da semana"
+          value={value.weeklyWeekday}
+          disabled={saving || !value.weekly}
+          onChange={(e) => update({ weeklyWeekday: Number(e.target.value) })}
+          className={selectClass}
+        >
+          {WEEKDAYS.map((d, i) => (
+            <option key={d} value={i}>
+              {i === 0 || i === 6 ? "Todo" : "Toda"} {d}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className={row}>
+        <label className="flex cursor-pointer items-start gap-3">
+          <input type="checkbox" checked={value.monthly} disabled={saving} onChange={(e) => update({ monthly: e.target.checked })} className={`mt-0.5 ${check}`} />
+          <span>
+            <span className="block text-sm font-medium">Resumo do mês</span>
+            <span className="block text-sm text-muted">O mês anterior inteiro, comparado com o de antes. Chega no dia 1, às 8h.</span>
+          </span>
+        </label>
+      </div>
+
+      {error ? <p className="px-5 pb-4 text-[13px] text-danger sm:px-6">{error}</p> : null}
+      {value.daily || value.weekly || value.monthly ? <DigestEmailForm initial={digestEmail} loginEmail={loginEmail} /> : null}
     </div>
   );
 }
@@ -272,7 +345,7 @@ function DigestEmailForm({ initial, loginEmail }: { initial: string | null; logi
       <div className="flex flex-wrap items-start gap-2">
         <Field
           label="Receber em"
-          hint={`Deixe vazio para receber no e-mail de login (${loginEmail}).`}
+          hint={`Vale para os três resumos. Deixe vazio para receber no e-mail de login (${loginEmail}).`}
           error={state.fieldErrors?.digestEmail}
           className="min-w-56 flex-1"
         >

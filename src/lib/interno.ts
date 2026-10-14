@@ -149,6 +149,8 @@ export async function loadHealth(): Promise<HealthCheck[]> {
     ["members", "digest_email", "20261014020000_client_owner_digest_email.sql"],
     ["organizations", "cancel_at", "20261014030000_subscription_cancel.sql"],
     ["access_logs", "id", "20261014040000_access_logs.sql"],
+    ["members", "daily_digest", "20261014050000_daily_digest.sql"],
+    ["members", "daily_digest_hour, weekly_digest_weekday, monthly_digest", "20261014060000_digest_schedule.sql"],
     ["members", "terms_version", "20261013010000_platform.sql"],
     ["ops_alerts", "fingerprint", "20261013010000_platform.sql"],
     ["system_heartbeats", "name", "20261013010000_platform.sql"],
