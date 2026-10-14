@@ -16,13 +16,13 @@ export const COMPANY = {
   /** Nome comercial, como aparece para os clientes. */
   name: "DomuTech",
   /** Razão social do CNPJ, por exemplo "DomuTech Tecnologia Ltda.". */
-  legalName: "",
+  legalName: "DomuTech",
   /** CNPJ no formato 00.000.000/0001-00. */
-  cnpj: "",
+  cnpj: "63.032.580/0001-19",
   /** Endereço da sede: rua, número, bairro, cidade, UF e CEP. */
-  address: "",
+  address: "N/A",
   /** Cidade e UF do foro escolhido para disputas, por exemplo "São Paulo/SP". */
-  forumCity: "",
+  forumCity: "N/A",
   /** Nome do encarregado de dados (LGPD, art. 41). Vazio usa o e-mail de contato. */
   dpoName: "",
 };
