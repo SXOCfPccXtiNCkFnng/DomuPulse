@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { AlertTriangle, Check, Clock, Minus, Timer } from "lucide-react";
+import type { ReactNode } from "react";
 import { conversion, formatNumber, METRICS, type Totals } from "@/lib/metrics";
 
 export function StatTile({
@@ -7,11 +8,13 @@ export function StatTile({
   value,
   detail,
   emphasis = false,
+  trend,
 }: {
   label: string;
   value: number;
   detail?: string;
   emphasis?: boolean;
+  trend?: ReactNode;
 }) {
   return (
     <div
@@ -21,9 +24,10 @@ export function StatTile({
       )}
     >
       <p className={clsx("text-[13px]", emphasis ? "text-brand-ink/70" : "text-muted")}>{label}</p>
-      <p className="mt-1 font-display text-[1.9rem] font-semibold leading-none tracking-tight tabular-nums">
-        {formatNumber(value)}
-      </p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <p className="font-display text-[1.9rem] font-semibold leading-none tracking-tight tabular-nums">{formatNumber(value)}</p>
+        {trend}
+      </div>
       {detail ? (
         <p className={clsx("mt-1.5 text-xs", emphasis ? "text-brand-ink/70" : "text-muted")}>{detail}</p>
       ) : null}

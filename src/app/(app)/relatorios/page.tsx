@@ -9,8 +9,26 @@ import { buttonClass } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { requireActivatedMember, isLeader } from "@/lib/auth";
 import { conversion, formatNumber, METRICS } from "@/lib/metrics";
-import { PERIODS, periodQuery, resolvePeriod } from "@/lib/period";
+import { PERIODS, periodQuery, previousPeriod, resolvePeriod } from "@/lib/period";
 import { loadReportData } from "@/lib/report-data";
+
+/** Variação percentual frente ao mesmo número no período anterior. */
+function TrendBadge({ current, previous, emphasis = false }: { current: number; previous: number; emphasis?: boolean }) {
+  if (previous <= 0) return null;
+  const pct = Math.round(((current - previous) / previous) * 100);
+  const up = pct >= 0;
+  return (
+    <span
+      title={`${formatNumber(previous)} no período anterior`}
+      className={clsx(
+        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+        emphasis ? "bg-brand-ink/15 text-brand-ink" : up ? "bg-brand-soft text-brand-text" : "bg-danger-soft text-danger",
+      )}
+    >
+      {up ? "↑" : "↓"} {Math.abs(pct)}%
+    </span>
+  );
+}
 
 export const metadata: Metadata = { title: "Relatórios" };
 
@@ -28,6 +46,9 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
   const broker = leader ? (data.brokers.find((b) => b.id === one(sp.corretor)) ?? null) : null;
   const teamId = !broker && leader && data.teams.some((t) => t.id === one(sp.equipe)) ? one(sp.equipe) : null;
   const view = broker || teamId ? await loadReportData(period, teamId, broker?.id ?? null) : data;
+  // Mesmo recorte no período anterior, para mostrar se cada número subiu ou caiu.
+  const prevPeriod = previousPeriod(period);
+  const prev = (await loadReportData(prevPeriod, teamId, broker?.id ?? null)).totals;
   const teamParam: Record<string, string> = broker ? { corretor: broker.id } : teamId ? { equipe: teamId } : {};
   const brokerOptions = data.brokers.filter((b) => !teamId || b.teamId === teamId);
   const t = view.totals;
@@ -132,12 +153,15 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
 
       {view.error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{view.error}</p> : null}
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <StatTile label="Leads" value={t.leads} detail={`${formatNumber(t.interactions)} interações`} />
-        <StatTile label="Agendamentos" value={t.appointments} detail={`${conversion(t.negotiations, t.appointments)} das negociações`} />
-        <StatTile label="Visitas" value={t.visits} detail={`${conversion(t.appointments, t.visits)} dos agendamentos`} />
-        <StatTile label="Propostas" value={t.proposals} detail={`${conversion(t.visits, t.proposals)} das visitas`} />
-        <StatTile label="Vendas" value={t.sales} emphasis detail={`${conversion(t.proposals, t.sales)} das propostas`} />
+      <section className="flex flex-col gap-2">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <StatTile label="Leads" value={t.leads} detail={`${formatNumber(t.interactions)} interações`} trend={<TrendBadge current={t.leads} previous={prev.leads} />} />
+          <StatTile label="Agendamentos" value={t.appointments} detail={`${conversion(t.negotiations, t.appointments)} das negociações`} trend={<TrendBadge current={t.appointments} previous={prev.appointments} />} />
+          <StatTile label="Visitas" value={t.visits} detail={`${conversion(t.appointments, t.visits)} dos agendamentos`} trend={<TrendBadge current={t.visits} previous={prev.visits} />} />
+          <StatTile label="Propostas" value={t.proposals} detail={`${conversion(t.visits, t.proposals)} das visitas`} trend={<TrendBadge current={t.proposals} previous={prev.proposals} />} />
+          <StatTile label="Vendas" value={t.sales} emphasis detail={`${conversion(t.proposals, t.sales)} das propostas`} trend={<TrendBadge current={t.sales} previous={prev.sales} emphasis />} />
+        </div>
+        <p className="text-xs text-muted">Comparado com o período anterior ({prevPeriod.label}).</p>
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">

@@ -50,6 +50,14 @@ export function resolvePeriod(params: { periodo?: string; de?: string; ate?: str
   }
 }
 
+/** Período anterior de mesmo tamanho, imediatamente antes do atual (para comparar tendência). */
+export function previousPeriod(period: Period): Period {
+  const length = daysBetween(period.from, period.to) + 1;
+  const to = addDays(period.from, -1);
+  const from = addDays(to, -(length - 1));
+  return { id: "intervalo", from, to, label: `${formatDate(from)} a ${formatDate(to)}` };
+}
+
 export function periodQuery(period: Period, extra: Record<string, string> = {}) {
   const q = new URLSearchParams({ periodo: period.id, ...extra });
   if (period.id === "intervalo") {
