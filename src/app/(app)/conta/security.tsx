@@ -12,6 +12,7 @@ import { changePassword, signOutEverywhere } from "./security-actions";
 
 type MfaState =
   | { kind: "loading" }
+  | { kind: "unknown" }
   | { kind: "off" }
   | { kind: "enrolling"; factorId: string; qr: string; secret: string }
   | { kind: "on"; factorId: string; since: string };
@@ -24,18 +25,22 @@ export function MfaSettings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    void supabase.auth.mfa.listFactors().then(({ data }) => {
+    void supabase.auth.mfa.listFactors().then(({ data, error }) => {
       if (cancelled) return;
-      const verified = data?.totp.find((f) => f.status === "verified");
+      // Se a checagem falhar, não dizer "desligado" (apareceria "Ativar" por
+      // engano, escondendo um 2FA que existe): mostrar que não deu para ler.
+      if (error || !data) return setState({ kind: "unknown" });
+      const verified = data.totp.find((f) => f.status === "verified");
       setState(verified ? { kind: "on", factorId: verified.id, since: verified.created_at } : { kind: "off" });
     });
     return () => {
       cancelled = true;
     };
-  }, [supabase]);
+  }, [supabase, reload]);
 
   async function start() {
     setBusy(true);
@@ -87,6 +92,15 @@ export function MfaSettings() {
       {error ? <FormMessage>{error}</FormMessage> : null}
 
       {state.kind === "loading" ? <p className="text-sm text-muted">Verificando.</p> : null}
+
+      {state.kind === "unknown" ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-ink-2">Não foi possível verificar o estado da verificação em duas etapas agora.</p>
+          <Button size="sm" variant="secondary" onClick={() => setReload((n) => n + 1)}>
+            Tentar de novo
+          </Button>
+        </div>
+      ) : null}
 
       {state.kind === "off" ? (
         <>
