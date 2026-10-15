@@ -92,33 +92,41 @@ export default async function MetasPage(props: PageProps<"/metas">) {
         />
         <ul className="mt-3 divide-y divide-line border-t border-line">
           {people.length === 0 ? <li className="px-6 py-12 text-center text-sm text-muted">Nenhum corretor ativo.</li> : null}
-          {people.map((p) => (
-            <li key={p.id} className="flex flex-col gap-4 px-5 py-4 sm:px-6 lg:flex-row lg:flex-wrap lg:items-center">
-              <span className="flex w-56 shrink-0 items-center gap-2.5">
-                <Avatar name={p.full_name} />
-                <span className="truncate font-medium">{p.full_name}</span>
-              </span>
-              <div className="grid flex-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                {GOAL_METRICS.map((metric) => (
-                  <Progress
-                    key={metric}
-                    label={LABEL[metric]}
-                    actual={actualOf(p.id, metric)}
-                    goal={goalOf(p.id, metric)}
-                    projected={projection(actualOf(p.id, metric), month, today)}
-                    showProjection={isCurrent}
+          {people.map((p) => {
+            // Só as tarefas com meta viram barra; as 8 ficam no "Editar metas".
+            const withGoals = GOAL_METRICS.filter((m) => goalOf(p.id, m) !== undefined);
+            return (
+              <li key={p.id} className="flex flex-col gap-4 px-5 py-4 sm:px-6 lg:flex-row lg:flex-wrap lg:items-center">
+                <span className="flex w-56 shrink-0 items-center gap-2.5">
+                  <Avatar name={p.full_name} />
+                  <span className="truncate font-medium">{p.full_name}</span>
+                </span>
+                {withGoals.length === 0 ? (
+                  <p className="flex-1 text-sm text-muted">Sem metas neste mês.{leader ? " Defina em “Editar metas”." : ""}</p>
+                ) : (
+                  <div className="grid flex-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {withGoals.map((metric) => (
+                      <Progress
+                        key={metric}
+                        label={LABEL[metric]}
+                        actual={actualOf(p.id, metric)}
+                        goal={goalOf(p.id, metric)}
+                        projected={projection(actualOf(p.id, metric), month, today)}
+                        showProjection={isCurrent}
+                      />
+                    ))}
+                  </div>
+                )}
+                {leader ? (
+                  <GoalRowForm
+                    month={month}
+                    memberId={p.id}
+                    values={Object.fromEntries(GOAL_METRICS.map((m) => [m, goalOf(p.id, m) ?? 0])) as Record<GoalMetric, number>}
                   />
-                ))}
-              </div>
-              {leader ? (
-                <GoalRowForm
-                  month={month}
-                  memberId={p.id}
-                  values={Object.fromEntries(GOAL_METRICS.map((m) => [m, goalOf(p.id, m) ?? 0])) as Record<GoalMetric, number>}
-                />
-              ) : null}
-            </li>
-          ))}
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </Card>
 
@@ -200,7 +208,7 @@ function Progress({
       </div>
       {goal && showProjection ? (
         <p className={clsx("mt-1 text-xs", onTrack ? "text-brand-text" : "text-warn")}>
-          Projeção {formatNumber(projected)}, {onTrack ? "no ritmo" : "abaixo do ritmo"}
+          {onTrack ? "No ritmo" : "Abaixo do ritmo"} · deve fechar o mês em {formatNumber(projected)}
         </p>
       ) : null}
     </div>

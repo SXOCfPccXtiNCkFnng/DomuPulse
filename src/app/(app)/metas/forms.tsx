@@ -1,6 +1,7 @@
 "use client";
 
 import { Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
@@ -24,7 +25,12 @@ function GoalInputs({ values, errors }: { values?: Partial<Record<GoalMetric, nu
 }
 
 export function BulkGoalsForm({ month, memberIds }: { month: string; memberIds: string[] }) {
-  const [state, action, pending] = useActionState(saveGoals, {} as FormState);
+  const router = useRouter();
+  const [state, action, pending] = useActionState(async (prev: FormState, data: FormData) => {
+    const result = await saveGoals(prev, data);
+    if (result.success) router.refresh();
+    return result;
+  }, {} as FormState);
   return (
     <form action={action} className="flex flex-col gap-4 p-5 sm:p-6" noValidate>
       <input type="hidden" name="month" value={month} />
@@ -44,10 +50,14 @@ export function BulkGoalsForm({ month, memberIds }: { month: string; memberIds: 
 }
 
 export function GoalRowForm({ month, memberId, values }: { month: string; memberId: string; values: Record<GoalMetric, number> }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState(async (prev: FormState, data: FormData) => {
     const result = await saveGoals(prev, data);
-    if (result.success) setOpen(false);
+    if (result.success) {
+      setOpen(false);
+      router.refresh();
+    }
     return result;
   }, {} as FormState);
 
