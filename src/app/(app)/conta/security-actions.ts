@@ -46,9 +46,10 @@ export async function changePassword(_: FormState, formData: FormData): Promise<
     return { error: "Não foi possível trocar a senha. Tente novamente." };
   }
 
-  await supabase.auth.signOut({ scope: "others" });
+  // Desconecta todos os aparelhos, inclusive este: a pessoa entra de novo com a senha nova.
   after(() => sendPasswordChangedEmail({ to: email }));
-  return { success: "Senha alterada. Os outros aparelhos foram desconectados." };
+  await supabase.auth.signOut({ scope: "global" });
+  redirect("/entrar?senha=alterada");
 }
 
 /** Desconecta a conta de todos os aparelhos, inclusive este. */

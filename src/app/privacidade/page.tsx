@@ -65,6 +65,7 @@ const sections: LegalSection[] = [
         <li><strong>Operação:</strong> relatórios de produção, presença do dia, metas, comissões, observações e visitas agendadas.</li>
         <li><strong>Clientes da carteira:</strong> nome, telefone, e-mail, origem, interesse, valor do negócio, etapa e anotações inseridos pela equipe.</li>
         <li><strong>Cobrança:</strong> CPF ou CNPJ, valores, faturas e situação dos pagamentos, processados pelo Asaas.</li>
+        <li><strong>Notas fiscais:</strong> dados fiscais do corretor e da imobiliária (CNPJ, razão social, regime, inscrição municipal e endereço), as notas emitidas ou enviadas e os arquivos delas. O certificado digital A1 do corretor e a senha dele ficam guardados criptografados (AES-256), só são abertos no servidor no momento de emitir ou cancelar uma nota pedida pelo próprio corretor e são apagados junto com a conta.</li>
         <li><strong>Aparelhos:</strong> endereço técnico de notificação e tipo de navegador de cada aparelho que ativar os avisos.</li>
         <li><strong>Segurança e registros:</strong> endereço IP, data e hora de acesso, tentativas de login, aceite destes documentos e registro de alterações feitas na conta.</li>
         <li><strong>Contato:</strong> mensagens trocadas com o suporte por e-mail ou WhatsApp.</li>
@@ -163,6 +164,8 @@ const sections: LegalSection[] = [
           <li><strong>Resend:</strong> envio dos e-mails.</li>
           <li><strong>Asaas:</strong> cobrança, faturas e confirmação de pagamentos.</li>
           <li><strong>Cloudflare (Turnstile):</strong> verificação contra robôs nas telas de entrada e cadastro.</li>
+          <li><strong>Sistema Nacional da NFS-e (Receita Federal):</strong> autorização e cancelamento das notas fiscais de serviço dos corretores. É o sistema oficial do governo; o Pulse envia a nota assinada com o certificado do corretor.</li>
+          <li><strong>ViaCEP:</strong> consulta de endereço pelo CEP no cadastro fiscal (só o CEP é enviado).</li>
           <li><strong>Serviços de notificação do navegador</strong> (Google, Apple, Mozilla ou Microsoft, conforme o aparelho): entrega dos avisos.</li>
         </ul>
         <p>

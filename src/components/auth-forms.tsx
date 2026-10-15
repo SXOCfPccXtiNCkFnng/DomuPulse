@@ -26,6 +26,7 @@ export function SignInForm() {
   const queryError = QUERY_ERRORS[params.get("erro") ?? ""];
   const justSignedUp = params.get("cadastro") === "ok";
   const accountDeleted = params.get("conta") === "excluida";
+  const passwordChanged = params.get("senha") === "alterada";
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
@@ -34,6 +35,8 @@ export function SignInForm() {
         <FormMessage>{state.error ?? queryError}</FormMessage>
       ) : accountDeleted ? (
         <FormMessage tone="success">Sua conta foi excluída. Obrigado por ter usado o Domu Pulse.</FormMessage>
+      ) : passwordChanged ? (
+        <FormMessage tone="success">Senha alterada. Entre com a senha nova.</FormMessage>
       ) : justSignedUp ? (
         <FormMessage tone="success">Conta criada com sucesso. Entre com o e-mail e a senha que você cadastrou.</FormMessage>
       ) : null}

@@ -98,7 +98,13 @@ async function Overview() {
   const o = await loadOverview();
   return (
     <div className="flex flex-col gap-5">
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+        <StatTile
+          label="Assinantes"
+          value={o.byStatus.active + o.byStatus.past_due}
+          detail={`${formatNumber(o.byStatus.active)} em dia, ${formatNumber(o.byStatus.past_due)} com fatura em aberto`}
+          emphasis
+        />
         <StatTile label="Receita mensal recorrente" value={Math.round(o.mrrCents / 100)} detail="em reais, assinaturas ativas e em atraso" emphasis />
         <StatTile label="Imobiliárias" value={o.totalOrgs} detail={`${o.newThisWeek} novas nos últimos 7 dias`} />
         <StatTile label="Pessoas ativas" value={o.activeMembers} detail={`${formatNumber(o.brokers)} corretores`} />

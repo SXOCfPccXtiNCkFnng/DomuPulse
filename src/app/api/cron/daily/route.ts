@@ -4,6 +4,7 @@ import { recordHeartbeat } from "@/lib/heartbeat";
 import { describeError, logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendDailyDigests } from "@/lib/daily-digest";
+import { replayPendingNfse } from "@/lib/nfse";
 import { sendPeriodDigests } from "@/lib/weekly-digest";
 
 // Resumos podem demorar com muitas imobiliárias: até 60 s no plano gratuito.
@@ -40,7 +41,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    await recordHeartbeat("cron.daily", { ok: true, result: { sent } });
+    // Notas e cancelamentos que ficaram na fila porque o sistema nacional da
+    // NFS-e estava fora do ar: reenvia aqui.
+    const invoicesSynced = await replayPendingNfse().catch((err) => {
+      logger.error("cron.nfse_replay", { message: describeError(err) });
+      return 0;
+    });
+
+    await recordHeartbeat("cron.daily", { ok: true, result: { sent, invoicesSynced } });
     // Esta rotina também manda o semanal e o mensal: a tarefa antiga de
     // /api/cron/weekly deixou de ser necessária.
     await recordHeartbeat("cron.weekly", { ok: true, result: { via: "daily" } });

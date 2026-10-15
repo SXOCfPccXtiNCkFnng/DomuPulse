@@ -10,6 +10,7 @@ export const metadata: Metadata = { title: "Termos atualizados" };
 
 // O que mudou nesta versão, em linguagem simples. Atualize junto com LEGAL_DOCS_VERSION.
 const CHANGES = [
+  "Emissão de notas fiscais pelos corretores: responsabilidades do corretor, da imobiliária e do emissor parceiro.",
   "Regras mais claras de assinatura, cancelamento, reajuste e suspensão por falta de pagamento ou contestação.",
   "Responsabilidades de cada parte sobre os dados de clientes que a equipe cadastra.",
   "Como pedir uma cópia dos seus dados ou excluir a conta pelo próprio Pulse.",

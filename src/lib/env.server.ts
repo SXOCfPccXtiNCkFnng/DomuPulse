@@ -52,3 +52,21 @@ export const asaasEnv = lazy(() =>
       webhookToken: process.env.ASAAS_WEBHOOK_TOKEN,
     }),
 );
+
+// Emissão de NFS-e direto na API nacional. NFSE_ENV escolhe o ambiente:
+// "homologacao" (testes, sem valor fiscal) ou "producao". NFSE_CERT_KEY
+// (32 bytes em base64) criptografa os certificados digitais dos corretores.
+export const nfseEnv = lazy(() =>
+  z
+    .object({
+      env: z.enum(["homologacao", "producao"]),
+      certKey: z
+        .string()
+        .transform((v) => Buffer.from(v, "base64"))
+        .refine((b) => b.length === 32, "NFSE_CERT_KEY precisa ter 32 bytes em base64"),
+    })
+    .parse({
+      env: process.env.NFSE_ENV,
+      certKey: process.env.NFSE_CERT_KEY,
+    }),
+);

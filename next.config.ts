@@ -31,6 +31,9 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  // Emissão de NFS-e: o gerador do PDF (pdfkit) lê as fontes do disco e não
+  // pode ser empacotado.
+  serverExternalPackages: ["open-nfse", "pdfkit"],
   turbopack: {
     root: import.meta.dirname,
     rules: {

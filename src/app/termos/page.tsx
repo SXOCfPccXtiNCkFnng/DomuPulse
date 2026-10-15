@@ -172,6 +172,33 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    title: "Notas fiscais dos corretores",
+    body: (
+      <>
+        <p>
+          A Plataforma permite que o corretor emita a nota fiscal de serviço (NFS-e) contra a Contratante, diretamente
+          no Sistema Nacional da NFS-e do governo federal, e que envie notas emitidas fora dela. A nota sai em nome e no CNPJ do
+          corretor, que é o único responsável:
+        </p>
+        <ul>
+          <li>pela exatidão dos dados fiscais cadastrados, como CNPJ, regime tributário, inscrição municipal e endereço;</li>
+          <li>pelo valor, pela descrição do serviço e pela competência informados em cada nota;</li>
+          <li>pelos tributos devidos, pela escrituração e pelas demais obrigações fiscais da nota;</li>
+          <li>pela validade, guarda e senha do seu certificado digital.</li>
+        </ul>
+        <p>
+          A Contratante responde pelos dados dela como tomadora, inclusive o código do serviço, e deve confirmar com o seu
+          contador as regras aplicáveis. A DomuTech apenas transmite os dados informados ao Sistema Nacional da NFS-e e não presta
+          consultoria contábil ou tributária. A autorização, a rejeição e o cancelamento das notas dependem da prefeitura e
+          do ambiente nacional da NFS-e, fora do controle da DomuTech. Para emitir em nome do corretor, a Plataforma guarda o
+          certificado digital dele e a senha criptografados, com chave que só existe no servidor, e os usa exclusivamente
+          para emitir e cancelar as notas que o próprio corretor pedir. O corretor pode trocar o certificado a qualquer
+          momento e, ao sair da Plataforma ou excluir a conta, o certificado é apagado.
+        </p>
+      </>
+    ),
+  },
+  {
     title: "Assinatura e pagamento",
     body: (
       <>

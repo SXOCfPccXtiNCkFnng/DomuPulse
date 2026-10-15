@@ -138,6 +138,14 @@ export async function setMemberActive(memberId: string, active: boolean): Promis
 
   // Bloqueia o login de quem foi desativado. O histórico continua salvo.
   await admin.auth.admin.updateUserById(target.user_id, { ban_duration: active ? "none" : "876000h" });
+  // Quem sai não deixa o certificado digital guardado: para voltar a emitir,
+  // a pessoa envia de novo.
+  if (!active) {
+    await admin
+      .from("fiscal_profiles")
+      .update({ certificate_encrypted: null, certificate_password_encrypted: null, status: "pending" })
+      .eq("member_id", memberId);
+  }
 
   revalidatePath("/equipe");
   return { success: active ? "Acesso reativado." : "Acesso desativado. O histórico foi mantido." };

@@ -316,7 +316,11 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
         ),
       );
     }
+    redirect("/painel");
   }
 
-  redirect("/painel");
+  // Recuperação de senha: encerra a sessão aberta pelo link e leva para o
+  // login, onde a pessoa entra com a senha nova.
+  await supabase.auth.signOut({ scope: "global" });
+  redirect("/entrar?senha=alterada");
 }

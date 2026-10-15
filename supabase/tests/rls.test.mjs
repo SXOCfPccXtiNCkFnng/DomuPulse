@@ -300,6 +300,30 @@ await expectError("dono não lê o código de convite pela API", "ownerA", "sele
 await expectError("visitante não lê o código de convite", null, "select code from org_invites", /permission denied/, [], "anon");
 await expectError("dono não muda o valor da assinatura", "ownerA", "update platform_settings set monthly_price_cents = 1", /permission denied/);
 await expectError("dono não muda o valor que assinou", "ownerA", "update organizations set price_cents = 1", /permission denied/);
+// ---- Notas fiscais --------------------------------------------------------
+await as(null, `insert into invoices (org_id, member_id, number, amount_cents, issued_on, description, file_path, file_name) values
+  ('${uid("orgA")}', '${uid("m_b1")}', '101', 50000, current_date, 'Comissão de teste', 'x/y/1.pdf', '1.pdf'),
+  ('${uid("orgA")}', '${uid("m_b3")}', '202', 70000, current_date, 'Valor mensal', 'x/y/2.pdf', '2.pdf')`, [], "service_role");
+await expectRows("corretor vê só as próprias notas", "b1", "select id from invoices", 1);
+await expectRows("gerente vê as notas da equipe dele", "mgr1", "select id from invoices", 1);
+await expectRows("dona vê todas as notas", "ownerA", "select id from invoices", 2);
+await expectRows("outra imobiliária não vê as notas", "ownerB", "select id from invoices", 0);
+await expectError("corretor não cria nota sem passar pelo servidor", "b1", `insert into invoices (org_id, member_id, number, amount_cents, issued_on, description, file_path, file_name) values ('${uid("orgA")}', '${uid("m_b1")}', '1', 1, current_date, 'xx', 'a', 'a')`, /permission denied/);
+await expectError("liderança não muda situação sem passar pelo servidor", "ownerA", "update invoices set status = 'paid'", /permission denied/);
+
+// ---- Emissão de NFS-e ----------------------------------------------------
+await as(null, `insert into fiscal_profiles (member_id, org_id, cnpj, legal_name, simples_option, cep, street, number, district, city, uf, city_ibge, certificate_encrypted)
+  values ('${uid("m_b1")}', '${uid("orgA")}', '12345678000195', 'Corretor 1 MEI', 2, '01001000', 'Rua A', '1', 'Centro', 'São Paulo', 'SP', '3550308', 'cifrado')`, [], "service_role");
+await expectError("corretor não lê o próprio certificado guardado", "b1", "select certificate_encrypted from fiscal_profiles", /permission denied/);
+await expectError("dona não lê os dados fiscais dos corretores pela API", "ownerA", "select * from fiscal_profiles", /permission denied/);
+await expectError("ninguém pega número de nota pela API", "b1", `select take_dps_number('${uid("m_b1")}')`, /permission denied/);
+const dps1 = await as(null, `select take_dps_number('${uid("m_b1")}') as n`, [], "service_role");
+const dps2 = await as(null, `select take_dps_number('${uid("m_b1")}') as n`, [], "service_role");
+check("número da nota é sequencial e não repete", dps1.rows[0].n === 1 && dps2.rows[0].n === 2, JSON.stringify([dps1.rows, dps2.rows]));
+await expectError("dona não muda os dados fiscais da imobiliária pela API", "ownerA", "update organizations set fiscal_cnpj = '11111111000111'", /permission denied/);
+await expectError("nota enviada pronta precisa de arquivo", null, `insert into invoices (org_id, member_id, number, amount_cents, issued_on, description, source) values ('${uid("orgA")}', '${uid("m_b1")}', '9', 100, current_date, 'teste', 'upload')`, /invoices_upload_has_file/, [], "service_role");
+
+await expectError("ninguém lê a fila de reenvio de notas pela API", "ownerA", "select * from nfse_pending", /permission denied/);
 await expectError("ninguém lê os registros de acesso pela API", "ownerA", "select * from access_logs", /permission denied/);
 await expectError("dono não estende o próprio acesso após cancelar", "ownerA", "update organizations set cancel_at = now() + interval '1 year'", /permission denied/);
 await expectError("só existe uma linha de configuração", null, "insert into platform_settings (id) values (false)", /check/, [], "service_role");

@@ -1,7 +1,7 @@
 // Versão vigente dos Termos e da Política. Troque a data ao alterar o texto:
 // é ela que fica registrada no aceite de cada pessoa, e quem aceitou uma
 // versão anterior é levado a aceitar a nova antes de continuar.
-export const LEGAL_DOCS_VERSION = "2026-10-14";
+export const LEGAL_DOCS_VERSION = "2026-10-15";
 
 export const CONTACT_EMAIL = "contato@domutech.digital";
 export const CONTACT_WHATSAPP_NUMBER = "5511921474360";

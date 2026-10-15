@@ -16,6 +16,8 @@ import { CouponForm, DigestSettings, HashToTab, InstallGuide, PushSettings, Subs
 import { OrgSettingsForm } from "./org-settings";
 import { CancelSubscriptionButton, DeleteAccountForm } from "./privacy";
 import { ProfileForm } from "./profile";
+import { OrgFiscalForm } from "../notas/fiscal";
+import { ORG_FISCAL_COLUMNS, type OrgFiscal as OrgFiscalRow } from "@/lib/nfse";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
 
 export const metadata: Metadata = { title: "Conta" };
@@ -84,11 +86,12 @@ export default async function ContaPage(props: PageProps<"/conta">) {
       {tab === "perfil" ? <Profile name={me.fullName} /> : null}
 
       {tab === "imobiliaria" ? (
-        <div className="max-w-3xl">
+        <div className="grid items-start gap-5 xl:grid-cols-2">
           <Card>
             <CardHeader title="Imobiliária" description="Nome, fuso e horários de relatório da equipe" />
             <OrgSettingsForm name={me.org.name} timezone={me.org.timezone} slots={me.org.reportSlots} />
           </Card>
+          <OrgFiscal orgId={me.org.id} />
         </div>
       ) : null}
 
@@ -258,5 +261,29 @@ async function Profile({ name }: { name: string }) {
         <ProfileForm name={name} email={String(claims?.claims?.email ?? "")} />
       </Card>
     </div>
+  );
+}
+
+/** Dados da imobiliária como tomadora das notas fiscais dos corretores. */
+async function OrgFiscal({ orgId }: { orgId: string }) {
+  const { data } = await createAdminClient().from("organizations").select(ORG_FISCAL_COLUMNS).eq("id", orgId).single<OrgFiscalRow>();
+  return (
+    <Card>
+      <CardHeader title="Dados fiscais" description="Para os corretores emitirem as notas contra a imobiliária pelo Pulse" />
+      <OrgFiscalForm
+        initial={{
+          legalName: data?.fiscal_legal_name ?? "",
+          cnpj: data?.fiscal_cnpj ?? "",
+          email: data?.fiscal_email ?? "",
+          cep: data?.fiscal_cep ?? "",
+          street: data?.fiscal_street ?? "",
+          number: data?.fiscal_number ?? "",
+          district: data?.fiscal_district ?? "",
+          city: data?.fiscal_city ?? "",
+          uf: data?.fiscal_uf ?? "",
+          serviceCode: data?.nfse_service_code ?? "100501",
+        }}
+      />
+    </Card>
   );
 }

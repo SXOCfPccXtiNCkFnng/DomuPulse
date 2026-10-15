@@ -15,7 +15,7 @@ function isCpf(d: string) {
   return true;
 }
 
-function isCnpj(d: string) {
+export function isCnpj(d: string) {
   if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
   const weights = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
   for (const len of [12, 13]) {

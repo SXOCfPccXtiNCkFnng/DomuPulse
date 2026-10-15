@@ -91,6 +91,8 @@ export async function deleteMyAccount(_: FormState, formData: FormData): Promise
         .eq("id", me.id),
       admin.from("push_subscriptions").delete().eq("user_id", me.userId),
       admin.from("notifications").delete().eq("user_id", me.userId),
+      // Dados fiscais e certificado digital saem junto com a conta.
+      admin.from("fiscal_profiles").delete().eq("member_id", me.id),
     ]);
     // Cópias antigas do cadastro da pessoa no registro de alterações.
     await admin.from("audit_log").delete().eq("table_name", "members").eq("record_id", me.id);

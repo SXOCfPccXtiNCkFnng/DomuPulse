@@ -135,6 +135,12 @@ export default async function MetasPage(props: PageProps<"/metas">) {
                   <span className={clsx("block truncate text-sm", leader ? "text-muted" : "font-medium")}>{c.description || "Sem descrição"}</span>
                 </span>
                 <span className="font-semibold tabular-nums">{formatMoney(Number(c.amount_cents))}</span>
+                {/* Atalho opcional: abre a nota fiscal já ligada a esta comissão. */}
+                {c.member_id === me.id ? (
+                  <Link href={`/notas?comissao=${c.id}`} className="rounded-lg px-2 py-1 text-xs font-medium text-brand-text hover:bg-brand-soft">
+                    Enviar NF
+                  </Link>
+                ) : null}
                 <form action={deleteCommission.bind(null, c.id)}>
                   <button type="submit" className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-danger-soft hover:text-danger">
                     Remover
