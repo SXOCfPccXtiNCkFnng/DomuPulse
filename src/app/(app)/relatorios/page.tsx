@@ -48,7 +48,10 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
   const view = broker || teamId ? await loadReportData(period, teamId, broker?.id ?? null) : data;
   // Mesmo recorte no período anterior, para mostrar se cada número subiu ou caiu.
   const prevPeriod = previousPeriod(period);
-  const prev = (await loadReportData(prevPeriod, teamId, broker?.id ?? null)).totals;
+  const prevData = await loadReportData(prevPeriod, teamId, broker?.id ?? null);
+  const prev = prevData.totals;
+  const prevSalesByBroker = new Map(prevData.brokers.map((b) => [b.id, b.totals.sales]));
+  const prevSalesByTeam = new Map(prevData.teamLines.map((tl) => [tl.id, tl.totals.sales]));
   const teamParam: Record<string, string> = broker ? { corretor: broker.id } : teamId ? { equipe: teamId } : {};
   const brokerOptions = data.brokers.filter((b) => !teamId || b.teamId === teamId);
   const t = view.totals;
@@ -179,7 +182,7 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
         </Card>
       </div>
 
-      {leader && !teamId && !broker && view.teamLines.length > 1 ? <TeamComparison lines={view.teamLines} /> : null}
+      {leader && !teamId && !broker && view.teamLines.length > 1 ? <TeamComparison lines={view.teamLines} prevSales={prevSalesByTeam} /> : null}
 
       {leader && !broker ? (
         <Card className="min-w-0">
@@ -202,6 +205,9 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
                   <span className="shrink-0 text-right">
                     <span className="block font-display text-lg leading-none font-semibold tabular-nums">{formatNumber(b.totals.sales)}</span>
                     <span className="text-[11px] text-muted">vendas</span>
+                    <span className="mt-1 block">
+                      <TrendBadge current={b.totals.sales} previous={prevSalesByBroker.get(b.id) ?? 0} />
+                    </span>
                   </span>
                 </Link>
               </li>
@@ -246,7 +252,14 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
                     </td>
                     {METRICS.map((m) => (
                       <td key={m.key} className={clsx("px-2 py-2.5 text-right tabular-nums", m.key === "sales" && "font-semibold")}>
-                        {formatNumber(b.totals[m.key])}
+                        {m.key === "sales" ? (
+                          <span className="inline-flex items-center justify-end gap-1.5">
+                            {formatNumber(b.totals.sales)}
+                            <TrendBadge current={b.totals.sales} previous={prevSalesByBroker.get(b.id) ?? 0} />
+                          </span>
+                        ) : (
+                          formatNumber(b.totals[m.key])
+                        )}
                       </td>
                     ))}
                     <td className="px-5 py-2.5 text-right text-muted tabular-nums sm:px-6">{b.daysReported}</td>
@@ -282,7 +295,7 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
   );
 }
 
-function TeamComparison({ lines }: { lines: Awaited<ReturnType<typeof loadReportData>>["teamLines"] }) {
+function TeamComparison({ lines, prevSales }: { lines: Awaited<ReturnType<typeof loadReportData>>["teamLines"]; prevSales: Map<string, number> }) {
   const max = Math.max(1, ...lines.map((l) => l.totals.sales));
   return (
     <Card className="min-w-0">
@@ -315,7 +328,10 @@ function TeamComparison({ lines }: { lines: Awaited<ReturnType<typeof loadReport
                         style={{ width: l.totals.sales ? `max(4px, ${(l.totals.sales / max) * 100}%)` : 0 }}
                       />
                     </span>
-                    <span className="w-8 text-right font-semibold tabular-nums">{l.totals.sales}</span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span className="w-8 text-right font-semibold tabular-nums">{l.totals.sales}</span>
+                      <TrendBadge current={l.totals.sales} previous={prevSales.get(l.id) ?? 0} />
+                    </span>
                   </span>
                 </td>
               </tr>
