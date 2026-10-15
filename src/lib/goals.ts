@@ -1,7 +1,17 @@
 import type { MetricKey } from "@/lib/metrics";
 
-// Métricas que podem ter meta mensal.
-export const GOAL_METRICS = ["appointments", "visits", "sales"] as const satisfies readonly MetricKey[];
+// Tarefas que podem ter meta mensal: todas as etapas do funil, na mesma ordem
+// do relatório. O banco (tabela goals) já aceita qualquer uma delas.
+export const GOAL_METRICS = [
+  "leads",
+  "interactions",
+  "negotiations",
+  "appointments",
+  "visits",
+  "proposals",
+  "presales",
+  "sales",
+] as const satisfies readonly MetricKey[];
 export type GoalMetric = (typeof GOAL_METRICS)[number];
 
 export function daysInMonth(month: string) {

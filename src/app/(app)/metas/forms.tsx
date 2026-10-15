@@ -33,12 +33,12 @@ export function BulkGoalsForm({ month, memberIds }: { month: string; memberIds: 
       ))}
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
       {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <GoalInputs errors={state.fieldErrors} />
-        <Button type="submit" variant="secondary" disabled={pending}>
-          {pending ? "Aplicando..." : "Aplicar a todos"}
-        </Button>
       </div>
+      <Button type="submit" variant="secondary" disabled={pending} className="self-start">
+        {pending ? "Aplicando..." : "Aplicar a todos"}
+      </Button>
     </form>
   );
 }
@@ -61,11 +61,11 @@ export function GoalRowForm({ month, memberId, values }: { month: string; member
   }
 
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-xl bg-surface-2 p-3 lg:w-80" noValidate>
+    <form action={action} className="flex w-full flex-col gap-3 rounded-xl bg-surface-2 p-3 lg:w-[34rem]" noValidate>
       <input type="hidden" name="month" value={month} />
       <input type="hidden" name="memberId" value={memberId} />
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <GoalInputs values={values} errors={state.fieldErrors} />
       </div>
       <div className="flex gap-2">

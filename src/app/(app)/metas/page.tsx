@@ -93,12 +93,12 @@ export default async function MetasPage(props: PageProps<"/metas">) {
         <ul className="mt-3 divide-y divide-line border-t border-line">
           {people.length === 0 ? <li className="px-6 py-12 text-center text-sm text-muted">Nenhum corretor ativo.</li> : null}
           {people.map((p) => (
-            <li key={p.id} className="flex flex-col gap-4 px-5 py-4 sm:px-6 lg:flex-row lg:items-center">
+            <li key={p.id} className="flex flex-col gap-4 px-5 py-4 sm:px-6 lg:flex-row lg:flex-wrap lg:items-center">
               <span className="flex w-56 shrink-0 items-center gap-2.5">
                 <Avatar name={p.full_name} />
                 <span className="truncate font-medium">{p.full_name}</span>
               </span>
-              <div className="grid flex-1 gap-3 sm:grid-cols-3">
+              <div className="grid flex-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                 {GOAL_METRICS.map((metric) => (
                   <Progress
                     key={metric}
