@@ -1,11 +1,12 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { ROLE_LABEL, type Role } from "@/lib/roles";
 import type { FormState } from "@/lib/validation";
-import { createTeam, deleteTeam, inviteMember, renameDivision, renameTeam, resendInvite, setMemberActive, updateMember } from "./actions";
+import { createTeam, deleteTeam, inviteMember, removeMember, renameDivision, renameTeam, resendInvite, setMemberActive, updateMember } from "./actions";
 
 type Option = { id: string; name: string };
 
@@ -139,7 +140,40 @@ export function MemberToggle({ memberId, active, name }: { memberId: string; act
   );
 }
 
-type MemberInfo = { id: string; name: string; role: Role; scopeId: string; active: boolean; pending: boolean };
+type MemberInfo = { id: string; name: string; role: Role; scopeId: string; active: boolean; pending: boolean; accountDeleted: boolean };
+
+/** Conta excluída pela própria pessoa: não reativa, só tira da lista (histórico fica). */
+function RemoveMemberButton({ memberId, name }: { memberId: string; name: string }) {
+  const [pending, start] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (confirming) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="danger"
+          disabled={pending}
+          onClick={() => start(async () => setError((await removeMember(memberId)).error ?? null))}
+        >
+          {pending ? "Removendo..." : "Remover da lista"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+          Cancelar
+        </Button>
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-2">
+      {error ? <span className="text-xs text-danger">{error}</span> : null}
+      <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} aria-label={`Remover ${name} da lista`}>
+        <Trash2 className="size-4" />
+      </Button>
+    </span>
+  );
+}
 
 /** Editar, reenviar convite e desativar: as ações de cada pessoa da lista. */
 export function MemberActions({
@@ -175,7 +209,11 @@ export function MemberActions({
             {pending ? "Reenviando..." : "Reenviar convite"}
           </Button>
         ) : null}
-        <MemberToggle memberId={member.id} active={member.active} name={member.name} />
+        {member.accountDeleted ? (
+          <RemoveMemberButton memberId={member.id} name={member.name} />
+        ) : (
+          <MemberToggle memberId={member.id} active={member.active} name={member.name} />
+        )}
       </div>
       {notice?.error ? <p className="mt-1 text-xs text-danger">{notice.error}</p> : null}
       {notice?.success ? <p className="mt-1 text-xs text-brand-text">{notice.success}</p> : null}

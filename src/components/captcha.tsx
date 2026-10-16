@@ -52,7 +52,10 @@ export function Captcha({ resetKey }: { resetKey?: unknown }) {
           sitekey: SITE_KEY,
           language: "pt-br",
           theme: dark ? "dark" : "light",
-          appearance: "interaction-only",
+          // Visível quando houver desafio, para nunca travar o login sem nada
+          // para tocar (acontecia no celular). Reinicia sozinho se expirar.
+          "refresh-expired": "auto",
+          retry: "auto",
         });
       })
       .catch(() => {});
@@ -68,5 +71,5 @@ export function Captcha({ resetKey }: { resetKey?: unknown }) {
   }, [resetKey]);
 
   if (!SITE_KEY) return null;
-  return <div ref={ref} className="min-h-0 empty:hidden" />;
+  return <div ref={ref} className="empty:hidden" />;
 }

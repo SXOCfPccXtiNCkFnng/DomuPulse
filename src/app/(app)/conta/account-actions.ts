@@ -87,7 +87,7 @@ export async function deleteMyAccount(_: FormState, formData: FormData): Promise
     await Promise.all([
       admin
         .from("members")
-        .update({ full_name: "Pessoa removida", active: false, digest_email: null, weekly_digest: false, terms_accepted_ip: null })
+        .update({ full_name: "Pessoa removida", active: false, account_deleted_at: new Date().toISOString(), digest_email: null, weekly_digest: false, terms_accepted_ip: null })
         .eq("id", me.id),
       admin.from("push_subscriptions").delete().eq("user_id", me.userId),
       admin.from("notifications").delete().eq("user_id", me.userId),

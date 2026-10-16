@@ -21,6 +21,7 @@ type MemberRow = {
   division_id: string | null;
   active: boolean;
   terms_accepted_at: string | null;
+  account_deleted_at: string | null;
 };
 type Option = { id: string; name: string };
 
@@ -31,7 +32,8 @@ export default async function EquipePage() {
   const supabase = await createClient();
   const canEditTeams = me.role === "owner" || me.role === "director";
   const [{ data: members }, { data: teams }, { data: divisions }, inviteCode] = await Promise.all([
-    supabase.from("members").select("id, full_name, role, team_id, division_id, active, terms_accepted_at").order("full_name"),
+    // Quem já foi removido da lista (hidden_at) não aparece; o histórico fica.
+    supabase.from("members").select("id, full_name, role, team_id, division_id, active, terms_accepted_at, account_deleted_at").is("hidden_at", null).order("full_name"),
     supabase.from("teams").select("id, name, division_id").order("name"),
     supabase.from("divisions").select("id, name").order("name"),
     // O link deixa a pessoa escolher qualquer equipe: só a liderança de cima vê.
@@ -202,6 +204,7 @@ function MemberLine({
             scopeId: (person.role === "director" ? person.division_id : person.team_id) ?? "",
             active: person.active,
             pending,
+            accountDeleted: Boolean(person.account_deleted_at),
           }}
           myRole={myRole}
           teams={teams}

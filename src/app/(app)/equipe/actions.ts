@@ -151,6 +151,30 @@ export async function setMemberActive(memberId: string, active: boolean): Promis
   return { success: active ? "Acesso reativado." : "Acesso desativado. O histórico foi mantido." };
 }
 
+/**
+ * Tira da lista da equipe quem excluiu a própria conta. A linha do membro
+ * continua no banco (os relatórios dele seguem no histórico), só deixa de
+ * aparecer. Não reativa nem apaga nada.
+ */
+export async function removeMember(memberId: string): Promise<FormState> {
+  const me = await getCurrentMember();
+  if (me.role === "broker") return { error: "Sem permissão." };
+  if (!orgWritable(me.org)) return READ_ONLY;
+  if (!z.uuid().safeParse(memberId).success || memberId === me.id) return { error: "Membro inválido." };
+
+  const supabase = await createClient();
+  const { data: target } = await supabase.from("members").select("id, role, account_deleted_at").eq("id", memberId).maybeSingle();
+  if (!target || RANK[target.role as Role] <= RANK[me.role]) return { error: "Sem permissão para alterar este membro." };
+  // Só some da lista quem já excluiu a própria conta; desativar é outra coisa.
+  if (!target.account_deleted_at) return { error: "Só é possível remover da lista quem excluiu a própria conta." };
+
+  const { error } = await createAdminClient().from("members").update({ hidden_at: new Date().toISOString() }).eq("id", memberId).eq("org_id", me.org.id);
+  if (error) return { error: "Não foi possível remover. Tente novamente." };
+
+  revalidatePath("/equipe");
+  return { success: "Removido da lista. O histórico de relatórios foi mantido." };
+}
+
 const teamSchema = z.object({
   name: z.string().trim().min(2, "Nome muito curto.").max(80),
   divisionId: z.string().optional(),
