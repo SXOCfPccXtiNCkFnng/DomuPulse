@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
 
   const { data: org } = await admin
     .from("organizations")
-    .select("id, name")
+    .select("id, name, suspended_at")
     .eq("asaas_subscription_id", subscriptionId)
     .maybeSingle();
   if (!org) {
@@ -102,7 +102,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const { error } = await admin.from("organizations").update({ status }).eq("id", org.id);
+  // Conta suspensa à mão (ou por estorno) não volta por pagamento atrasado que
+  // chegue depois: só "Liberar acesso" no painel interno reabre. Estorno e
+  // chargeback, esses sim, continuam valendo (mantêm a conta suspensa).
+  const moneyBack = MONEY_BACK.has(body.event);
+  if (org.suspended_at && !moneyBack) {
+    logger.info("webhook.asaas", { message: `Evento ${body.event} ignorado: ${org.name} está suspensa`, orgId: org.id });
+    await recordHeartbeat("webhook.asaas", { ok: true, result: { event: body.event, suspended: true } });
+    return NextResponse.json({ ok: true, suspended: true });
+  }
+
+  const patch = moneyBack ? { status, suspended_at: new Date().toISOString() } : { status };
+  const { error } = await admin.from("organizations").update(patch).eq("id", org.id);
   if (error) {
     logger.error("webhook.asaas", { message: describeError(error), orgId: org.id });
     await recordHeartbeat("webhook.asaas", { ok: false, error: describeError(error) });

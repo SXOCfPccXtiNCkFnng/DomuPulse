@@ -37,16 +37,15 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   const parsed = signInSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
 
-  // Por IP contra varredura, por e-mail contra força bruta numa conta só.
+  // Limite por IP (do próprio chamador) e captcha vêm antes do limite por
+  // e-mail: senão qualquer um tranca o login de outra pessoa só repetindo o
+  // e-mail dela, sem nem resolver o captcha. Só conta no e-mail quem passou.
   const ip = await clientIp();
-  for (const [key, limit] of [
-    [`login:ip:${ip}`, 30],
-    [`login:email:${parsed.data.email}`, 8],
-  ] as const) {
-    const check = await rateLimit(key, limit, 15 * 60);
-    if (!check.ok) return { error: tooManyAttempts(check.retryAfterSec), values };
-  }
+  const ipCheck = await rateLimit(`login:ip:${ip}`, 30, 15 * 60);
+  if (!ipCheck.ok) return { error: tooManyAttempts(ipCheck.retryAfterSec), values };
   if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
+  const emailCheck = await rateLimit(`login:email:${parsed.data.email}`, 8, 15 * 60);
+  if (!emailCheck.ok) return { error: tooManyAttempts(emailCheck.retryAfterSec), values };
 
   const supabase = await createClient();
   const { data: signedIn, error } = await supabase.auth.signInWithPassword(parsed.data);
@@ -238,15 +237,14 @@ export async function requestPasswordReset(_: FormState, formData: FormData): Pr
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
   const { email } = parsed.data;
 
+  // Captcha antes do limite por e-mail: senão alguém bloqueia a recuperação
+  // de senha de outra pessoa só repetindo o e-mail dela.
   const ip = await clientIp();
-  for (const [key, limit] of [
-    [`reset:ip:${ip}`, 10],
-    [`reset:email:${email}`, 3],
-  ] as const) {
-    const check = await rateLimit(key, limit, 60 * 60);
-    if (!check.ok) return { error: tooManyAttempts(check.retryAfterSec), values };
-  }
+  const ipCheck = await rateLimit(`reset:ip:${ip}`, 10, 60 * 60);
+  if (!ipCheck.ok) return { error: tooManyAttempts(ipCheck.retryAfterSec), values };
   if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
+  const emailCheck = await rateLimit(`reset:email:${email}`, 3, 60 * 60);
+  if (!emailCheck.ok) return { error: tooManyAttempts(emailCheck.retryAfterSec), values };
 
   // O link sai pelo nosso e-mail, com a marca do Pulse. E-mail inexistente
   // recebe a mesma resposta, para não revelar quem tem conta.

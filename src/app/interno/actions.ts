@@ -62,7 +62,8 @@ export async function extendTrial(orgId: string, days: number) {
 export async function grantAccess(orgId: string) {
   const { userId } = await requirePlatformAdmin();
   if (!z.uuid().safeParse(orgId).success) return;
-  await createAdminClient().from("organizations").update({ status: "active" }).eq("id", orgId);
+  // Liberar limpa a suspensão: a partir daqui o webhook volta a mandar.
+  await createAdminClient().from("organizations").update({ status: "active", suspended_at: null }).eq("id", orgId);
   await audit(userId, orgId, "grant_access", {});
   revalidatePath("/interno");
 }
@@ -94,7 +95,8 @@ export async function setMonthlyPrice(_: FormState, formData: FormData): Promise
 export async function suspendAccess(orgId: string) {
   const { userId } = await requirePlatformAdmin();
   if (!z.uuid().safeParse(orgId).success) return;
-  await createAdminClient().from("organizations").update({ status: "canceled" }).eq("id", orgId);
+  // Suspensão "pegajosa": o webhook não reativa por um pagamento atrasado.
+  await createAdminClient().from("organizations").update({ status: "canceled", suspended_at: new Date().toISOString() }).eq("id", orgId);
   await audit(userId, orgId, "suspend_access", {});
   revalidatePath("/interno");
 }

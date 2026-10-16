@@ -67,8 +67,12 @@ export async function createInvoice(_: FormState, formData: FormData): Promise<F
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
   const v = parsed.data;
 
-  // O arquivo precisa ser deste corretor, na pasta dele, e já ter chegado.
-  if (!v.filePath.startsWith(`${me.org.id}/${me.id}/`)) return { error: "Arquivo inválido. Anexe de novo." };
+  // O arquivo precisa ser deste corretor, na pasta dele, e já ter chegado. O
+  // caminho tem que bater exatamente com o formato emitido por
+  // prepareInvoiceUpload: nada de "../" ou segmentos extras apontando para
+  // outra empresa.
+  const expected = new RegExp(`^${me.org.id}/${me.id}/[0-9a-f-]{36}\\.(pdf|xml|jpg|png)$`);
+  if (!expected.test(v.filePath)) return { error: "Arquivo inválido. Anexe de novo." };
   const admin = createAdminClient();
   const { error: fileError } = await admin.storage.from(BUCKET).createSignedUrl(v.filePath, 30);
   if (fileError) return { fieldErrors: { filePath: "O arquivo não chegou. Anexe de novo." } };

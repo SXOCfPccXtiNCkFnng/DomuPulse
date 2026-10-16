@@ -5,14 +5,15 @@ import { after } from "next/server";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/auth";
 import { sendDigestEmailChangedEmail } from "@/lib/email-templates";
-import { sendToUsers } from "@/lib/push";
+import { isPushEndpoint, sendToUsers } from "@/lib/push";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { emailSchema, fullNameSchema, type FormState } from "@/lib/validation";
 
 const subscriptionSchema = z.object({
-  endpoint: z.url().startsWith("https://").max(1000),
+  // Só endpoints dos serviços de push dos navegadores (evita SSRF).
+  endpoint: z.url().max(1000).refine(isPushEndpoint, "Endpoint de push inválido."),
   keys: z.object({
     p256dh: z.string().min(20).max(200),
     auth: z.string().min(8).max(100),
@@ -24,9 +25,18 @@ export async function savePushSubscription(input: unknown, userAgent: string) {
   const parsed = subscriptionSchema.safeParse(input);
   if (!parsed.success) return { ok: false };
 
+  const limit = await rateLimit(`push-sub:${me.userId}`, 30, 60 * 60);
+  if (!limit.ok) return { ok: false };
+
   // O mesmo aparelho pode trocar de usuário (celular compartilhado). O
   // endpoint passa a pertencer a quem está logado agora.
   const admin = createAdminClient();
+  // Teto de inscrições por usuário: um atacante não enche a tabela.
+  const { count } = await admin.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", me.userId);
+  if ((count ?? 0) >= 20) {
+    const { data: oldest } = await admin.from("push_subscriptions").select("endpoint").eq("user_id", me.userId).order("created_at").limit(1).maybeSingle();
+    if (oldest) await admin.from("push_subscriptions").delete().eq("endpoint", oldest.endpoint);
+  }
   const { error } = await admin.from("push_subscriptions").upsert(
     {
       user_id: me.userId,
@@ -48,6 +58,8 @@ export async function removePushSubscription(endpoint: string) {
 
 export async function sendTestNotification() {
   const me = await getCurrentMember();
+  const limit = await rateLimit(`push-test:${me.userId}`, 10, 60 * 60);
+  if (!limit.ok) return { sent: 0 };
   const { sent } = await sendToUsers([me.userId], {
     title: "Tudo certo",
     body: "Você vai receber os lembretes de relatório neste aparelho.",

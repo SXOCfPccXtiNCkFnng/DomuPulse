@@ -49,10 +49,17 @@ export async function rateLimit(key: string, limit: number, windowSec: number): 
   }
 }
 
-// Na Vercel, o primeiro IP de x-forwarded-for é o do visitante.
+// IP do visitante. x-forwarded-for é enviado pelo cliente e pode ser forjado
+// (burlaria o limite por IP e sujaria o log LGPD); por isso usamos primeiro os
+// cabeçalhos que a própria Vercel define, e só caímos no x-forwarded-for sem elas.
 export async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || "desconhecido";
+  return (
+    h.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "desconhecido"
+  );
 }
 
 export function tooManyAttempts(retryAfterSec: number) {

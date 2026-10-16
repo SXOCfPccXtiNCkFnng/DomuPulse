@@ -91,6 +91,14 @@ async function createInvite(
     return { ok: false, error: "Não foi possível enviar o convite. Tente novamente." };
   }
 
+  // O generateLink pode devolver um usuário que já existe (ex.: convidado de
+  // outra empresa, ainda sem confirmar). Se ele já é membro em algum lugar,
+  // não é um usuário novo nosso: recusa sem apagar nada — senão o rollback
+  // abaixo apagaria o usuário da outra empresa.
+  const { data: already } = await admin.from("members").select("id").eq("user_id", invited.user.id).maybeSingle();
+  if (already) return { ok: false, field: "email", error: "Este e-mail já tem conta no Pulse." };
+  const isNewUser = Date.now() - Date.parse(invited.user.created_at) < 60_000;
+
   const { error: memberError } = await admin.from("members").insert({
     org_id: me.org.id,
     user_id: invited.user.id,
@@ -100,7 +108,7 @@ async function createInvite(
     division_id: input.divisionId,
   });
   if (memberError) {
-    await admin.auth.admin.deleteUser(invited.user.id);
+    if (isNewUser) await admin.auth.admin.deleteUser(invited.user.id);
     logger.error("team.invite_member", { message: describeError(memberError), orgId: me.org.id });
     return { ok: false, error: "Não foi possível cadastrar o membro. Tente novamente." };
   }
@@ -115,7 +123,7 @@ async function createInvite(
   });
   if (!sent.ok) {
     // Sem e-mail o convite não serve: desfaz para poder tentar de novo.
-    await admin.auth.admin.deleteUser(invited.user.id);
+    if (isNewUser) await admin.auth.admin.deleteUser(invited.user.id);
     return { ok: false, error: "Não foi possível enviar o e-mail de convite. Tente novamente em instantes." };
   }
   return { ok: true };

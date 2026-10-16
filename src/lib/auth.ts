@@ -121,8 +121,13 @@ export async function requireActivatedMember() {
   return member;
 }
 
-/** A organização pode lançar dados? Assinatura em dia ou acesso gratuito valendo. */
+/**
+ * A organização pode lançar dados? Só com a assinatura ativa ou o acesso
+ * gratuito valendo. Fatura vencida (past_due) e cancelada ficam só para
+ * consulta — nem o administrador nem a equipe lançam até pagar. O Asaas avisa
+ * antes de vencer; ao pagar, o webhook reativa.
+ */
 export function orgCanWrite(org: Pick<CurrentMember["org"], "status" | "trialEndsAt">) {
-  if (org.status === "active" || org.status === "past_due") return true;
+  if (org.status === "active") return true;
   return org.status === "trialing" && Date.parse(org.trialEndsAt) > Date.now();
 }

@@ -71,6 +71,9 @@ describe("redirecionamento depois do login", () => {
     ["//evil.com", "/painel"],
     ["/\\evil.com", "/painel"],
     ["/\t/evil.com", "/painel"],
+    ["/.//evil.com", "/painel"],
+    ["/..//evil.com", "/painel"],
+    ["/%2e//evil.com", "/painel"],
     ["https://evil.com", "/painel"],
     ["javascript:alert(1)", "/painel"],
   ])("%s vira %s", (input, expected) => {

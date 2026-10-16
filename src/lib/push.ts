@@ -12,6 +12,21 @@ export type PushPayload = {
   tag?: string;
 };
 
+// Só os serviços de push dos navegadores. Sem isso, o endpoint seria qualquer
+// https:// e o servidor faria requisições a hosts arbitrários (SSRF cego).
+const PUSH_HOSTS = ["fcm.googleapis.com", "android.googleapis.com", ".push.services.mozilla.com", ".notify.windows.com", ".push.apple.com"];
+
+export function isPushEndpoint(url: string) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    return PUSH_HOSTS.some((h) => (h.startsWith(".") ? host.endsWith(h) : host === h));
+  } catch {
+    return false;
+  }
+}
+
 /** As chaves VAPID estão no ambiente? Sem elas não há como mandar push. */
 export function pushConfigured() {
   try {
@@ -46,7 +61,7 @@ export async function sendToUsers(userIds: string[], payload: PushPayload) {
   let sent = 0;
 
   await Promise.all(
-    (subs ?? []).map(async (s) => {
+    (subs ?? []).filter((s) => isPushEndpoint(s.endpoint)).map(async (s) => {
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth_key } },
