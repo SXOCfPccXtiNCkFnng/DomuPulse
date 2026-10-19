@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-script";
+import { ServiceWorkerRegister } from "@/components/sw-register";
 import "./globals.css";
 
 const inter = Inter({
@@ -18,12 +19,17 @@ export const metadata: Metadata = {
   description:
     "O pulso da sua operação imobiliária em tempo real. Relatórios por horário, funil, ranking e agenda da equipe em um só lugar.",
   applicationName: "Domu Pulse",
+  manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "Pulse", statusBarStyle: "black-translucent" },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
+  },
   formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f4f6fb",
+  themeColor: "#0f2a5f",
   viewportFit: "cover",
 };
 
@@ -38,7 +44,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ServiceWorkerRegister />
+        {children}
+      </body>
     </html>
   );
 }

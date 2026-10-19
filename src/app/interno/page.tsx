@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, Building2, CircleCheck, CircleX, LayoutDashboard, Stethoscope, Tag, TriangleAlert } from "lucide-react";
+import { AlertTriangle, Building2, CircleCheck, CircleX, LayoutDashboard, Stethoscope, Tag, TriangleAlert, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
@@ -8,23 +8,34 @@ import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { BrandMark } from "@/components/ui/logo";
 import { StatTile } from "@/components/live/viz";
-import { loadAlerts, loadCoupons, loadHealth, loadOrgs, loadOverview, type HealthStatus, type OrgStatusView } from "@/lib/interno";
+import {
+  getSignupAlertEmails,
+  loadAlerts,
+  loadCoupons,
+  loadHealth,
+  loadOrgs,
+  loadOverview,
+  loadPayingClients,
+  type HealthStatus,
+  type OrgStatusView,
+} from "@/lib/interno";
 import { formatMoney, formatNumber } from "@/lib/metrics";
 import { platformAdminSession } from "@/lib/platform-admin";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { formatDate } from "@/lib/time";
 import { extendTrial, grantAccess, resolveAlertsBySource, setAlertResolved, setCouponActive, suspendAccess } from "./actions";
-import { ConfirmButton, CouponForm, PriceForm } from "./client";
+import { ConfirmButton, CouponForm, PriceForm, SignupAlertEmailsCard } from "./client";
 
 // Título neutro: a página não se anuncia para quem não tem acesso.
 export const metadata: Metadata = { title: "Pulse", robots: { index: false, follow: false } };
 
 const TABS = [
   { id: "visao", label: "Visão geral", Icon: LayoutDashboard },
-  { id: "saude", label: "Saúde do sistema", Icon: Stethoscope },
-  { id: "erros", label: "Erros", Icon: AlertTriangle },
+  { id: "clientes", label: "Pessoas pagantes", Icon: Users },
   { id: "empresas", label: "Empresas", Icon: Building2 },
   { id: "comercial", label: "Comercial", Icon: Tag },
+  { id: "saude", label: "Saúde do sistema", Icon: Stethoscope },
+  { id: "erros", label: "Erros", Icon: AlertTriangle },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -85,10 +96,11 @@ async function Gate({ searchParams }: { searchParams: PageProps<"/interno">["sea
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {tab === "visao" ? <Overview /> : null}
-        {tab === "saude" ? <Health checks={health} /> : null}
-        {tab === "erros" ? <Errors status={one(sp.status) === "resolvidos" ? "resolved" : "open"} level={one(sp.nivel)} /> : null}
+        {tab === "clientes" ? <ClientsTab search={one(sp.q).slice(0, 80)} status={one(sp.situacao)} /> : null}
         {tab === "empresas" ? <Orgs search={one(sp.q).slice(0, 80)} /> : null}
         {tab === "comercial" ? <Commercial /> : null}
+        {tab === "saude" ? <Health checks={health} /> : null}
+        {tab === "erros" ? <Errors status={one(sp.status) === "resolvidos" ? "resolved" : "open"} level={one(sp.nivel)} /> : null}
       </main>
     </div>
   );
@@ -256,6 +268,116 @@ const STATUS: Record<OrgStatusView, { label: string; tone: "neutral" | "brand" |
 
 function StatusBadge({ status }: { status: OrgStatusView }) {
   return <Badge tone={STATUS[status].tone}>{STATUS[status].label}</Badge>;
+}
+
+async function ClientsTab({ search, status }: { search: string; status: string }) {
+  const [clients, alertEmails] = await Promise.all([loadPayingClients(search), getSignupAlertEmails()]);
+  const filtered = status ? clients.filter((c) => c.view === status) : clients;
+
+  const filterBtn = (label: string, value: string) => {
+    const active = (status || "") === value;
+    const url = `/interno?aba=clientes${value ? `&situacao=${value}` : ""}${search ? `&q=${encodeURIComponent(search)}` : ""}`;
+    return (
+      <Link href={url} className={buttonClass(active ? "primary" : "secondary", "sm")}>
+        {label}
+      </Link>
+    );
+  };
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="min-w-0">
+        <CardHeader
+          title="Pessoas cadastradas (Clientes pagantes)"
+          description={`${filtered.length} ${filtered.length === 1 ? "titular cadastrado" : "titulares cadastrados"} (exclui corretores e membros convidados)`}
+        />
+        <form className="flex gap-2 px-5 pt-4 sm:px-6" action="/interno">
+          <input type="hidden" name="aba" value="clientes" />
+          {status ? <input type="hidden" name="situacao" value={status} /> : null}
+          <input
+            name="q"
+            defaultValue={search}
+            placeholder="Buscar por nome, e-mail, telefone ou imobiliária"
+            className="h-10 w-full max-w-md rounded-xl border border-line bg-surface-2 px-3 text-sm outline-none focus:border-ink"
+          />
+          <button type="submit" className={buttonClass("secondary", "md")}>
+            Buscar
+          </button>
+        </form>
+
+        <div className="flex flex-wrap gap-2 px-5 pt-3 sm:px-6">
+          {filterBtn("Todos", "")}
+          {filterBtn("Ativos", "active")}
+          {filterBtn("Acesso gratuito", "trial")}
+          {filterBtn("Aguardando ativação", "trial_expired")}
+          {filterBtn("Fatura em aberto", "past_due")}
+          {filterBtn("Cancelados", "canceled")}
+        </div>
+
+        <ul className="mt-4 divide-y divide-line border-t border-line">
+          {filtered.length === 0 ? (
+            <li className="px-6 py-12 text-center text-sm text-muted">Nenhuma pessoa pagante encontrada.</li>
+          ) : null}
+          {filtered.map((client) => {
+            const cleanPhone = client.phone ? client.phone.replace(/\D/g, "") : "";
+            const waUrl = cleanPhone ? `https://wa.me/55${cleanPhone}` : null;
+            return (
+              <li key={client.id} className="flex flex-col gap-3 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-ink">{client.fullName}</span>
+                    <Badge tone="brand">Titular</Badge>
+                    <StatusBadge status={client.view} />
+                    {client.couponCode ? <Badge>Cupom {client.couponCode}</Badge> : null}
+                  </div>
+                  <p className="mt-1 text-sm text-ink-2">
+                    <span className="font-medium">{client.orgName}</span>
+                    {client.email ? ` • ${client.email}` : " • sem e-mail"}
+                    {client.phone ? ` • WhatsApp ${client.phone}` : ""}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {client.teamSize} {client.teamSize === 1 ? "pessoa na equipe" : "pessoas na equipe"}
+                    {client.priceCents ? ` • Assinatura: ${formatMoney(client.priceCents)}/mês` : ""} • Cadastrado em{" "}
+                    {formatDate(client.createdAt.slice(0, 10))}
+                    {client.view === "trial" || client.view === "trial_expired"
+                      ? ` • Teste até ${formatDate(client.trialEndsAt.slice(0, 10))}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {waUrl ? (
+                    <a
+                      href={waUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={buttonClass("secondary", "sm")}
+                    >
+                      WhatsApp
+                    </a>
+                  ) : null}
+                  {client.email ? (
+                    <a href={`mailto:${client.email}`} className={buttonClass("ghost", "sm")}>
+                      E-mail
+                    </a>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+
+      <div className="flex flex-col gap-5 self-start">
+        <Card>
+          <CardHeader
+            title="Alertas de novos cadastros"
+            description="Receba avisos por e-mail sempre que um novo cliente se cadastrar"
+          />
+          <SignupAlertEmailsCard initialEmails={alertEmails} />
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 async function Orgs({ search }: { search: string }) {

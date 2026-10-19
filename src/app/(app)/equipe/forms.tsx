@@ -284,8 +284,8 @@ function MemberEditForm({
   );
 }
 
-/** Renomear e excluir equipe. Excluir só aparece com a equipe vazia. */
-export function TeamActions({ teamId, name, hasPeople }: { teamId: string; name: string; hasPeople: boolean }) {
+/** Renomear e excluir equipe. O dono sempre vê "Excluir"; o superintendente só com a equipe vazia. */
+export function TeamActions({ teamId, name, hasPeople, isOwner }: { teamId: string; name: string; hasPeople: boolean; isOwner: boolean }) {
   const [mode, setMode] = useState<"idle" | "rename" | "delete">("idle");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -343,7 +343,7 @@ export function TeamActions({ teamId, name, hasPeople }: { teamId: string; name:
       <Button size="sm" variant="ghost" onClick={() => setMode("rename")}>
         Renomear
       </Button>
-      {!hasPeople ? (
+      {isOwner || !hasPeople ? (
         <Button size="sm" variant="ghost" onClick={() => setMode("delete")}>
           Excluir
         </Button>

@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { LEGAL_DOCS_VERSION } from "@/lib/legal";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/lib/roles";
 import { normalizeSlot } from "@/lib/time";
@@ -73,7 +74,20 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
     .eq("active", true)
     .maybeSingle<MemberRow>();
 
-  if (!data) redirect("/entrar?erro=sem-acesso");
+  if (!data) {
+    const admin = createAdminClient();
+    const { data: member } = await admin
+      .from("members")
+      .select("id, active, account_deleted_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (member && !member.active && !member.account_deleted_at) {
+      redirect("/entrar?erro=desativado");
+    }
+
+    redirect("/entrar?erro=sem-acesso");
+  }
 
   return {
     id: data.id,

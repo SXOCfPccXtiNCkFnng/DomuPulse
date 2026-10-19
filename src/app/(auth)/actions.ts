@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
-import { sendPasswordChangedEmail, sendPasswordResetEmail, sendTeamWelcomeEmail, sendWelcomeEmail } from "@/lib/email-templates";
+import { sendNewSignupAlert, sendPasswordChangedEmail, sendPasswordResetEmail, sendTeamWelcomeEmail, sendWelcomeEmail } from "@/lib/email-templates";
 import { siteUrl } from "@/lib/email";
 import { recordAccess } from "@/lib/access-log";
 import { CAPTCHA_ERROR, verifyCaptcha } from "@/lib/captcha";
@@ -52,10 +52,42 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
 
   if (error) {
     if (error.status === 429) return { error: "Muitas tentativas. Aguarde alguns minutos e tente de novo.", values };
+
+    // Usuário bloqueado/banido no Supabase Auth por ter sido desativado na equipe
+    const isBanned =
+      error.message?.toLowerCase().includes("banned") ||
+      (error as { code?: string }).code === "user_banned";
+
+    if (isBanned) {
+      return {
+        error: "Sua conta foi desativada. Entre em contato com o administrador da sua equipe.",
+        values,
+      };
+    }
+
     // Mensagem única para não revelar se o e-mail existe.
     return { error: "E-mail ou senha incorretos.", values };
   }
-  if (signedIn.user) await recordAccess(signedIn.user.id, "login", ip);
+
+  if (signedIn.user) {
+    // Confere se o membro da equipe foi desativado
+    const admin = createAdminClient();
+    const { data: member } = await admin
+      .from("members")
+      .select("id, active, account_deleted_at")
+      .eq("user_id", signedIn.user.id)
+      .maybeSingle();
+
+    if (member && !member.active && !member.account_deleted_at) {
+      await supabase.auth.signOut();
+      return {
+        error: "Sua conta foi desativada. Entre em contato com o administrador da sua equipe.",
+        values,
+      };
+    }
+
+    await recordAccess(signedIn.user.id, "login", ip);
+  }
 
   redirect(safeNext(formData.get("proximo")));
 }
@@ -144,6 +176,7 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
   // Envia depois da resposta, para o cadastro não esperar o provedor de e-mail.
   await recordAccess(user.id, "signup", ip);
   after(() => sendWelcomeEmail({ to: email, fullName, orgName }));
+  after(() => sendNewSignupAlert({ fullName, email, orgName, phone: whatsapp, ip }));
 
   redirect("/entrar?cadastro=ok");
 }
@@ -248,11 +281,20 @@ export async function requestPasswordReset(_: FormState, formData: FormData): Pr
 
   // O link sai pelo nosso e-mail, com a marca do Pulse. E-mail inexistente
   // recebe a mesma resposta, para não revelar quem tem conta.
-  const { data, error } = await createAdminClient().auth.admin.generateLink({ type: "recovery", email });
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email });
   const hash = data?.properties?.hashed_token;
-  if (!error && hash) {
-    const link = siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=recovery`);
-    after(() => sendPasswordResetEmail({ to: email, link }));
+  if (!error && hash && data.user) {
+    const { data: member } = await admin
+      .from("members")
+      .select("active, account_deleted_at")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+
+    if (!member || (member.active && !member.account_deleted_at)) {
+      const link = siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=recovery`);
+      after(() => sendPasswordResetEmail({ to: email, link }));
+    }
   }
 
   return RESET_SENT;
@@ -264,9 +306,11 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
   const userId = auth?.claims?.sub;
   if (!userId) return { error: "Seu link expirou. Peça um novo link de acesso." };
 
-  // Quem ainda não aceitou os termos é decidido pelo banco, não pelo campo
-  // escondido do formulário: senão bastava mandar "0" para pular o aceite.
-  const { data: member } = await createAdminClient().from("members").select("terms_accepted_at").eq("user_id", userId).maybeSingle();
+  const { data: member } = await createAdminClient().from("members").select("terms_accepted_at, active, account_deleted_at").eq("user_id", userId).maybeSingle();
+  if (member && !member.active && !member.account_deleted_at) {
+    await supabase.auth.signOut();
+    return { error: "Sua conta foi desativada. Entre em contato com o administrador da sua equipe." };
+  }
   const needsTerms = Boolean(member) && !member?.terms_accepted_at;
 
   const parsed = z

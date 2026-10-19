@@ -17,6 +17,7 @@ const initial: FormState = {};
 
 const QUERY_ERRORS: Record<string, string> = {
   "sem-acesso": "Sua conta não está vinculada a nenhuma equipe ativa. Fale com o administrador.",
+  "desativado": "Sua conta foi desativada. Entre em contato com o administrador da sua equipe.",
   "link-invalido": "Este link expirou ou já foi usado. Peça um novo.",
 };
 

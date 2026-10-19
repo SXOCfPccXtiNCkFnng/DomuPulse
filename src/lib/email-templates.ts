@@ -374,3 +374,76 @@ export function sendOpsAlertEmail(input: { to: string; source: string; message: 
     { silent: true },
   );
 }
+
+export async function sendNewSignupAlert(input: {
+  fullName: string;
+  email: string;
+  orgName: string;
+  phone: string;
+  ip?: string;
+}) {
+  const { getSignupAlertEmails } = await import("@/lib/interno");
+  const recipients = await getSignupAlertEmails();
+  if (!recipients.length) return;
+
+  const url = siteUrl("/interno?aba=clientes");
+  const cleanPhone = input.phone.replace(/\D/g, "");
+  const waUrl = cleanPhone ? `https://wa.me/55${cleanPhone}` : null;
+  const now = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
+
+  const bodyHtml =
+    p("Um novo cliente contratante acabou de se cadastrar no Domu Pulse:") +
+    `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0;width:100%;border-collapse:collapse;font-size:14px;line-height:22px">
+      <tr>
+        <td style="padding:6px 0;color:#666;width:120px"><strong>Nome:</strong></td>
+        <td style="padding:6px 0;color:#111"><strong>${escapeHtml(input.fullName)}</strong></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#666"><strong>Imobiliária:</strong></td>
+        <td style="padding:6px 0;color:#111">${escapeHtml(input.orgName)}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#666"><strong>E-mail:</strong></td>
+        <td style="padding:6px 0;color:#111"><a href="mailto:${escapeHtml(input.email)}" style="color:#0259f3">${escapeHtml(input.email)}</a></td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#666"><strong>WhatsApp:</strong></td>
+        <td style="padding:6px 0;color:#111">${waUrl ? `<a href="${escapeHtml(waUrl)}" style="color:#0259f3">${escapeHtml(input.phone)} (abrir WhatsApp)</a>` : escapeHtml(input.phone)}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#666"><strong>Data/Hora:</strong></td>
+        <td style="padding:6px 0;color:#111">${escapeHtml(now)}</td>
+      </tr>
+    </table>`;
+
+  const text = `Novo cadastro no Domu Pulse!\n\nNome: ${input.fullName}\nImobiliária: ${input.orgName}\nE-mail: ${input.email}\nWhatsApp: ${input.phone}${waUrl ? ` (${waUrl})` : ""}\nData/Hora: ${now}\n\nVer no painel: ${url}`;
+
+  await Promise.allSettled(
+    recipients.map((to) =>
+      sendEmail(
+        {
+          to,
+          subject: `[Novo Cliente] ${input.fullName} cadastrou a imobiliária ${input.orgName}`,
+          html: brandedEmail({
+            eyebrow: "Novo Cliente",
+            heading: "Novo cadastro no Pulse!",
+            intro: `${input.fullName} acabou de criar a conta da ${input.orgName}.`,
+            preheader: `Novo cadastro: ${input.fullName} (${input.orgName})`,
+            bodyHtml,
+            cta: { label: "Abrir painel interno", url },
+          }),
+          text,
+        },
+        { silent: true },
+      ),
+    ),
+  );
+}
+

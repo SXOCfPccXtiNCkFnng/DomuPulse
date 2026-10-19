@@ -90,7 +90,7 @@ export default async function EquipePage() {
               <CardHeader
                 title={team.name}
                 description={plural(people.filter((p) => p.active).length)}
-                action={canEditTeams ? <TeamActions teamId={team.id} name={team.name} hasPeople={people.length > 0} /> : null}
+                action={canEditTeams ? <TeamActions teamId={team.id} name={team.name} hasPeople={people.length > 0} isOwner={me.role === "owner"} /> : null}
               />
               <ul className="mt-3 divide-y divide-line border-t border-line">
                 {people.length === 0 ? <li className="px-6 py-5 text-sm text-muted">Ninguém nesta equipe ainda.</li> : null}

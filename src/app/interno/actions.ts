@@ -5,7 +5,8 @@ import { z } from "zod";
 import { describeError } from "@/lib/logger";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { FormState } from "@/lib/validation";
+import { getSignupAlertEmails } from "@/lib/interno";
+import { emailSchema, type FormState } from "@/lib/validation";
 
 // Toda ação confere a lista de administradores de novo: o botão na tela
 // não é proteção, a ação é.
@@ -148,3 +149,47 @@ export async function setCouponActive(code: string, active: boolean) {
   await audit(userId, null, active ? "enable_coupon" : "disable_coupon", { code });
   revalidatePath("/interno");
 }
+
+const alertEmailSchema = z.object({
+  email: emailSchema,
+});
+
+export async function addSignupAlertEmail(_: FormState, formData: FormData): Promise<FormState> {
+  const { userId } = await requirePlatformAdmin();
+  const rawEmail = String(formData.get("email") ?? "").trim().toLowerCase();
+  const parsed = alertEmailSchema.safeParse({ email: rawEmail });
+  if (!parsed.success) {
+    return { fieldErrors: { email: parsed.error.issues[0].message } };
+  }
+  const emailToAdd = parsed.data.email;
+  const current = await getSignupAlertEmails();
+  if (current.includes(emailToAdd)) {
+    return { fieldErrors: { email: "Este e-mail já está na lista de alertas." } };
+  }
+  const updated = [...current, emailToAdd];
+  const { error } = await createAdminClient()
+    .from("platform_settings")
+    .upsert({ id: true, signup_alert_emails: updated, updated_at: new Date().toISOString() });
+  if (error) return { error: describeError(error) };
+  await audit(userId, null, "add_signup_alert_email", { email: emailToAdd });
+  revalidatePath("/interno");
+  return { success: `E-mail ${emailToAdd} adicionado aos alertas.` };
+}
+
+export async function removeSignupAlertEmail(emailToRemove: string): Promise<FormState> {
+  const { userId } = await requirePlatformAdmin();
+  const emailClean = emailToRemove.trim().toLowerCase();
+  const current = await getSignupAlertEmails();
+  const updated = current.filter((e) => e !== emailClean);
+  if (updated.length === 0) {
+    return { error: "A lista de alertas precisa ter pelo menos um e-mail." };
+  }
+  const { error } = await createAdminClient()
+    .from("platform_settings")
+    .upsert({ id: true, signup_alert_emails: updated, updated_at: new Date().toISOString() });
+  if (error) return { error: describeError(error) };
+  await audit(userId, null, "remove_signup_alert_email", { email: emailClean });
+  revalidatePath("/interno");
+  return { success: `E-mail ${emailClean} removido dos alertas.` };
+}
+

@@ -65,7 +65,10 @@ export async function proxy(request: NextRequest) {
     if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") return redirectTo("/verificacao");
   }
 
-  if (signedIn && matches(path, AUTH_ROUTES)) return redirectTo("/painel");
+  if (signedIn && matches(path, AUTH_ROUTES)) {
+    if (request.nextUrl.searchParams.has("erro")) return response;
+    return redirectTo("/painel");
+  }
 
   return response;
 }

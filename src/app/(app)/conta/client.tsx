@@ -104,6 +104,29 @@ export function PushSettings({ vapidKey }: { vapidKey: string }) {
       <p className="text-sm text-ink-2">{text[state]}</p>
       {message ? <FormMessage tone={message.tone}>{message.text}</FormMessage> : null}
       <div className="flex flex-wrap gap-2">
+        {state === "needs-install" ? (
+          <div className="w-full rounded-2xl border border-brand/20 bg-brand/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand">Passo a passo no iPhone</p>
+            <ol className="mt-3 flex flex-col gap-2.5 text-xs text-ink-2">
+              <li className="flex items-center gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-brand text-[10px] font-bold text-white">1</span>
+                <span>Abra este site no <strong>Safari</strong> do iPhone</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-brand text-[10px] font-bold text-white">2</span>
+                <span>Toque no botão <strong>Compartilhar</strong> <Share className="inline size-3.5 text-brand" /> (barra inferior do Safari)</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-brand text-[10px] font-bold text-white">3</span>
+                <span>Toque em <strong>Adicionar à Tela de Início</strong> <SquarePlus className="inline size-3.5 text-brand" /></span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-brand text-[10px] font-bold text-white">4</span>
+                <span>Abra pelo ícone do Pulse na sua tela de início e ative as notificações</span>
+              </li>
+            </ol>
+          </div>
+        ) : null}
         {state === "off" ? (
           <Button onClick={enable} disabled={busy}>
             {busy ? "Ativando..." : "Ativar notificações"}

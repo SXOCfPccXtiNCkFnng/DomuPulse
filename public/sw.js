@@ -25,6 +25,7 @@ self.addEventListener("push", (event) => {
       body,
       icon: "/icons/icon-192.png",
       badge: "/icons/badge-96.png",
+      vibrate: [100, 50, 100],
       tag: typeof data.tag === "string" ? data.tag : undefined,
       renotify: Boolean(data.tag),
       data: { url },

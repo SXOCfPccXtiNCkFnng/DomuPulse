@@ -63,14 +63,14 @@ export function InviteLink({ url: initialUrl, orgName, canRegenerate = false }: 
         </Button>
         {canRegenerate ? (
           armed ? (
-            <span className="flex items-center gap-1">
-              <Button variant="danger" onClick={regenerate}>
+            <div className="flex w-full flex-wrap items-center gap-2">
+              <Button variant="danger" onClick={regenerate} className="whitespace-normal text-left">
                 Confirmar: o link atual para de funcionar
               </Button>
               <Button variant="ghost" onClick={() => setArmed(false)}>
                 Cancelar
               </Button>
-            </span>
+            </div>
           ) : (
             <Button variant="ghost" onClick={() => setArmed(true)} disabled={pending}>
               <RefreshCw className={pending ? "size-4 animate-spin" : "size-4"} />

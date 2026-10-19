@@ -158,6 +158,7 @@ export async function loadHealth(): Promise<HealthCheck[]> {
     ["ops_alerts", "fingerprint", "20261013010000_platform.sql"],
     ["system_heartbeats", "name", "20261013010000_platform.sql"],
     ["rate_limits", "key", "20261013010000_platform.sql"],
+    ["platform_settings", "signup_alert_emails", "20261019000000_signup_alert_emails.sql"],
   ];
   const results = await Promise.all(marks.map(([t, c]) => admin.from(t).select(c).limit(1)));
   const missing = marks.filter((_, i) => results[i].error);
@@ -277,3 +278,119 @@ export async function loadCoupons() {
     .order("created_at", { ascending: false });
   return data ?? [];
 }
+
+export const DEFAULT_SIGNUP_ALERT_EMAILS = ["alanfelipe1678@gmail.com"];
+
+export async function getSignupAlertEmails(): Promise<string[]> {
+  try {
+    const { data } = await createAdminClient()
+      .from("platform_settings")
+      .select("signup_alert_emails")
+      .maybeSingle();
+    const emails = data?.signup_alert_emails;
+    if (Array.isArray(emails) && emails.length > 0) {
+      const cleaned = [...new Set(emails.map((e) => String(e).trim().toLowerCase()).filter(Boolean))];
+      if (cleaned.length > 0) return cleaned;
+    }
+  } catch {
+    // Retorna lista padrão se a coluna não existir
+  }
+  return [...DEFAULT_SIGNUP_ALERT_EMAILS];
+}
+
+export type PayingClientRow = {
+  id: string;
+  userId: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  orgId: string;
+  orgName: string;
+  view: OrgStatusView;
+  status: "trialing" | "active" | "past_due" | "canceled";
+  trialEndsAt: string;
+  priceCents: number | null;
+  couponCode: string | null;
+  teamSize: number;
+  createdAt: string;
+};
+
+export async function loadPayingClients(search = ""): Promise<PayingClientRow[]> {
+  const admin = createAdminClient();
+
+  // Apenas membros com role 'owner': são os que criaram a conta e pagam (nunca os convidados)
+  const { data: owners } = await admin
+    .from("members")
+    .select("id, user_id, full_name, created_at, org_id, organizations (id, name, status, trial_ends_at, price_cents, coupon_code, contact_phone, created_at)")
+    .eq("role", "owner")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (!owners || owners.length === 0) return [];
+
+  const orgIds = owners.map((o) => o.org_id);
+
+  // Busca contagem de pessoas ativas em cada imobiliária
+  const { data: teamMembers } = await admin
+    .from("members")
+    .select("org_id")
+    .in("org_id", orgIds)
+    .eq("active", true);
+
+  const teamCounts = new Map<string, number>();
+  for (const m of teamMembers ?? []) {
+    teamCounts.set(m.org_id, (teamCounts.get(m.org_id) ?? 0) + 1);
+  }
+
+  // Busca e-mails no Supabase Auth
+  const emailMap = new Map<string, string | null>();
+  await Promise.all(
+    owners.map(async (o) => {
+      try {
+        const { data } = await admin.auth.admin.getUserById(o.user_id);
+        emailMap.set(o.user_id, data.user?.email ?? null);
+      } catch {
+        emailMap.set(o.user_id, null);
+      }
+    }),
+  );
+
+  const q = search.trim().toLowerCase();
+
+  const clients: PayingClientRow[] = [];
+  for (const o of owners) {
+    const org = o.organizations as unknown as OrgRow | null;
+    if (!org) continue;
+
+    const email = emailMap.get(o.user_id) ?? null;
+    const phone = org.contact_phone ?? null;
+
+    if (q) {
+      const matchName = o.full_name.toLowerCase().includes(q);
+      const matchOrg = org.name.toLowerCase().includes(q);
+      const matchEmail = email ? email.toLowerCase().includes(q) : false;
+      const matchPhone = phone ? phone.toLowerCase().includes(q) : false;
+      if (!matchName && !matchOrg && !matchEmail && !matchPhone) continue;
+    }
+
+    clients.push({
+      id: o.id,
+      userId: o.user_id,
+      fullName: o.full_name,
+      email,
+      phone,
+      orgId: org.id,
+      orgName: org.name,
+      view: statusView(org),
+      status: org.status,
+      trialEndsAt: org.trial_ends_at,
+      priceCents: org.price_cents,
+      couponCode: org.coupon_code,
+      teamSize: teamCounts.get(org.id) ?? 1,
+      createdAt: o.created_at || org.created_at,
+    });
+  }
+
+  return clients;
+}
+

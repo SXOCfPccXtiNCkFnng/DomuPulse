@@ -74,7 +74,11 @@ export function InvoiceBoard({
     (i) =>
       (broker === "all" || i.member_id === broker) &&
       (month === "all" || i.issued_on.startsWith(month)) &&
-      (!q || i.number.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)),
+      (!q ||
+        i.number.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q) ||
+        (i.nfse_number && i.nfse_number.toLowerCase().includes(q)) ||
+        (names[i.member_id] && names[i.member_id].toLowerCase().includes(q))),
   );
   const visible = scoped.filter((i) => status === "all" || i.status === status);
   const summary = (s: InvoiceStatus) => {
@@ -175,7 +179,7 @@ export function InvoiceBoard({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por número ou descrição"
+            placeholder="Buscar por número, código ou corretor"
             className="h-10 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-sm outline-none focus:border-ink"
           />
         </label>
@@ -385,6 +389,7 @@ function InvoiceRow({
   const issued = invoice.source !== "upload";
   const [canceling, setCanceling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Nota na fila (sistema da NFS-e fora do ar): confere de tempos em tempos
   // se a rotina de reenvio já conseguiu a autorização.
@@ -461,6 +466,44 @@ function InvoiceRow({
             {isBroker ? "" : `${brokerName}, `}emitida em {formatDate(invoice.issued_on)}
             {invoice.paid_at ? `, paga em ${formatDate(invoice.paid_at.slice(0, 10))}` : ""}
           </p>
+          {invoice.nfse_number ? (
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+              <span className="inline-flex items-center gap-1.5">
+                <span>Código de verificação:</span>
+                <span className="font-medium text-ink tabular-nums">{invoice.nfse_number}</span>
+                <button
+                  type="button"
+                  title="Copiar código de verificação"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(invoice.nfse_number!);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 1500);
+                    } catch {}
+                  }}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-muted hover:bg-surface-2 hover:text-ink transition-colors"
+                >
+                  {copiedCode ? (
+                    <>
+                      <Check className="size-3 text-brand-text" />
+                      <span className="text-brand-text">Copiado</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="size-3" />
+                      <span>Copiar</span>
+                    </>
+                  )}
+                </button>
+              </span>
+              {invoice.nfse_portal_url ? (
+                <a href={invoice.nfse_portal_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-brand-text hover:underline">
+                  <ExternalLink className="size-3" />
+                  Ver no portal
+                </a>
+              ) : null}
+            </p>
+          ) : null}
           {invoice.notes ? <p className="mt-1 text-xs text-muted">Obs.: {invoice.notes}</p> : null}
           {invoice.status === "error" && invoice.issue_error ? (
             <p className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">Motivo: {invoice.issue_error}</p>

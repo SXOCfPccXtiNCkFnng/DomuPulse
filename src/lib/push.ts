@@ -14,14 +14,23 @@ export type PushPayload = {
 
 // Só os serviços de push dos navegadores. Sem isso, o endpoint seria qualquer
 // https:// e o servidor faria requisições a hosts arbitrários (SSRF cego).
-const PUSH_HOSTS = ["fcm.googleapis.com", "android.googleapis.com", ".push.services.mozilla.com", ".notify.windows.com", ".push.apple.com"];
+const PUSH_HOSTS = [
+  "fcm.googleapis.com",
+  "android.googleapis.com",
+  ".push.services.mozilla.com",
+  "push.services.mozilla.com",
+  ".notify.windows.com",
+  "notify.windows.com",
+  ".push.apple.com",
+  "push.apple.com",
+];
 
 export function isPushEndpoint(url: string) {
   try {
     const u = new URL(url);
     if (u.protocol !== "https:") return false;
     const host = u.hostname.toLowerCase();
-    return PUSH_HOSTS.some((h) => (h.startsWith(".") ? host.endsWith(h) : host === h));
+    return PUSH_HOSTS.some((h) => (h.startsWith(".") ? host.endsWith(h) || host === h.slice(1) : host === h));
   } catch {
     return false;
   }

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { SideNav, TabBar } from "@/components/app-nav";
 import { NotificationBell } from "@/components/notification-bell";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { PwaPrompt } from "@/components/pwa-prompt";
 import { ThemeSwitcher, ThemeToggle } from "@/components/theme";
 import { BrandMark, Logo } from "@/components/ui/logo";
 import { getCurrentMember, ROLE_LABEL } from "@/lib/auth";
@@ -58,6 +59,8 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
           <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
         </main>
       </div>
+
+      <PwaPrompt />
 
       <Suspense>
         <MemberTabBar />
