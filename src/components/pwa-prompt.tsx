@@ -20,6 +20,7 @@ type BeforeInstallPromptEvent = Event & {
 
 export function PwaPrompt() {
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -32,19 +33,30 @@ export function PwaPrompt() {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushSuccess, setPushSuccess] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    // 1. Detecção do modo standalone (app já instalado)
+    // 1. Detecção rigorosa de dispositivo móvel (celular/tablet)
+    const ua = window.navigator.userAgent;
+    const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i;
+    const isAppleMobile =
+      /iPad|iPhone|iPod/.test(ua) ||
+      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
+
+    const isCellPhoneOrTablet = mobileRegex.test(ua) || isAppleMobile;
+
+    // Se for computador/desktop, não exibe nada
+    if (!isCellPhoneOrTablet) {
+      return;
+    }
+
+    setIsMobile(true);
+    setIsIos(isAppleMobile);
+
+    // 2. Detecção do modo standalone (app já instalado)
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsStandalone(standalone);
-
-    // 2. Detecção de iPhone/iPad
-    const ua = window.navigator.userAgent;
-    const isAppleMobile =
-      /iPad|iPhone|iPod/.test(ua) ||
-      (window.navigator.platform === "MacIntel" && window.navigator.maxTouchPoints > 1);
-    setIsIos(isAppleMobile);
 
     // 3. Checagem de dispensa temporária (3 dias)
     const dismissedUntil = localStorage.getItem("pwa_prompt_dismissed_until");
@@ -62,7 +74,7 @@ export function PwaPrompt() {
       }).catch(() => {});
     }
 
-    // 5. Captura do evento de instalação no Android/Chrome
+    // 5. Captura do evento de instalação no Android/Chrome mobile
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -75,8 +87,9 @@ export function PwaPrompt() {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
     };
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  if (!mounted || dismissed) return null;
+  if (!mounted || !isMobile || dismissed) return null;
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -132,7 +145,7 @@ export function PwaPrompt() {
       return (
         <aside
           aria-label="Ativar notificações"
-          className="fixed bottom-20 left-4 right-4 z-40 mx-auto max-w-lg rounded-2xl border border-line bg-surface p-4 shadow-xl backdrop-blur-xl sm:bottom-6 sm:left-auto sm:right-6"
+          className="fixed bottom-20 left-4 right-4 z-40 mx-auto max-w-lg rounded-2xl border border-line bg-surface p-4 shadow-xl backdrop-blur-xl lg:hidden sm:bottom-6 sm:left-auto sm:right-6"
         >
           <div className="flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand">
@@ -175,7 +188,7 @@ export function PwaPrompt() {
     <>
       <aside
         aria-label="Instalar aplicativo"
-        className="fixed bottom-20 left-3 right-3 z-40 mx-auto max-w-md rounded-2xl border border-brand/20 bg-surface/95 p-4 shadow-2xl backdrop-blur-xl sm:bottom-6 sm:left-auto sm:right-6"
+        className="fixed bottom-20 left-3 right-3 z-40 mx-auto max-w-md rounded-2xl border border-brand/20 bg-surface/95 p-4 shadow-2xl backdrop-blur-xl lg:hidden sm:bottom-6 sm:left-auto sm:right-6"
       >
         <div className="flex items-start gap-3.5">
           <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-brand text-white shadow-md shadow-brand/20">
