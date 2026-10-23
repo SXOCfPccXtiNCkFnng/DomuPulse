@@ -30,7 +30,9 @@ const STATE_TO_STATUS: Record<string, "connected" | "connecting" | "disconnected
  * (ler currículo, pontuar) não pode travar o webhook.
  */
 export async function POST(request: NextRequest) {
-  if (!sameToken(request.nextUrl.searchParams.get("token"))) {
+  const token = request.nextUrl.searchParams.get("token");
+  if (!sameToken(token)) {
+    logger.warn("wa.webhook_unauthorized", { hasToken: Boolean(token), tokenLength: token?.length ?? 0 });
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
