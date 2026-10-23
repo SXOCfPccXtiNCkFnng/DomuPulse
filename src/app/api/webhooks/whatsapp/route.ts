@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
       const messages = Array.isArray((raw as { messages?: unknown[] })?.messages)
         ? (raw as { messages: unknown[] }).messages
         : [raw];
+      logger.info("wa.webhook", { event: body.event, orgId, count: messages.length });
       for (const msg of messages) {
         after(() => handleIncoming(orgId, msg as Parameters<typeof handleIncoming>[1]).catch((e) => logger.error("wa.bot", { message: describeError(e), orgId })));
       }

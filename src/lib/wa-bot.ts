@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // Mensagem recebida no WhatsApp (evento MESSAGES_UPSERT do Evolution).
 type Incoming = {
-  key?: { remoteJid?: string; fromMe?: boolean; id?: string };
+  key?: { remoteJid?: string; remoteJidAlt?: string; senderPn?: string; fromMe?: boolean; id?: string };
   message?: Record<string, unknown> & {
     conversation?: string;
     extendedTextMessage?: { text?: string };
@@ -33,11 +33,24 @@ const greeting = (vagas: Vaga[], name: string | undefined, company: string | nul
 };
 
 /** Processa uma mensagem recebida: recepciona, pega a vaga, recebe e pontua o currículo. */
+/**
+ * Número de telefone do contato. Com o endereçamento LID do WhatsApp, o
+ * remoteJid vira um id interno (…@lid) e o número real vem em remoteJidAlt
+ * (ou senderPn, conforme a versão do Evolution).
+ */
+function contactNumber(key: NonNullable<Incoming["key"]>): string | null {
+  const pn = [key.remoteJid, key.remoteJidAlt, key.senderPn].find((j) => j?.endsWith("@s.whatsapp.net"));
+  if (pn) return pn.split("@")[0].split(":")[0];
+  // Sem o número: responde pelo próprio LID, que o Evolution também aceita.
+  return key.remoteJid?.endsWith("@lid") ? key.remoteJid : null;
+}
+
 export async function handleIncoming(orgId: string, incoming: Incoming) {
   const jid = incoming.key?.remoteJid ?? "";
   // Ignora grupos.
   if (jid.endsWith("@g.us") || !jid) return;
-  const phone = jid.split("@")[0].split(":")[0];
+  const phone = contactNumber(incoming.key ?? {});
+  if (!phone) return;
 
   // Mensagem enviada pelo nosso número: ou é o próprio bot, ou o recrutador
   // respondendo na mão (handoff).
