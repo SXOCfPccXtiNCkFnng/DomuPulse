@@ -15,8 +15,11 @@ export function instanceName(orgId: string) {
 }
 
 function webhookUrl() {
-  // O token confere que o aviso veio do nosso Evolution.
-  return siteUrl(`/api/webhooks/whatsapp?token=${evolutionEnv().webhookToken}`);
+  // O token confere que o aviso veio do nosso Evolution. O Evolution precisa
+  // alcançar este endereço pela internet: em dev, localhost não serve.
+  const { webhookToken, webhookBaseUrl } = evolutionEnv();
+  const path = `/api/webhooks/whatsapp?token=${webhookToken}`;
+  return webhookBaseUrl ? `${webhookBaseUrl}${path}` : siteUrl(path);
 }
 
 async function evo(path: string, init: { method: string; body?: unknown }) {

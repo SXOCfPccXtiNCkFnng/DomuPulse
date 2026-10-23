@@ -70,11 +70,17 @@ export const evolutionEnv = lazy(() =>
       url: z.string().url().transform((u) => u.replace(/\/$/, "")),
       apiKey: z.string().min(1),
       webhookToken: z.string().min(16, "EVOLUTION_WEBHOOK_TOKEN precisa de 16+ caracteres"),
+      webhookBaseUrl: z
+        .string()
+        .url()
+        .transform((u) => u.replace(/\/$/, ""))
+        .optional(),
     })
     .parse({
       url: process.env.EVOLUTION_API_URL,
       apiKey: process.env.EVOLUTION_API_KEY,
       webhookToken: process.env.EVOLUTION_WEBHOOK_TOKEN,
+      webhookBaseUrl: process.env.EVOLUTION_WEBHOOK_BASE_URL || undefined,
     }),
 );
 

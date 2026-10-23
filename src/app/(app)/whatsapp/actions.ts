@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { connectInstance, connectionState, createInstance, deleteInstance, EvolutionError, instanceName, logoutInstance } from "@/lib/evolution";
+import { connectInstance, connectionState, createInstance, deleteInstance, EvolutionError, instanceName, logoutInstance, setWebhook } from "@/lib/evolution";
 import { describeError, logger } from "@/lib/logger";
 import { requireHr } from "@/lib/recruitment";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -36,6 +36,8 @@ export async function startConnection() {
     } catch (error) {
       const exists = error instanceof EvolutionError && (error.status === 403 || error.status === 409 || /exist|already|in use/i.test(error.message));
       if (!exists) throw error;
+      // Instância antiga: reaponta o webhook, que pode estar com um endereço velho.
+      await setWebhook(orgId).catch((e) => logger.warn("wa.webhook_set", { message: describeError(e), orgId }));
     }
 
     // Se já está conectado, não precisa de QR.
