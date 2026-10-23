@@ -46,9 +46,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
   const orgId = conn.org_id as string;
+  // O Evolution v2 manda "messages.upsert"; versões antigas, "MESSAGES_UPSERT".
+  const event = body.event.toUpperCase().replace(/\./g, "_");
 
   try {
-    if (body.event === "CONNECTION_UPDATE") {
+    if (event === "CONNECTION_UPDATE") {
       const data = body.data as { state?: string; wuid?: string };
       const status = STATE_TO_STATUS[data?.state ?? ""] ?? "disconnected";
       const phone = data?.wuid ? data.wuid.split("@")[0].split(":")[0] : undefined;
@@ -56,14 +58,14 @@ export async function POST(request: NextRequest) {
         .from("wa_connections")
         .update({ status, ...(phone ? { phone } : {}), updated_at: new Date().toISOString() })
         .eq("org_id", orgId);
-    } else if (body.event === "MESSAGES_UPSERT") {
+    } else if (event === "MESSAGES_UPSERT") {
       // O Evolution pode mandar uma mensagem ou uma lista. Processa em segundo
       // plano para responder o webhook rápido.
       const raw = body.data as { messages?: unknown[] } | unknown;
       const messages = Array.isArray((raw as { messages?: unknown[] })?.messages)
         ? (raw as { messages: unknown[] }).messages
         : [raw];
-      logger.info("wa.webhook", { event: body.event, orgId, count: messages.length });
+      logger.info("wa.webhook", { event, orgId, count: messages.length });
       for (const msg of messages) {
         after(() => handleIncoming(orgId, msg as Parameters<typeof handleIncoming>[1]).catch((e) => logger.error("wa.bot", { message: describeError(e), orgId })));
       }
