@@ -12,12 +12,13 @@ export type Conversation = {
   id: string;
   phone: string;
   name: string;
-  stage: "awaiting_vaga" | "awaiting_resume" | "done" | "human";
+  stage: "awaiting_intent" | "awaiting_vaga" | "awaiting_resume" | "done" | "human";
   vagaTitle: string | null;
   updatedAt: string;
 };
 
 const STAGE: Record<Conversation["stage"], { label: string; tone: "neutral" | "brand" | "warn" }> = {
+  awaiting_intent: { label: "Recepcionado", tone: "neutral" },
   awaiting_vaga: { label: "Escolhendo a vaga", tone: "neutral" },
   awaiting_resume: { label: "Aguardando currículo", tone: "neutral" },
   done: { label: "Currículo recebido", tone: "brand" },

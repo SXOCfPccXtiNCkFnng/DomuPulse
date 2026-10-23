@@ -73,7 +73,7 @@ export function AutomationForm({ initial, defaults }: { initial: Values; default
       <MessageField
         name="greeting"
         label="Mensagem de boas-vindas"
-        hint={<>A primeira mensagem ao candidato. Logo depois, o atendimento mostra as vagas abertas. {VARS_HINT}</>}
+        hint={<>A primeira mensagem a quem chama. Logo depois, o atendimento pergunta se a pessoa quer se candidatar a uma vaga ou tirar uma dúvida. Dúvidas vão para a equipe. {VARS_HINT}</>}
         initial={initial.greeting}
         fallback={defaults.greeting}
         rows={3}

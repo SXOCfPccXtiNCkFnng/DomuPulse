@@ -27,12 +27,29 @@ const vagaPrompt = (vagas: Vaga[]) =>
     ? `Estamos com a vaga de *${vagas[0].title}*. Me envie seu currículo (PDF) que eu já encaminho. 🙂`
     : `Para qual vaga você quer se candidatar? Responda o número:\n` + vagas.map((v, i) => `${i + 1}. ${v.title}`).join("\n");
 
-const greeting = (vagas: Vaga[], name: string | undefined, company: string | null, custom: string | null) => {
-  const intro = fillBotText(custom?.trim() || DEFAULT_GREETING, { name, company });
-  return `${intro}\n\n${vagaPrompt(vagas)}`;
-};
+const MENU = "Como posso te ajudar? Responda o número:\n\n1. Quero me candidatar a uma vaga\n2. Tenho uma dúvida";
+const MENU_AGAIN = "Não entendi. 🙂 Responda *1* para se candidatar a uma vaga ou *2* para falar com a nossa equipe.";
+const HANDOFF = "Certo! Já avisei a nossa equipe, que vai te responder por aqui. Pode mandar sua dúvida. 🙂";
+const NO_VAGAS = "No momento não temos vagas abertas, mas obrigado pelo interesse! Fique de olho, logo devem surgir novas oportunidades. 🙏";
 
-/** Processa uma mensagem recebida: recepciona, pega a vaga, recebe e pontua o currículo. */
+const greeting = (name: string | undefined, company: string | null, custom: string | null) =>
+  `${fillBotText(custom?.trim() || DEFAULT_GREETING, { name, company })}\n\n${MENU}`;
+
+// Palavras que indicam o que a pessoa quer, para não obrigar a responder só o número.
+const APPLY_WORDS = /\b(vaga|curr[ií]culo|cv\b|candidat|emprego|trabalh|oportunidade|contrat)/i;
+const QUESTION_WORDS = /\b(d[uú]vida|pergunt|informa[cç]|falar|atendente|algu[eé]m|pessoa|humano)/i;
+
+/** O que a pessoa quer, pela resposta ao menu. */
+function intentOf(text: string): "apply" | "question" | null {
+  const t = text.trim();
+  if (/^1\b/.test(t)) return "apply";
+  if (/^2\b/.test(t)) return "question";
+  if (APPLY_WORDS.test(t)) return "apply";
+  if (QUESTION_WORDS.test(t)) return "question";
+  // Frase mais longa sem palavra de candidatura: provavelmente já é a dúvida.
+  return t.split(/\s+/).length >= 6 ? "question" : null;
+}
+
 /**
  * Número de telefone do contato. Com o endereçamento LID do WhatsApp, o
  * remoteJid vira um id interno (…@lid) e o número real vem em remoteJidAlt
@@ -99,25 +116,59 @@ export async function handleIncoming(orgId: string, incoming: Incoming) {
     .eq("status", "open")
     .order("created_at", { ascending: false });
   const vagas = (vagasRaw ?? []) as Vaga[];
-  if (vagas.length === 0) {
-    await ensureConversation(admin, orgId, phone, incoming.pushName ?? null);
-    await say("Obrigado pelo contato! No momento não temos vagas abertas, mas vou guardar seu interesse. 🙏");
-    return;
-  }
 
+  // Primeiro contato: recepciona e pergunta o que a pessoa quer. Quem já chega
+  // mandando o currículo pula a pergunta.
   if (!conv) {
-    const vagaId = vagas.length === 1 ? vagas[0].id : null;
     const { data } = await admin
       .from("wa_conversations")
-      .insert({ org_id: orgId, phone, name: incoming.pushName ?? null, vaga_id: vagaId, stage: vagaId ? "awaiting_resume" : "awaiting_vaga" })
+      .insert({ org_id: orgId, phone, name: incoming.pushName ?? null, stage: "awaiting_intent" })
       .select("id, stage, vaga_id, candidato_id, name")
       .single();
     conv = data as typeof conv;
-    await say(greeting(vagas, incoming.pushName, company, settings?.greeting ?? null));
-    return;
+    if (!conv) return;
+    if (!doc) {
+      await say(greeting(incoming.pushName, company, settings?.greeting ?? null));
+      return;
+    }
   }
+
+  // Esperando a pessoa dizer se quer se candidatar ou tirar uma dúvida.
+  if (conv.stage === "awaiting_intent") {
+    const intent = doc ? "apply" : intentOf(text);
+    if (intent === "question") {
+      await say(HANDOFF);
+      await admin.from("wa_conversations").update({ stage: "human", updated_at: new Date().toISOString() }).eq("id", conv.id);
+      logger.info("wa.handoff", { message: "Contato pediu para falar com a equipe", orgId });
+      return;
+    }
+    if (intent !== "apply") {
+      await say(MENU_AGAIN);
+      return;
+    }
+    if (vagas.length === 0) {
+      await say(NO_VAGAS);
+      await admin.from("wa_conversations").update({ stage: "done", updated_at: new Date().toISOString() }).eq("id", conv.id);
+      return;
+    }
+    const only = vagas.length === 1 ? vagas[0].id : null;
+    await admin
+      .from("wa_conversations")
+      .update({ vaga_id: only, stage: only ? "awaiting_resume" : "awaiting_vaga", updated_at: new Date().toISOString() })
+      .eq("id", conv.id);
+    conv = { ...conv, vaga_id: only, stage: only ? "awaiting_resume" : "awaiting_vaga" };
+    if (!doc) {
+      await say(vagaPrompt(vagas));
+      return;
+    }
+  }
+
   if (conv.stage === "done") {
     if (!doc) return; // encerrado; só reage a um currículo novo
+  }
+  if (vagas.length === 0) {
+    if (doc) await say(NO_VAGAS);
+    return;
   }
 
   // Descobre a vaga, se ainda não tem.
@@ -154,11 +205,6 @@ type Admin = ReturnType<typeof createAdminClient>;
 const BOT_MSG_KEEP = 50;
 // O eco da mensagem do bot pode chegar no webhook antes de o id ser gravado.
 const ECHO_GRACE_MS = 4000;
-
-/** Garante que a conversa existe (sem mexer numa que já existe). */
-async function ensureConversation(admin: Admin, orgId: string, phone: string, name: string | null) {
-  await admin.from("wa_conversations").upsert({ org_id: orgId, phone, name }, { onConflict: "org_id,phone", ignoreDuplicates: true });
-}
 
 /** Registra o id de uma mensagem enviada pelo bot. */
 async function markBotMsg(admin: Admin, orgId: string, phone: string, msgId: string) {
@@ -205,7 +251,7 @@ export async function sendFromPulse(orgId: string, phone: string, text: string, 
 /** Em que ponto o bot retoma uma conversa que estava com o recrutador. */
 export function resumeStage(conv: { candidato_id: string | null; vaga_id: string | null }) {
   if (conv.candidato_id) return "done";
-  return conv.vaga_id ? "awaiting_resume" : "awaiting_vaga";
+  return conv.vaga_id ? "awaiting_resume" : "awaiting_intent";
 }
 
 async function processResume(
