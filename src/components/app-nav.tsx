@@ -1,13 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, BarChart3, CalendarDays, CircleUser, Contact, Ellipsis, FileText, Target, Users } from "lucide-react";
+import { Activity, BarChart3, Briefcase, CalendarDays, CircleUser, Contact, Ellipsis, FileText, LayoutDashboard, Target, UserSearch, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { Role } from "@/lib/auth";
+import type { Role, Segment } from "@/lib/auth";
 
-const ITEMS = [
+const BROKER_ITEMS = [
   { href: "/painel", label: "Painel", Icon: Activity, leadersOnly: false },
   { href: "/clientes", label: "Clientes", Icon: Contact, leadersOnly: false },
   { href: "/agenda", label: "Agenda", Icon: CalendarDays, leadersOnly: false },
@@ -18,20 +18,31 @@ const ITEMS = [
   { href: "/conta", label: "Conta", Icon: CircleUser, leadersOnly: false },
 ];
 
+const HR_ITEMS = [
+  { href: "/recrutamento", label: "Painel", Icon: LayoutDashboard, leadersOnly: false },
+  { href: "/vagas", label: "Vagas", Icon: Briefcase, leadersOnly: false },
+  { href: "/candidatos", label: "Candidatos", Icon: UserSearch, leadersOnly: false },
+  { href: "/entrevistas", label: "Entrevistas", Icon: CalendarDays, leadersOnly: false },
+  { href: "/automacao", label: "Automação", Icon: Zap, leadersOnly: true },
+  { href: "/equipe", label: "Equipe", Icon: Users, leadersOnly: true },
+  { href: "/conta", label: "Conta", Icon: CircleUser, leadersOnly: false },
+];
+
 // Na barra do celular cabem 4 itens; o resto fica em "Mais".
 const TAB_COUNT = 4;
 
-function useItems(role: Role) {
-  return ITEMS.filter((i) => !i.leadersOnly || role !== "broker");
+function useItems(role: Role, segment: Segment) {
+  const items = segment === "hr" ? HR_ITEMS : BROKER_ITEMS;
+  return items.filter((i) => !i.leadersOnly || role !== "broker");
 }
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
 
-export function SideNav({ role }: { role: Role }) {
+export function SideNav({ role, segment }: { role: Role; segment: Segment }) {
   const path = usePathname();
   return (
     <nav aria-label="Principal" className="flex flex-col gap-1">
-      {useItems(role).map(({ href, label, Icon }) => {
+      {useItems(role, segment).map(({ href, label, Icon }) => {
         const active = isActive(path, href);
         return (
           <Link
@@ -58,9 +69,9 @@ function TabIcon({ active, children }: { active: boolean; children: React.ReactN
   );
 }
 
-export function TabBar({ role }: { role: Role }) {
+export function TabBar({ role, segment }: { role: Role; segment: Segment }) {
   const path = usePathname();
-  const items = useItems(role);
+  const items = useItems(role, segment);
   const main = items.slice(0, TAB_COUNT);
   const more = items.slice(TAB_COUNT);
   const moreActive = more.some((i) => isActive(path, i.href));

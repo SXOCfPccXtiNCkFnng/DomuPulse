@@ -8,7 +8,7 @@ import type { FormState } from "@/lib/validation";
 import { deleteMyAccount } from "./account-actions";
 import { cancelSubscription, type BillingState } from "./billing-actions";
 
-/** Excluir a conta: pede para digitar o nome da imobiliária (dono) ou EXCLUIR (demais). */
+/** Excluir a conta: pede para digitar o nome da empresa (dono) ou EXCLUIR (demais). */
 export function DeleteAccountForm({ isOwner, orgName }: { isOwner: boolean; orgName: string }) {
   const [state, action, pending] = useActionState(deleteMyAccount, {} as FormState);
   const [open, setOpen] = useState(false);
@@ -29,7 +29,7 @@ export function DeleteAccountForm({ isOwner, orgName }: { isOwner: boolean; orgN
         ) : (
           <p>
             Seu nome, e-mail, aparelhos e avisos são apagados e o acesso é bloqueado de vez. Os números que você lançou ficam
-            com a imobiliária, sem o seu nome, porque fazem parte do histórico da equipe. Não dá para desfazer.
+            com a empresa, sem o seu nome, porque fazem parte do histórico da equipe. Não dá para desfazer.
           </p>
         )}
       </div>
@@ -38,14 +38,14 @@ export function DeleteAccountForm({ isOwner, orgName }: { isOwner: boolean; orgN
         <form action={action} className="flex flex-col gap-3" noValidate>
           {state.error ? <FormMessage>{state.error}</FormMessage> : null}
           <Field
-            label={isOwner ? `Para confirmar, digite o nome da imobiliária: ${orgName}` : "Para confirmar, digite EXCLUIR"}
+            label={isOwner ? `Para confirmar, digite o nome da empresa: ${orgName}` : "Para confirmar, digite EXCLUIR"}
             error={state.fieldErrors?.confirmation}
           >
             <Input name="confirmation" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={expected} />
           </Field>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant="danger" disabled={pending || !matches}>
-              {pending ? "Excluindo..." : isOwner ? "Excluir a imobiliária e minha conta" : "Excluir minha conta"}
+              {pending ? "Excluindo..." : isOwner ? "Excluir a empresa e minha conta" : "Excluir minha conta"}
             </Button>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
               Cancelar

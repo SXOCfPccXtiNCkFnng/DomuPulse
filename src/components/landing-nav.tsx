@@ -7,8 +7,9 @@ import { ThemeToggle, useTheme } from "@/components/theme";
 import { BrandMark } from "@/components/ui/logo";
 
 const LINKS = [
-  { id: "como-funciona", label: "Como funciona" },
-  { id: "recursos", label: "Recursos" },
+  { id: "modulos", label: "Módulos" },
+  { id: "corretores", label: "Corretores" },
+  { id: "recrutamento", label: "Recrutamento" },
   { id: "duvidas", label: "Dúvidas" },
 ];
 

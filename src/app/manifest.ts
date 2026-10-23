@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/painel",
     name: "Domu Pulse",
     short_name: "Pulse",
-    description: "O pulso da sua operação imobiliária em tempo real.",
+    description: "O pulso da sua operação empresa em tempo real.",
     lang: "pt-BR",
     start_url: "/painel",
     scope: "/",

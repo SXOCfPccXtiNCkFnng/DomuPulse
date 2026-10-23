@@ -2,7 +2,7 @@
 // separado por ponto e vírgula (Excel em português) ou vírgula.
 
 export const IMPORT_MAX_ROWS = 200;
-export const IMPORT_TEMPLATE = "nome;email;cargo;equipe\nMaria Souza;maria@imobiliaria.com.br;corretor;Equipe Norte\nCarlos Lima;carlos@imobiliaria.com.br;gerente;Equipe Norte\n";
+export const IMPORT_TEMPLATE = "nome;email;cargo;equipe\nMaria Souza;maria@empresa.com.br;corretor;Equipe Norte\nCarlos Lima;carlos@empresa.com.br;gerente;Equipe Norte\n";
 
 export type ImportRow = { line: number; fullName: string; email: string; role: string; team: string };
 

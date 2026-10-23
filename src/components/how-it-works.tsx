@@ -8,7 +8,7 @@ const STEPS = [
   {
     n: "01",
     title: "Você marca os horários",
-    lead: "O dia da equipe passa a ter hora para prestar conta. Você escolhe de 1 a 8 horários, no fuso da imobiliária, do jeito que a sala já funciona.",
+    lead: "O dia da equipe passa a ter hora para prestar conta. Você escolhe de 1 a 8 horários, no fuso da empresa, do jeito que a sala já funciona.",
     text: "Dez minutos antes de cada um, o Pulse avisa o corretor no celular. Quem marcou folga não recebe lembrete e não aparece como pendente. O gerente deixa de cobrar no grupo.",
     points: [
       { Icon: Clock, text: "12h, 15h, 18h e 21h, ou qualquer outro horário" },
@@ -31,7 +31,7 @@ const STEPS = [
     n: "03",
     title: "Você vê na hora",
     lead: "Quem entregou, quem atrasou, o funil de cada equipe e o ranking do dia. O painel muda sozinho, no segundo em que o corretor lança.",
-    text: "Pelo ritmo de visitas e vendas, no dia 10 você já sabe se a meta do mês fecha. Corretor vê os próprios números. Gerente vê a equipe. Diretoria vê a imobiliária inteira.",
+    text: "Pelo ritmo de visitas e vendas, no dia 10 você já sabe se a meta do mês fecha. Corretor vê os próprios números. Gerente vê a equipe. Diretoria vê a empresa inteira.",
     points: [
       { Icon: Timer, text: "O atraso aparece enquanto ainda dá tempo de agir" },
       { Icon: Target, text: "Meta e projeção no ritmo de agora" },
@@ -102,7 +102,7 @@ function StepPreview({ step }: { step: number }) {
   }
 
   return (
-    <Note kicker="Agora" title="14 de 18 entregues" foot="Corretor vê o próprio dia. Gerente vê a equipe. Diretoria vê a imobiliária.">
+    <Note kicker="Agora" title="14 de 18 entregues" foot="Corretor vê o próprio dia. Gerente vê a equipe. Diretoria vê a empresa.">
       <ul>
         <Line left="Marina" right="entregue, 4 visitas" />
         <Line left="Rafael" right="ainda não lançou" />
@@ -140,7 +140,7 @@ export function HowItWorks() {
         <div className="max-w-3xl pt-20 lg:pt-28">
           <p className="flex items-center gap-3 text-[12px] font-semibold tracking-[0.18em] text-brand-text uppercase">
             <span className="h-px w-8 bg-brand-text" />
-            Como funciona
+            Corretores, como funciona
           </p>
           <h2 className="mt-5 font-display text-4xl font-bold tracking-[-0.02em] sm:text-5xl">Três passos. Nenhuma planilha.</h2>
           <p className="mt-5 text-lg leading-relaxed text-ink-2">

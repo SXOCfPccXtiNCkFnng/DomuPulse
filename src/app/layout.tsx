@@ -17,7 +17,7 @@ const bricolage = Bricolage_Grotesque({
 export const metadata: Metadata = {
   title: { default: "Domu Pulse", template: "%s | Domu Pulse" },
   description:
-    "O pulso da sua operação imobiliária em tempo real. Relatórios por horário, funil, ranking e agenda da equipe em um só lugar.",
+    "O pulso da sua operação empresa em tempo real. Relatórios por horário, funil, ranking e agenda da equipe em um só lugar.",
   applicationName: "Domu Pulse",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "Pulse", statusBarStyle: "black-translucent" },

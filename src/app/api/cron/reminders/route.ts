@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isCronRequest } from "@/lib/cron-auth";
 import { recordHeartbeat } from "@/lib/heartbeat";
+import { sendInterviewReminders } from "@/lib/interview-notify";
 import { describeError, logger } from "@/lib/logger";
 import { sendToUsers } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,8 +26,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const sent = await run();
-    await recordHeartbeat("cron.reminders", { ok: true, result: { sent } });
-    return NextResponse.json({ ok: true, sent });
+    // Lembretes de entrevista para candidatos (RH), no horário escolhido em cada entrevista.
+    const interviews = await sendInterviewReminders().catch((err) => {
+      logger.error("cron.interview_reminders", { message: describeError(err) });
+      return 0;
+    });
+    await recordHeartbeat("cron.reminders", { ok: true, result: { sent, interviews } });
+    return NextResponse.json({ ok: true, sent, interviews });
   } catch (error) {
     const message = describeError(error);
     logger.error("cron.reminders", { message });

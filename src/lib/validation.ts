@@ -3,7 +3,7 @@ import { PASSWORD_MAX, PASSWORD_MIN, PASSWORD_RULES } from "@/lib/password";
 import { validatePhoneBR } from "@/lib/phone";
 
 export const emailSchema = z
-  .email("Informe um e-mail válido, como voce@imobiliaria.com.br.")
+  .email("Informe um e-mail válido, como voce@empresa.com.br.")
   .max(254)
   .transform((v) => v.trim().toLowerCase());
 

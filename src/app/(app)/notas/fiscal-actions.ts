@@ -148,10 +148,10 @@ const orgSchema = z.object({
   serviceCode: z.string().trim().regex(/^\d{6}$/, "O código tem 6 números."),
 });
 
-/** Dados da imobiliária como tomadora das notas dos corretores. Só o administrador. */
+/** Dados da empresa como tomadora das notas dos corretores. Só o administrador. */
 export async function saveOrgFiscal(_: FormState, formData: FormData): Promise<FormState> {
   const me = await getCurrentMember();
-  if (me.role !== "owner") return { error: "Só o administrador altera os dados fiscais da imobiliária." };
+  if (me.role !== "owner") return { error: "Só o administrador altera os dados fiscais da empresa." };
   const parsed = orgSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
   const v = parsed.data;
@@ -177,7 +177,7 @@ export async function saveOrgFiscal(_: FormState, formData: FormData): Promise<F
   if (error) return { error: "Não foi possível salvar. Tente de novo." };
   revalidatePath("/notas");
   revalidatePath("/conta");
-  return { success: "Dados fiscais da imobiliária salvos." };
+  return { success: "Dados fiscais da empresa salvos." };
 }
 
 const issueSchema = z.object({
@@ -191,11 +191,11 @@ const issueSchema = z.object({
   commissionId: z.preprocess((v) => (v === "" ? undefined : v), z.uuid().optional()),
 });
 
-/** Emite a NFS-e do corretor contra a imobiliária, direto na API nacional. */
+/** Emite a NFS-e do corretor contra a empresa, direto na API nacional. */
 export async function issueInvoice(_: FormState & { invoiceId?: string }, formData: FormData): Promise<FormState & { invoiceId?: string }> {
   const me = await getCurrentMember();
   if (me.role !== "broker") return { error: "Só o corretor emite nota fiscal." };
-  if (!orgCanWrite(me.org)) return { error: "A assinatura da imobiliária está inativa." };
+  if (!orgCanWrite(me.org)) return { error: "A assinatura da empresa está inativa." };
   if (!nfseConfigured()) return NOT_CONFIGURED;
 
   const parsed = issueSchema.safeParse(Object.fromEntries(formData));
@@ -214,7 +214,7 @@ export async function issueInvoice(_: FormState & { invoiceId?: string }, formDa
   if (profile.certificate_valid_until && new Date(profile.certificate_valid_until).getTime() <= Date.now()) {
     return { error: "Seu certificado digital venceu. Envie o novo em Dados fiscais." };
   }
-  if (!orgFiscalComplete(org)) return { error: "A imobiliária ainda não cadastrou os dados fiscais dela. Avise o administrador." };
+  if (!orgFiscalComplete(org)) return { error: "A empresa ainda não cadastrou os dados fiscais dela. Avise o administrador." };
 
   if (v.commissionId) {
     const { data: commission } = await (await createClient()).from("commissions").select("id").eq("id", v.commissionId).eq("member_id", me.id).maybeSingle();

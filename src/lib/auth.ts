@@ -7,9 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 import type { Role } from "@/lib/roles";
 import { normalizeSlot } from "@/lib/time";
 
-export { ROLE_LABEL, ROLE_RANK, type Role } from "@/lib/roles";
+export { ROLE_LABEL, ROLE_RANK, roleLabel, type Role } from "@/lib/roles";
 
 export type OrgStatus = "trialing" | "active" | "past_due" | "canceled";
+export type Segment = "brokers" | "hr";
 
 export type CurrentMember = {
   id: string;
@@ -27,6 +28,8 @@ export type CurrentMember = {
     trialEndsAt: string;
     /** Assinatura cancelada pelo administrador: acesso até esta data. */
     cancelAt: string | null;
+    /** Corretores ou RH: decide módulo, menu e onboarding. */
+    segment: Segment;
   };
   /** Versão dos Termos que a pessoa aceitou por último (null se nunca aceitou). */
   termsVersion: string | null;
@@ -47,6 +50,7 @@ type MemberRow = {
     status: OrgStatus;
     trial_ends_at: string;
     cancel_at: string | null;
+    segment: Segment;
   };
   terms_version: string | null;
 };
@@ -68,7 +72,7 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
   const { data } = await supabase
     .from("members")
     .select(
-      "id, user_id, full_name, role, team_id, division_id, terms_version, organizations (id, name, timezone, report_slots, status, trial_ends_at, cancel_at)",
+      "id, user_id, full_name, role, team_id, division_id, terms_version, organizations (id, name, timezone, report_slots, status, trial_ends_at, cancel_at, segment)",
     )
     .eq("user_id", userId)
     .eq("active", true)
@@ -104,6 +108,7 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
       status: data.organizations.status,
       trialEndsAt: data.organizations.trial_ends_at,
       cancelAt: data.organizations.cancel_at,
+      segment: data.organizations.segment,
     },
     termsVersion: data.terms_version,
   };
@@ -138,7 +143,7 @@ export async function requireActivatedMember() {
 /**
  * A organização pode lançar dados? Só com a assinatura ativa ou o acesso
  * gratuito valendo. Fatura vencida (past_due) e cancelada ficam só para
- * consulta — nem o administrador nem a equipe lançam até pagar. O Asaas avisa
+ * consulta; nem o administrador nem a equipe lançam até pagar. O Asaas avisa
  * antes de vencer; ao pagar, o webhook reativa.
  */
 export function orgCanWrite(org: Pick<CurrentMember["org"], "status" | "trialEndsAt">) {

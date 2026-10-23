@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { sendPendingRejections } from "@/lib/candidate-notify";
 import { isCronRequest } from "@/lib/cron-auth";
 import { recordHeartbeat } from "@/lib/heartbeat";
 import { describeError, logger } from "@/lib/logger";
@@ -7,7 +8,7 @@ import { sendDailyDigests } from "@/lib/daily-digest";
 import { replayPendingNfse } from "@/lib/nfse";
 import { sendPeriodDigests } from "@/lib/weekly-digest";
 
-// Resumos podem demorar com muitas imobiliárias: até 60 s no plano gratuito.
+// Resumos podem demorar com muitas empresas: até 60 s no plano gratuito.
 export const maxDuration = 60;
 
 /**
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
         sent += await sendPeriodDigests(org, "week");
         sent += await sendPeriodDigests(org, "month");
       } catch (err) {
-        // Uma imobiliária com problema não impede o resumo das outras.
+        // Uma empresa com problema não impede o resumo das outras.
         logger.error("cron.daily_org", { message: describeError(err), orgId: org.id });
       }
     }
@@ -48,7 +49,13 @@ export async function GET(request: NextRequest) {
       return 0;
     });
 
-    await recordHeartbeat("cron.daily", { ok: true, result: { sent, invoicesSynced } });
+    // Recusas de candidatura com retorno agendado (sai no dia seguinte).
+    const rejectionsSent = await sendPendingRejections().catch((err) => {
+      logger.error("cron.candidate_rejections", { message: describeError(err) });
+      return 0;
+    });
+
+    await recordHeartbeat("cron.daily", { ok: true, result: { sent, invoicesSynced, rejectionsSent } });
     // Esta rotina também manda o semanal e o mensal: a tarefa antiga de
     // /api/cron/weekly deixou de ser necessária.
     await recordHeartbeat("cron.weekly", { ok: true, result: { via: "daily" } });

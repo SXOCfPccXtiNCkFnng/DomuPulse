@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { FirstSteps, type Step } from "@/components/first-steps";
 import { BrokerToday } from "@/components/live/broker-today";
 import { LiveBoard } from "@/components/live/live-board";
@@ -9,6 +10,8 @@ export const metadata: Metadata = { title: "Painel" };
 
 export default async function PainelPage() {
   const member = await requireActivatedMember();
+  // Conta de RH tem o próprio painel.
+  if (member.org.segment === "hr") redirect("/recrutamento");
   // Conta que ainda não foi ativada (sem assinatura nem cupom) vai para a ativação.
   if (!isLeader(member.role)) return <BrokerToday member={member} />;
 

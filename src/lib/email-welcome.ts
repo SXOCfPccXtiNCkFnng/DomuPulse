@@ -3,11 +3,16 @@
 // passos numerados e botão em destaque. Tabelas e estilos inline de propósito:
 // é o que Gmail, Outlook e Apple Mail respeitam.
 
+export type WelcomeSegment = "brokers" | "hr";
+
 type WelcomeInput = {
   firstName: string;
   orgName: string;
+  segment: WelcomeSegment;
   /** Endereço público do app, sem barra no final. */
   baseUrl: string;
+  /** Endereço público da marca branca (precisa abrir fora do app). */
+  logoUrl: string;
   whatsappUrl: string;
   contactEmail: string;
 };
@@ -17,27 +22,55 @@ const esc = (value: string) =>
 
 const FONT = "'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
-const STEPS = [
-  { title: "Ative a conta", text: "Assine com Pix, boleto ou cartão, ou use um cupom de acesso. Leva um minuto." },
-  { title: "Crie a primeira equipe", text: "Na aba Equipe, dê um nome a cada time da imobiliária." },
-  { title: "Chame os corretores", text: "Mande o link de convite no WhatsApp. Cada um cria a própria senha e já entra." },
-  { title: "Ative as notificações", text: "Em Conta, ligue os avisos no celular para saber na hora quando um relatório chega." },
-];
+export const SEGMENT_LABEL: Record<WelcomeSegment, string> = {
+  brokers: "Gestão de corretores",
+  hr: "Recrutamento (RH)",
+};
 
-const FEATURES = [
-  ["Painel ao vivo", "quem entregou cada relatório, ranking e funil da equipe"],
-  ["Lembretes automáticos", "o corretor recebe o aviso 10 minutos antes de cada horário"],
-  ["Metas e carteira", "meta mensal por corretor e os clientes de cada um, etapa por etapa"],
-];
+// O que cada módulo entrega e os primeiros passos de quem acabou de entrar.
+const CONTENT: Record<WelcomeSegment, { lead: string; features: [string, string][]; steps: { title: string; text: string }[] }> = {
+  brokers: {
+    lead: "A partir de agora, cada relatório, visita e venda da equipe aparece no seu painel no momento em que acontece. Chega de cobrar relatório no grupo.",
+    features: [
+      ["Painel ao vivo", "quem entregou cada relatório, ranking e funil da equipe"],
+      ["Lembretes automáticos", "o corretor recebe o aviso 10 minutos antes de cada horário"],
+      ["Metas e carteira", "meta mensal por corretor e os clientes de cada um, etapa por etapa"],
+    ],
+    steps: [
+      { title: "Ative a conta", text: "Assine com Pix, boleto ou cartão, ou use um cupom de acesso. Leva um minuto." },
+      { title: "Crie a primeira equipe", text: "Na aba Equipe, dê um nome a cada time da empresa." },
+      { title: "Chame os corretores", text: "Mande o link de convite no WhatsApp. Cada um cria a própria senha e já entra." },
+      { title: "Ative as notificações", text: "Em Conta, ligue os avisos no celular para saber na hora quando um relatório chega." },
+    ],
+  },
+  hr: {
+    lead: "A partir de agora, os currículos chegam organizados e com nota, e você acompanha cada candidato do primeiro contato até a contratação. Chega de procurar currículo no meio das conversas.",
+    features: [
+      ["Atendimento no WhatsApp", "o candidato escolhe a vaga e envia o currículo sozinho, a qualquer hora"],
+      ["Nota por inteligência artificial", "cada currículo recebe uma nota de 0 a 100 pelos critérios da vaga"],
+      ["Candidatos e entrevistas", "situação de cada candidato, agenda de entrevistas e planilha para relatório"],
+    ],
+    steps: [
+      { title: "Ative a conta", text: "Assine com Pix, boleto ou cartão, ou use um cupom de acesso. Leva um minuto." },
+      { title: "Cadastre a primeira vaga", text: "Na aba Vagas, descreva a vaga e o que é importante no candidato. A nota usa esses critérios." },
+      { title: "Conecte o WhatsApp", text: "Em Conta, leia o QR Code com o WhatsApp da empresa. Os candidatos passam a ser atendidos sozinhos." },
+      { title: "Chame a equipe de RH", text: "Mande o link de convite. Cada recrutador cria a própria senha e já entra." },
+    ],
+  },
+};
 
-export const WELCOME_SUBJECT = "Bem-vindo ao Domu Pulse";
+export function welcomeSubject(segment: WelcomeSegment) {
+  return segment === "hr" ? "Bem-vindo ao Domu Pulse Recrutamento" : "Bem-vindo ao Domu Pulse";
+}
 
 export function welcomeEmailHtml(input: WelcomeInput) {
   const name = esc(input.firstName);
   const org = esc(input.orgName);
   const cta = `${input.baseUrl}/ativar`;
+  const content = CONTENT[input.segment];
+  const moduleLabel = esc(SEGMENT_LABEL[input.segment]);
 
-  const steps = STEPS.map(
+  const steps = content.steps.map(
     (s, i) => `
       <tr>
         <td valign="top" width="56" style="padding:18px 0;border-top:1px solid #e2e7f0;font-family:${FONT};font-size:22px;font-weight:700;color:#0259f3;letter-spacing:-0.5px">0${i + 1}</td>
@@ -48,7 +81,7 @@ export function welcomeEmailHtml(input: WelcomeInput) {
       </tr>`,
   ).join("");
 
-  const features = FEATURES.map(
+  const features = content.features.map(
     ([title, text]) => `
       <tr>
         <td valign="top" width="22" style="padding:7px 0;font-family:${FONT};font-size:14px;color:#7ea5ff">&#9679;</td>
@@ -64,7 +97,7 @@ export function welcomeEmailHtml(input: WelcomeInput) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light only">
-  <title>${WELCOME_SUBJECT}</title>
+  <title>${welcomeSubject(input.segment)}</title>
 </head>
 <body style="margin:0;padding:0;background:#eef1f7">
   <div style="display:none;max-height:0;overflow:hidden;opacity:0">A ${org} já está no Pulse. Falta só ativar para a equipe começar.</div>
@@ -74,7 +107,7 @@ export function welcomeEmailHtml(input: WelcomeInput) {
 
         <!-- Topo -->
         <tr><td bgcolor="#02050b" style="background:#02050b;border-radius:14px 14px 0 0;padding:22px 36px">
-          <img src="${input.baseUrl}/brand/mark-white.png" width="24" height="24" alt="" style="vertical-align:middle;border:0">
+          <img src="${input.logoUrl}" width="24" height="24" alt="" style="display:inline-block;vertical-align:middle;border:0;outline:none;text-decoration:none">
           <span style="vertical-align:middle;margin-left:10px;font-family:${FONT};font-size:16px;color:#ffffff"><span style="color:#8f9bb5">Domu</span> <strong>Pulse</strong></span>
         </td></tr>
 
@@ -84,8 +117,13 @@ export function welcomeEmailHtml(input: WelcomeInput) {
           <h1 style="margin:18px 0 0;font-family:${FONT};font-size:32px;line-height:1.12;font-weight:800;letter-spacing:-0.8px;color:#ffffff">
             Parabéns, ${name}.<br>A <span style="color:#7ea5ff">${org}</span> já está no Pulse.
           </h1>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr>
+            <td style="border:1px solid #2a3d66;border-radius:999px;padding:6px 14px;font-family:${FONT};font-size:13px;color:#c7d3ea">
+              Módulo: <strong style="color:#ffffff">${moduleLabel}</strong>
+            </td>
+          </tr></table>
           <p style="margin:18px 0 0;font-family:${FONT};font-size:16px;line-height:1.6;color:#c7d3ea">
-            A partir de agora, cada relatório, visita e venda da equipe aparece no seu painel no momento em que acontece. Chega de cobrar relatório no grupo.
+            ${content.lead}
           </p>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px">${features}</table>
         </td></tr>
@@ -113,7 +151,9 @@ export function welcomeEmailHtml(input: WelcomeInput) {
           <p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:#2b3a56">
             <strong>Ficou com alguma dúvida?</strong> Chame no
             <a href="${input.whatsappUrl}" style="color:#0259f3;font-weight:700;text-decoration:none">WhatsApp</a>
-            ou escreva para <a href="mailto:${input.contactEmail}" style="color:#0259f3;font-weight:700;text-decoration:none">${input.contactEmail}</a>. A gente ajuda a colocar a equipe para rodar.
+            ou escreva para <a href="mailto:${input.contactEmail}" style="color:#0259f3;font-weight:700;text-decoration:none">${input.contactEmail}</a>. ${
+              input.segment === "hr" ? "A gente ajuda a deixar o recrutamento rodando." : "A gente ajuda a colocar a equipe para rodar."
+            }
           </p>
         </td></tr>
 
@@ -131,13 +171,15 @@ export function welcomeEmailHtml(input: WelcomeInput) {
 
 export function welcomeEmailText(input: WelcomeInput) {
   const cta = `${input.baseUrl}/ativar`;
+  const content = CONTENT[input.segment];
   return [
     `Parabéns, ${input.firstName}. A ${input.orgName} já está no Pulse.`,
+    `Módulo: ${SEGMENT_LABEL[input.segment]}`,
     "",
-    "A partir de agora, cada relatório, visita e venda da equipe aparece no seu painel no momento em que acontece.",
+    content.lead,
     "",
     "Seus primeiros passos:",
-    ...STEPS.map((s, i) => `0${i + 1}. ${s.title}: ${s.text}`),
+    ...content.steps.map((s, i) => `0${i + 1}. ${s.title}: ${s.text}`),
     "",
     `Ativar minha conta: ${cta}`,
     "",

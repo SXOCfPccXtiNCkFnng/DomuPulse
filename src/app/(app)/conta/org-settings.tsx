@@ -8,7 +8,7 @@ import { BR_TIMEZONES, MAX_SLOTS } from "@/lib/org-settings";
 import type { FormState } from "@/lib/validation";
 import { updateOrgSettings } from "./org-actions";
 
-export function OrgSettingsForm({ name, timezone, slots }: { name: string; timezone: string; slots: string[] }) {
+export function OrgSettingsForm({ name, timezone, slots, showSlots = true }: { name: string; timezone: string; slots: string[]; showSlots?: boolean }) {
   const [state, action, pending] = useActionState(updateOrgSettings, {} as FormState);
   // Controlados: continuam como a pessoa deixou se o servidor recusar.
   const [orgName, setOrgName] = useState(name);
@@ -21,7 +21,7 @@ export function OrgSettingsForm({ name, timezone, slots }: { name: string; timez
       {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Nome da imobiliária" error={state.fieldErrors?.name}>
+        <Field label="Nome da empresa" error={state.fieldErrors?.name}>
           <Input name="name" value={orgName} onChange={(e) => setOrgName(e.target.value)} required maxLength={120} />
         </Field>
         <Field label="Fuso horário" error={state.fieldErrors?.timezone}>
@@ -35,6 +35,7 @@ export function OrgSettingsForm({ name, timezone, slots }: { name: string; timez
         </Field>
       </div>
 
+      {showSlots ? (
       <fieldset className="flex flex-col gap-2">
         <legend className="text-[13px] font-medium text-ink-2">Horários de relatório</legend>
         <p className="text-[13px] text-muted">
@@ -74,6 +75,9 @@ export function OrgSettingsForm({ name, timezone, slots }: { name: string; timez
         </div>
         {state.fieldErrors?.slots ? <span className="text-[13px] text-danger">{state.fieldErrors.slots}</span> : null}
       </fieldset>
+      ) : (
+        times.map((t, i) => <input key={i} type="hidden" name="slot" value={t} />)
+      )}
 
       <Button type="submit" disabled={pending} className="self-start">
         {pending ? "Salvando..." : "Salvar configurações"}

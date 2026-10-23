@@ -27,7 +27,7 @@ const SUMMARY: { key: keyof Totals; label: string }[] = [
   { key: "sales", label: "Vendas" },
 ];
 
-// Semanal e mensal saem às 8h da manhã, no fuso da imobiliária.
+// Semanal e mensal saem às 8h da manhã, no fuso da empresa.
 const SEND_AT_MIN = 8 * 60;
 
 export async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>) {

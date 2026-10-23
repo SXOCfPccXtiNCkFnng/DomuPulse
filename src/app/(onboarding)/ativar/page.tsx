@@ -8,7 +8,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { getCurrentMember, needsActivation } from "@/lib/auth";
 import { formatMoney } from "@/lib/metrics";
 import { inviteUrl, getInviteCode } from "@/lib/invite-link";
-import { PLAN_FEATURES } from "@/lib/plans";
+import { planFeatures } from "@/lib/plans";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CouponForm, SubscriptionForm } from "@/app/(app)/conta/client";
@@ -55,6 +55,7 @@ async function Ativar() {
     );
   }
 
+  const hr = me.org.segment === "hr";
   const [{ data: org }, priceCents, code] = await Promise.all([
     createAdminClient().from("organizations").select("coupon_code").eq("id", me.org.id).single(),
     getMonthlyPriceCents(),
@@ -76,7 +77,7 @@ async function Ativar() {
         </h1>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-2">
           Escolha quantas pessoas vão usar o Pulse e ative com Pix, boleto ou cartão. Assim que o pagamento confirmar, você já
-          cria as equipes e convida os corretores.
+          {hr ? " convida a sua equipe de RH." : " cria as equipes e convida os corretores."}
         </p>
         <ol className="mt-8 grid gap-3 sm:grid-cols-3">
           {STEPS.map((step, i) => (
@@ -107,9 +108,9 @@ async function Ativar() {
         <Card className="self-start p-6 sm:p-8">
           <p className="text-[12px] font-semibold tracking-[0.16em] text-muted uppercase">Por mês</p>
           <p className="mt-2 font-display text-5xl font-bold tracking-tight tabular-nums">{formatMoney(priceCents)}</p>
-          <p className="mt-1 text-sm text-muted">Valor fixo da sua conta, com quantos corretores você quiser.</p>
+          <p className="mt-1 text-sm text-muted">Valor fixo da sua conta, com quantas pessoas você quiser.</p>
           <ul className="mt-6 flex flex-col gap-2.5 border-t border-line pt-6">
-            {PLAN_FEATURES.map((item) => (
+            {planFeatures(me.org.segment).map((item) => (
               <li key={item} className="flex items-start gap-2.5 text-sm text-ink-2">
                 <Check className="mt-0.5 size-4 shrink-0 text-brand-text" strokeWidth={2.5} />
                 {item}
@@ -136,11 +137,17 @@ async function Ativar() {
       <Card>
         <CardHeader
           title="Link da sua equipe"
-          description="Mande para os corretores. Quem abrir cria a própria senha e já entra na sua conta."
+          description={
+            hr
+              ? "Mande para a sua equipe de RH. Quem abrir cria a própria senha e já entra na sua conta."
+              : "Mande para os corretores. Quem abrir cria a própria senha e já entra na sua conta."
+          }
         />
         <InviteLink url={inviteUrl(code)} orgName={me.org.name} canRegenerate />
         <p className="border-t border-line px-5 py-4 text-sm text-muted sm:px-6">
-          Depois de ativar, crie as equipes em Equipe: no link, cada corretor escolhe a dele.
+          {hr
+            ? "Use o link para convidar quem vai cuidar do recrutamento com você."
+            : "Depois de ativar, crie as equipes em Equipe: no link, cada corretor escolhe a dele."}
         </p>
       </Card>
     </div>

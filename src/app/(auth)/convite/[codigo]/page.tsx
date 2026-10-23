@@ -43,17 +43,18 @@ async function Invite({ params }: { params: PageProps<"/convite/[codigo]">["para
   }
 
   const { data: teams } = await createAdminClient().from("teams").select("id, name").eq("org_id", org.id).order("name");
+  const hr = org.segment === "hr";
 
   return (
     <>
-      <AuthHeading eyebrow="Convite" title={<>Entre na equipe da <span className="text-brand-text">{org.name}.</span></>}>
-        Crie seu acesso para lançar seus relatórios pelo celular.
+      <AuthHeading eyebrow="Convite" title={<>Entre na conta da <span className="text-brand-text">{org.name}.</span></>}>
+        {hr ? "Crie seu acesso para cuidar do recrutamento com a equipe." : "Crie seu acesso para lançar seus relatórios pelo celular."}
       </AuthHeading>
       {teams?.length ? (
-        <JoinForm code={codigo} teams={teams} />
+        <JoinForm code={codigo} teams={teams} hideTeam={hr} />
       ) : (
         <p className="rounded-xl bg-surface-2 px-4 py-3 text-sm text-ink-2">
-          A {org.name} ainda não criou as equipes. Avise seu gestor e abra o link de novo depois.
+          A {org.name} ainda não terminou de configurar a conta. Avise quem te convidou e abra o link de novo depois.
         </p>
       )}
       <p className="mt-8 text-sm text-muted">

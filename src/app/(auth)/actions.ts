@@ -92,14 +92,19 @@ export async function signIn(_: FormState, formData: FormData): Promise<FormStat
   redirect(safeNext(formData.get("proximo")));
 }
 
-const signUpSchema = z.object({
-  fullName: fullNameSchema,
-  orgName: nameSchema,
-  email: emailSchema,
-  whatsapp: phoneSchema,
-  password: passwordSchema,
-  acceptTerms: acceptTermsSchema,
-});
+const signUpSchema = z
+  .object({
+    fullName: fullNameSchema,
+    orgName: nameSchema,
+    email: emailSchema,
+    whatsapp: phoneSchema,
+    password: passwordSchema,
+    confirm: z.string(),
+    acceptTerms: acceptTermsSchema,
+    // Segmento escolhido no cadastro: decide o módulo em que a conta entra.
+    segment: z.enum(["brokers", "hr"]).default("brokers"),
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "As senhas não conferem." });
 
 const GENERIC_SIGNUP_ERROR = { error: "Não foi possível criar a conta agora. Tente novamente." };
 
@@ -118,7 +123,7 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
   if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
-  const { fullName, orgName, email, whatsapp, password } = parsed.data;
+  const { fullName, orgName, email, whatsapp, password, segment } = parsed.data;
   const admin = createAdminClient();
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -144,6 +149,7 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
     // Sem teste grátis: a conta nasce aguardando ativação (assinatura ou cupom).
     .insert({
       name: orgName,
+      segment,
       contact_phone: whatsapp,
       trial_ends_at: new Date().toISOString(),
       trial_reminder_sent_at: new Date().toISOString(),
@@ -173,22 +179,32 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
     return { ...GENERIC_SIGNUP_ERROR, values };
   }
 
+  // Conta de RH já nasce com uma equipe padrão, para o link de convite
+  // funcionar de cara (o convidado entra nela sem escolher nada).
+  if (segment === "hr") {
+    const { data: division } = await admin.from("divisions").insert({ org_id: org!.id, name: "Recrutamento" }).select("id").single();
+    if (division) await admin.from("teams").insert({ org_id: org!.id, division_id: division.id, name: "Recrutamento" });
+  }
+
   // Envia depois da resposta, para o cadastro não esperar o provedor de e-mail.
   await recordAccess(user.id, "signup", ip);
-  after(() => sendWelcomeEmail({ to: email, fullName, orgName }));
-  after(() => sendNewSignupAlert({ fullName, email, orgName, phone: whatsapp, ip }));
+  after(() => sendWelcomeEmail({ to: email, fullName, orgName, segment }));
+  after(() => sendNewSignupAlert({ fullName, email, orgName, phone: whatsapp, segment, ip }));
 
   redirect("/entrar?cadastro=ok");
 }
 
-const joinSchema = z.object({
-  code: z.string(),
-  fullName: fullNameSchema,
-  email: emailSchema,
-  teamId: z.uuid("Escolha sua equipe."),
-  password: passwordSchema,
-  acceptTerms: acceptTermsSchema,
-});
+const joinSchema = z
+  .object({
+    code: z.string(),
+    fullName: fullNameSchema,
+    email: emailSchema,
+    teamId: z.uuid("Escolha sua equipe."),
+    password: passwordSchema,
+    confirm: z.string(),
+    acceptTerms: acceptTermsSchema,
+  })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "As senhas não conferem." });
 
 /**
  * Entrada pelo link de convite da conta: cria o usuário já como corretor da

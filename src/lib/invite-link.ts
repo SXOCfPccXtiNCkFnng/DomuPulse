@@ -44,10 +44,10 @@ export async function findOrgByInviteCode(code: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("org_invites")
-    .select("organizations (id, name, status)")
+    .select("organizations (id, name, status, segment)")
     .eq("code", code)
-    .maybeSingle<{ organizations: { id: string; name: string; status: string } | null }>();
+    .maybeSingle<{ organizations: { id: string; name: string; status: string; segment: "brokers" | "hr" } | null }>();
   const org = data?.organizations;
   if (!org || org.status === "canceled") return null;
-  return { id: org.id, name: org.name };
+  return { id: org.id, name: org.name, segment: org.segment };
 }

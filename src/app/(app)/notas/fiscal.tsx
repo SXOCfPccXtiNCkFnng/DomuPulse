@@ -184,7 +184,7 @@ export function FiscalProfileDialog({ profile, onClose }: { profile: ProfileView
           </div>
           <p className="text-xs text-muted">
             Não tem certificado? Você precisa de um <strong>e-CNPJ A1</strong> (arquivo .pfx), válido por 1 ano. Ele é vendido
-            por qualquer autoridade certificadora credenciada pela ICP-Brasil — escolha a que preferir.{" "}
+            por qualquer autoridade certificadora credenciada pela ICP-Brasil. Escolha a que preferir.{" "}
             <a
               href="https://www.google.com/search?q=comprar+certificado+digital+e-CNPJ+A1"
               target="_blank"
@@ -229,7 +229,7 @@ export function IssueDialog({
   const [commissionId, setCommissionId] = useState(initial?.id ?? "");
   const [amount, setAmount] = useState(initial ? centsToInput(initial.amountCents) : "");
   const [description, setDescription] = useState(
-    initial ? `Comissão de intermediação imobiliária${initial.description ? `: ${initial.description}` : ""}` : "Comissão de intermediação imobiliária",
+    initial ? `Comissão de intermediação empresa${initial.description ? `: ${initial.description}` : ""}` : "Comissão de intermediação empresa",
   );
 
   useEffect(() => {
@@ -244,7 +244,7 @@ export function IssueDialog({
     const c = commissions.find((x) => x.id === id);
     if (c) {
       setAmount(centsToInput(c.amountCents));
-      setDescription(`Comissão de intermediação imobiliária${c.description ? `: ${c.description}` : ""}`);
+      setDescription(`Comissão de intermediação empresa${c.description ? `: ${c.description}` : ""}`);
     }
   }
 
@@ -254,7 +254,7 @@ export function IssueDialog({
         <header className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-display text-xl font-semibold tracking-tight">Emitir nota fiscal</h2>
-            <p className="text-sm text-muted">Sai no seu CNPJ, contra a imobiliária. A liderança é avisada quando for autorizada.</p>
+            <p className="text-sm text-muted">Sai no seu CNPJ, contra a empresa. A liderança é avisada quando for autorizada.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2">
             <X className="size-4" />
@@ -311,7 +311,7 @@ export function IssueDialog({
   );
 }
 
-/** Dados da imobiliária como tomadora das notas (Conta, aba Imobiliária). */
+/** Dados da empresa como tomadora das notas (Conta, aba Empresa). */
 export function OrgFiscalForm({
   initial,
 }: {

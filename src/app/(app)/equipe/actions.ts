@@ -93,7 +93,7 @@ async function createInvite(
 
   // O generateLink pode devolver um usuário que já existe (ex.: convidado de
   // outra empresa, ainda sem confirmar). Se ele já é membro em algum lugar,
-  // não é um usuário novo nosso: recusa sem apagar nada — senão o rollback
+  // não é um usuário novo nosso: recusa sem apagar nada; senão o rollback
   // abaixo apagaria o usuário da outra empresa.
   const { data: already } = await admin.from("members").select("id").eq("user_id", invited.user.id).maybeSingle();
   if (already) return { ok: false, field: "email", error: "Este e-mail já tem conta no Pulse." };
@@ -200,7 +200,7 @@ export async function createTeam(_: FormState, formData: FormData): Promise<Form
   const supabase = await createClient();
   let divisionId = me.role === "director" ? me.divisionId : parsed.data.divisionId;
 
-  // Primeira equipe da imobiliária: cria a diretoria junto.
+  // Primeira equipe da empresa: cria a diretoria junto.
   if (me.role === "owner" && !divisionId) {
     const name = parsed.data.divisionName || "Diretoria principal";
     const { data, error } = await supabase

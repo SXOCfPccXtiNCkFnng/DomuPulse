@@ -76,12 +76,12 @@ async function MemberBell({ align }: { align: "left" | "right" }) {
 
 async function MemberSideNav() {
   const member = await getCurrentMember();
-  return <SideNav role={member.role} />;
+  return <SideNav role={member.role} segment={member.org.segment} />;
 }
 
 async function MemberTabBar() {
   const member = await getCurrentMember();
-  return <TabBar role={member.role} />;
+  return <TabBar role={member.role} segment={member.org.segment} />;
 }
 
 async function MemberCard() {

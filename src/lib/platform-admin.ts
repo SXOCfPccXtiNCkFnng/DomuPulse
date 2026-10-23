@@ -22,7 +22,7 @@ export async function platformAdminSession(): Promise<{ email: string; userId: s
 
 /**
  * Ações e dados do painel usam a chave de serviço, que ignora o RLS e mexe em
- * todas as imobiliárias. Por isso, além da lista, exigem a verificação em duas
+ * todas as empresas. Por isso, além da lista, exigem a verificação em duas
  * etapas confirmada nesta sessão: só a senha não basta.
  */
 export async function requirePlatformAdmin(): Promise<{ email: string; userId: string }> {

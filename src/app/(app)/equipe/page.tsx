@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { InviteLink } from "@/components/invite-link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
-import { requireActivatedMember, ROLE_LABEL, ROLE_RANK, type Role } from "@/lib/auth";
+import { requireActivatedMember, ROLE_RANK, roleLabel, type Role, type Segment } from "@/lib/auth";
 import { getInviteCode, inviteUrl } from "@/lib/invite-link";
 import { createClient } from "@/lib/supabase/server";
 import { InviteForm, MemberActions, RenameDivision, TeamActions, TeamForm } from "./forms";
@@ -59,10 +59,13 @@ export default async function EquipePage() {
       person={p}
       canManage={p.id !== me.id && ROLE_RANK[p.role] > ROLE_RANK[me.role]}
       myRole={me.role}
+      segment={me.org.segment}
       teams={teamOptions}
       divisions={divisionOptions}
     />
   );
+
+  const hr = me.org.segment === "hr";
 
   return (
     <div className="flex flex-col gap-5">
@@ -78,33 +81,45 @@ export default async function EquipePage() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-5">
-          {byTeam.length === 0 ? (
-            <Card className="p-8 text-center">
-              <p className="font-display text-lg font-semibold">Comece criando a primeira equipe</p>
-              <p className="mt-1 text-sm text-muted">Depois convide o gerente e os corretores dela.</p>
-            </Card>
-          ) : null}
-
-          {byTeam.map(({ team, people }) => (
-            <Card key={team.id}>
-              <CardHeader
-                title={team.name}
-                description={plural(people.filter((p) => p.active).length)}
-                action={canEditTeams ? <TeamActions teamId={team.id} name={team.name} hasPeople={people.length > 0} isOwner={me.role === "owner"} /> : null}
-              />
+          {hr ? (
+            <Card>
+              <CardHeader title="Recrutadores" description={plural(activeCount)} />
               <ul className="mt-3 divide-y divide-line border-t border-line">
-                {people.length === 0 ? <li className="px-6 py-5 text-sm text-muted">Ninguém nesta equipe ainda.</li> : null}
-                {people.map(line)}
+                {list.length === 0 ? <li className="px-6 py-5 text-sm text-muted">Ninguém ainda.</li> : null}
+                {list.map(line)}
               </ul>
             </Card>
-          ))}
+          ) : (
+            <>
+              {byTeam.length === 0 ? (
+                <Card className="p-8 text-center">
+                  <p className="font-display text-lg font-semibold">Comece criando a primeira equipe</p>
+                  <p className="mt-1 text-sm text-muted">Depois convide o gerente e os corretores dela.</p>
+                </Card>
+              ) : null}
 
-          {me.role === "owner" && leadership.length > 0 ? (
-            <Card>
-              <CardHeader title="Liderança" description="Administradores e superintendentes" />
-              <ul className="mt-3 divide-y divide-line border-t border-line">{leadership.map(line)}</ul>
-            </Card>
-          ) : null}
+              {byTeam.map(({ team, people }) => (
+                <Card key={team.id}>
+                  <CardHeader
+                    title={team.name}
+                    description={plural(people.filter((p) => p.active).length)}
+                    action={canEditTeams ? <TeamActions teamId={team.id} name={team.name} hasPeople={people.length > 0} isOwner={me.role === "owner"} /> : null}
+                  />
+                  <ul className="mt-3 divide-y divide-line border-t border-line">
+                    {people.length === 0 ? <li className="px-6 py-5 text-sm text-muted">Ninguém nesta equipe ainda.</li> : null}
+                    {people.map(line)}
+                  </ul>
+                </Card>
+              ))}
+
+              {me.role === "owner" && leadership.length > 0 ? (
+                <Card>
+                  <CardHeader title="Liderança" description="Administradores e superintendentes" />
+                  <ul className="mt-3 divide-y divide-line border-t border-line">{leadership.map(line)}</ul>
+                </Card>
+              ) : null}
+            </>
+          )}
         </div>
 
         <div className="flex flex-col gap-5">
@@ -113,9 +128,11 @@ export default async function EquipePage() {
               <CardHeader
                 title="Link de convite"
                 description={
-                  totalTeams
-                    ? "Quem abrir cria a senha, escolhe a equipe e entra como corretor"
-                    : "Crie a primeira equipe para o link começar a funcionar"
+                  me.org.segment === "hr"
+                    ? "Quem abrir cria a senha e entra como recrutador"
+                    : totalTeams
+                      ? "Quem abrir cria a senha, escolhe a equipe e entra como corretor"
+                      : "Crie a primeira equipe para o link começar a funcionar"
                 }
               />
               <InviteLink url={inviteUrl(inviteCode)} orgName={me.org.name} canRegenerate={me.role === "owner"} />
@@ -124,35 +141,39 @@ export default async function EquipePage() {
 
           <Card>
             <CardHeader title="Convidar pessoa" description="Ela recebe um e-mail para criar a senha" />
-            <InviteForm myRole={me.role} teams={teamOptions} divisions={divisionOptions} />
+            <InviteForm myRole={me.role} teams={teamOptions} divisions={divisionOptions} simple={hr} />
           </Card>
 
-          {teamOptions.length ? (
-            <Card>
-              <CardHeader title="Importar planilha" description="Convide várias pessoas de uma vez" />
-              <ImportMembers teams={teamOptions.map((t) => t.name)} canInviteManagers={me.role === "owner" || me.role === "director"} />
-            </Card>
-          ) : null}
+          {hr ? null : (
+            <>
+              {teamOptions.length ? (
+                <Card>
+                  <CardHeader title="Importar planilha" description="Convide várias pessoas de uma vez" />
+                  <ImportMembers teams={teamOptions.map((t) => t.name)} canInviteManagers={me.role === "owner" || me.role === "director"} />
+                </Card>
+              ) : null}
 
-          {canEditTeams ? (
-            <Card>
-              <CardHeader title="Nova equipe" />
-              <TeamForm isOwner={me.role === "owner"} divisions={divisionOptions} />
-            </Card>
-          ) : null}
+              {canEditTeams ? (
+                <Card>
+                  <CardHeader title="Nova equipe" />
+                  <TeamForm isOwner={me.role === "owner"} divisions={divisionOptions} />
+                </Card>
+              ) : null}
 
-          {me.role === "owner" && divisionOptions.length > 0 ? (
-            <Card>
-              <CardHeader title="Diretorias" description="Agrupam as equipes de cada superintendente" />
-              <ul className="mt-3 divide-y divide-line border-t border-line">
-                {divisionOptions.map((d) => (
-                  <li key={d.id} className="px-5 py-3 sm:px-6">
-                    <RenameDivision divisionId={d.id} name={d.name} />
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : null}
+              {me.role === "owner" && divisionOptions.length > 0 ? (
+                <Card>
+                  <CardHeader title="Diretorias" description="Agrupam as equipes de cada superintendente" />
+                  <ul className="mt-3 divide-y divide-line border-t border-line">
+                    {divisionOptions.map((d) => (
+                      <li key={d.id} className="px-5 py-3 sm:px-6">
+                        <RenameDivision divisionId={d.id} name={d.name} />
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -163,12 +184,14 @@ function MemberLine({
   person,
   canManage,
   myRole,
+  segment,
   teams,
   divisions,
 }: {
   person: MemberRow;
   canManage: boolean;
   myRole: Role;
+  segment: Segment;
   teams: Option[];
   divisions: Option[];
 }) {
@@ -181,11 +204,11 @@ function MemberLine({
           <p className={person.active ? "truncate text-sm font-medium" : "truncate text-sm font-medium text-muted line-through"}>
             {person.full_name}
           </p>
-          <p className="text-xs text-muted">{ROLE_LABEL[person.role]}</p>
+          <p className="text-xs text-muted">{roleLabel(person.role, segment)}</p>
         </div>
         {!person.active ? <Badge>Inativo</Badge> : null}
         {pending ? <Badge tone="warn">Convite pendente</Badge> : null}
-        {person.role === "broker" ? (
+        {person.role === "broker" && segment !== "hr" ? (
           <Link
             href={`/relatorios?periodo=mes&corretor=${person.id}`}
             className="flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-brand-text hover:bg-surface-2"

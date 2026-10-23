@@ -15,10 +15,10 @@ import type { FormState } from "@/lib/validation";
  *
  * Corretor, gerente e superintendente: os dados pessoais somem (nome, e-mail,
  * aparelhos, avisos) e o acesso é bloqueado de vez. Os números de produção
- * ficam para a imobiliária como "Pessoa removida": são registros do trabalho,
+ * ficam para a empresa como "Pessoa removida": são registros do trabalho,
  * que a empresa pode guardar, e apagá-los quebraria os relatórios da equipe.
  *
- * Administrador: é o dono da conta, então excluir apaga a imobiliária inteira,
+ * Administrador: é o dono da conta, então excluir apaga a empresa inteira,
  * depois de cancelar a assinatura no Asaas.
  */
 export async function deleteMyAccount(_: FormState, formData: FormData): Promise<FormState> {
@@ -32,7 +32,7 @@ export async function deleteMyAccount(_: FormState, formData: FormData): Promise
 
   if (me.role === "owner") {
     if (confirmation !== me.org.name) {
-      return { fieldErrors: { confirmation: `Digite o nome da imobiliária exatamente como aparece: ${me.org.name}` } };
+      return { fieldErrors: { confirmation: `Digite o nome da empresa exatamente como aparece: ${me.org.name}` } };
     }
 
     // Sem cancelar no Asaas, a cobrança continuaria depois de a conta sumir.
@@ -59,7 +59,7 @@ export async function deleteMyAccount(_: FormState, formData: FormData): Promise
     }
     await Promise.all((members ?? []).map((m) => admin.auth.admin.deleteUser(m.user_id as string)));
     // O registro de alterações guarda cópias dos dados (inclusive as geradas
-    // agora pela exclusão em cascata): sai junto com a imobiliária.
+    // agora pela exclusão em cascata): sai junto com a empresa.
     await admin.from("audit_log").delete().eq("org_id", me.org.id);
     await admin.from("audit_log").insert({
       org_id: null,

@@ -25,7 +25,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // Emissão de NFS-e direto na API oficial do Sistema Nacional (nfse.gov.br),
 // pela biblioteca open-nfse: sem intermediário e sem custo por nota. O corretor
-// é o prestador (com o certificado A1 dele) e a imobiliária é a tomadora.
+// é o prestador (com o certificado A1 dele) e a empresa é a tomadora.
 
 export type FiscalProfile = {
   member_id: string;

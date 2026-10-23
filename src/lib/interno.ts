@@ -330,7 +330,7 @@ export async function loadPayingClients(search = ""): Promise<PayingClientRow[]>
 
   const orgIds = owners.map((o) => o.org_id);
 
-  // Busca contagem de pessoas ativas em cada imobiliária
+  // Busca contagem de pessoas ativas em cada empresa
   const { data: teamMembers } = await admin
     .from("members")
     .select("org_id")

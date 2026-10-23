@@ -105,7 +105,7 @@ export function SignupAlertEmailsCard({ initialEmails }: { initialEmails: string
   return (
     <div className="flex flex-col gap-4 p-5 sm:p-6">
       <p className="text-xs text-muted">
-        Estes e-mails recebem um alerta instantâneo com os dados (nome, WhatsApp, imobiliária e e-mail) sempre que um novo cliente pagante se cadastrar.
+        Estes e-mails recebem um alerta instantâneo com os dados (nome, WhatsApp, empresa e e-mail) sempre que um novo cliente pagante se cadastrar.
       </p>
 
       {removeError ? <FormMessage>{removeError}</FormMessage> : null}

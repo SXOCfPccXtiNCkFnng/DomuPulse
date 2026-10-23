@@ -63,6 +63,16 @@ export function siteUrl(path = "") {
   return `${publicEnv().siteUrl.replace(/\/$/, "")}${path}`;
 }
 
+// O provedor de e-mail busca as imagens pela internet: um endereço local
+// (localhost, http) chega quebrado. Nesses casos usa o domínio público.
+const PUBLIC_ORIGIN = "https://pulse.domutech.digital";
+
+/** Endereço público de uma imagem usada nos e-mails. */
+export function emailAssetUrl(path: string) {
+  const base = siteUrl();
+  return /^https:\/\/(?!localhost|127\.)/.test(base) ? `${base}${path}` : `${PUBLIC_ORIGIN}${path}`;
+}
+
 /**
  * Casca visual de todos os e-mails, no estilo da página inicial: topo preto
  * com a marca, faixa azul-marinho com o título, corpo branco, botão azul e
@@ -109,7 +119,7 @@ export function brandedEmail({
     <tr><td align="center" style="padding:32px 12px">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
         <tr><td bgcolor="#02050b" style="background:#02050b;border-radius:14px 14px 0 0;padding:22px 36px">
-          <img src="${siteUrl("/brand/mark-white.png")}" width="24" height="24" alt="" style="vertical-align:middle;border:0">
+          <img src="${emailAssetUrl("/brand/mark-white.png")}" width="24" height="24" alt="" style="display:inline-block;vertical-align:middle;border:0;outline:none;text-decoration:none">
           <span style="vertical-align:middle;margin-left:10px;font-family:${EMAIL_FONT};font-size:16px;color:#ffffff"><span style="color:#8f9bb5">Domu</span> <strong>Pulse</strong></span>
         </td></tr>
         <tr><td bgcolor="#0a1428" style="background:#0a1428;padding:38px 36px 34px">

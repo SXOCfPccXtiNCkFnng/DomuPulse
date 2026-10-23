@@ -19,7 +19,7 @@ const INVITABLE: Record<Role, Role[]> = {
   broker: [],
 };
 
-export function InviteForm({ myRole, teams, divisions }: { myRole: Role; teams: Option[]; divisions: Option[] }) {
+export function InviteForm({ myRole, teams, divisions, simple = false }: { myRole: Role; teams: Option[]; divisions: Option[]; simple?: boolean }) {
   const [state, action, pending] = useActionState(inviteMember, initial);
   const roles = INVITABLE[myRole];
   const [role, setRole] = useState<Role>(roles[0]);
@@ -39,28 +39,38 @@ export function InviteForm({ myRole, teams, divisions }: { myRole: Role; teams: 
       <Field label="E-mail" error={state.fieldErrors?.email}>
         <Input name="email" type="email" inputMode="email" required autoComplete="off" />
       </Field>
-      {roles.length > 1 ? (
-        <Field label="Cargo">
-          <Select name="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            {roles.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL[r]}
-              </option>
-            ))}
-          </Select>
-        </Field>
+      {simple ? (
+        <>
+          {/* RH: cargo fixo (recrutador) e equipe única, sem seleção. */}
+          <input type="hidden" name="role" value="broker" />
+          <input type="hidden" name="scopeId" value={teams[0]?.id ?? ""} />
+        </>
       ) : (
-        <input type="hidden" name="role" value={role} />
+        <>
+          {roles.length > 1 ? (
+            <Field label="Cargo">
+              <Select name="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                {roles.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            <input type="hidden" name="role" value={role} />
+          )}
+          <Field label={role === "director" ? "Diretoria" : "Equipe"} error={state.fieldErrors?.scopeId}>
+            <Select name="scopeId" defaultValue={scopes[0]?.id} key={role}>
+              {scopes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </>
       )}
-      <Field label={role === "director" ? "Diretoria" : "Equipe"} error={state.fieldErrors?.scopeId}>
-        <Select name="scopeId" defaultValue={scopes[0]?.id} key={role}>
-          {scopes.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
       <Button type="submit" disabled={pending}>
         {pending ? "Enviando..." : "Enviar convite"}
       </Button>

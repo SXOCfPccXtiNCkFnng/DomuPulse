@@ -17,3 +17,17 @@ export const PLAN_FEATURES = [
   "Metas, comissões e relatórios",
   "Resumo semanal por e-mail",
 ];
+
+// Versão para contas de RH (recrutamento).
+export const HR_PLAN_FEATURES = [
+  "Equipe de RH sem limite",
+  "Recepção dos candidatos automatizada",
+  "Currículos organizados e pontuados",
+  "Ranking de candidatos por vaga",
+  "Aprovar ou recusar com um clique",
+  "Banco de talentos e agenda de entrevistas",
+];
+
+export function planFeatures(segment: "brokers" | "hr") {
+  return segment === "hr" ? HR_PLAN_FEATURES : PLAN_FEATURES;
+}

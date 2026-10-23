@@ -27,7 +27,7 @@ const sections: LegalSection[] = [
       <>
         <p>
           Estes Termos de Uso (&quot;Termos&quot;) regem o acesso e o uso do Domu Pulse (&quot;Plataforma&quot;), software
-          de gestão comercial para imobiliárias oferecido como serviço pela {companyIdentification()} (&quot;DomuTech&quot;,
+          de gestão comercial e de recrutamento para empresas oferecido como serviço pela {companyIdentification()} (&quot;DomuTech&quot;,
           &quot;nós&quot;).
         </p>
         <p>
@@ -36,7 +36,7 @@ const sections: LegalSection[] = [
           Plataforma.
         </p>
         <p>
-          Quem cria a conta de uma imobiliária declara ter poderes para contratar em nome dela. A contratação é feita para
+          Quem cria a conta de uma empresa declara ter poderes para contratar em nome dela. A contratação é feita para
           uso profissional, na atividade empresarial da contratante, e não configura relação de consumo.
         </p>
       </>
@@ -47,14 +47,14 @@ const sections: LegalSection[] = [
     body: (
       <ul>
         <li>
-          <strong>Contratante:</strong> a imobiliária ou empresa que cria a conta e contrata a assinatura.
+          <strong>Contratante:</strong> a empresa que cria a conta e contrata a assinatura.
         </li>
         <li>
           <strong>Administrador:</strong> a pessoa que criou a conta e responde por ela perante a DomuTech.
         </li>
         <li>
-          <strong>Usuários:</strong> todas as pessoas com acesso à conta da Contratante, como superintendentes, gerentes e
-          corretores.
+          <strong>Usuários:</strong> todas as pessoas com acesso à conta da Contratante, como superintendentes, gerentes,
+          corretores e recrutadores.
         </li>
         <li>
           <strong>Dados da Operação:</strong> relatórios, presença, metas, comissões, agenda e demais informações lançadas
@@ -63,6 +63,10 @@ const sections: LegalSection[] = [
         <li>
           <strong>Dados de Clientes:</strong> informações de clientes e interessados da Contratante cadastradas pelos
           Usuários, como nome, telefone, e-mail, interesse e valor de negócio.
+        </li>
+        <li>
+          <strong>Dados de Candidatos:</strong> informações de quem se candidata às vagas da Contratante, como nome,
+          telefone, e-mail, cidade, currículo, mensagens trocadas pelo WhatsApp, nota e situação no processo seletivo.
         </li>
         <li>
           <strong>Assinatura:</strong> o plano pago que libera o uso da Plataforma pela Contratante.
@@ -78,6 +82,11 @@ const sections: LegalSection[] = [
           A Plataforma permite registrar relatórios de produção em horários definidos, acompanhar a equipe em tempo real,
           organizar a carteira de clientes e a agenda de visitas, definir metas e receber lembretes e avisos no celular e no
           computador.
+        </p>
+        <p>
+          Nas contas de recrutamento, a Plataforma permite cadastrar vagas, receber currículos manualmente ou por um número
+          de WhatsApp da Contratante, pontuar currículos com inteligência artificial, acompanhar os candidatos e marcar
+          entrevistas.
         </p>
         <p>
           O serviço é oferecido pela internet, no estado em que se encontra, e depende de fornecedores como hospedagem,
@@ -139,7 +148,8 @@ const sections: LegalSection[] = [
           <li>extrair dados de forma automatizada, sobrecarregar o serviço ou interferir no seu funcionamento;</li>
           <li>revender, sublicenciar ou disponibilizar a Plataforma a terceiros fora da Contratante;</li>
           <li>inserir vírus, código malicioso, conteúdo ofensivo, discriminatório ou que viole direitos de imagem e privacidade;</li>
-          <li>usar Dados de Clientes para envio de mensagens em massa não solicitadas.</li>
+          <li>usar Dados de Clientes ou de Candidatos para envio de mensagens em massa não solicitadas;</li>
+          <li>usar critérios discriminatórios na seleção de candidatos, como sexo, origem, raça, cor, estado civil, situação familiar, deficiência ou idade, salvo nas exceções previstas em lei.</li>
         </ul>
         <p>
           O descumprimento autoriza a suspensão imediata do acesso, sem prejuízo das medidas legais e da cobrança dos danos
@@ -149,13 +159,13 @@ const sections: LegalSection[] = [
     ),
   },
   {
-    title: "Dados de Clientes e responsabilidade da Contratante",
+    title: "Dados de Clientes e de Candidatos e responsabilidade da Contratante",
     body: (
       <>
         <p>
-          Nos Dados de Clientes, a Contratante é a controladora, nos termos da Lei 13.709/2018 (LGPD), e a DomuTech atua como
-          operadora: armazena e organiza esses dados apenas para prestar o serviço, conforme as instruções dadas pelo uso da
-          Plataforma.
+          Nos Dados de Clientes e nos Dados de Candidatos, a Contratante é a controladora, nos termos da Lei 13.709/2018
+          (LGPD), e a DomuTech atua como operadora: armazena e organiza esses dados apenas para prestar o serviço, conforme as
+          instruções dadas pelo uso da Plataforma.
         </p>
         <p>Cabe exclusivamente à Contratante:</p>
         <ul>
@@ -167,6 +177,35 @@ const sections: LegalSection[] = [
         <p>
           Se um titular, terceiro ou autoridade reclamar de dado inserido sem esse direito, a Contratante assume a defesa e
           os prejuízos, multas, honorários e despesas decorrentes, e mantém a DomuTech livre de responsabilidade.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "Recrutamento, WhatsApp e inteligência artificial",
+    body: (
+      <>
+        <p>
+          <strong>WhatsApp.</strong> O número conectado à Plataforma é da Contratante e é usado em nome dela. A Plataforma
+          responde automaticamente aos candidatos, recebe os currículos e envia avisos sobre o processo seletivo, como
+          aprovação e recusa. A Contratante é responsável pelo conteúdo das mensagens que configurar, por cumprir as regras de
+          uso do WhatsApp e por avisar os candidatos de que o atendimento inicial é automático. A conexão não usa a API
+          oficial do WhatsApp: o aplicativo pode limitar ou bloquear o número, e a DomuTech não responde por esse bloqueio
+          nem pela entrega das mensagens. Quando um Usuário responde a conversa pelo próprio WhatsApp, o atendimento
+          automático para naquela conversa.
+        </p>
+        <p>
+          <strong>Inteligência artificial.</strong> Os currículos podem ser lidos por um serviço de inteligência artificial
+          contratado pela DomuTech, que extrai os dados principais e sugere uma nota de 0 a 100 conforme os critérios da
+          vaga. A nota é só um apoio: ela pode errar, e quem decide aprovar, recusar ou contratar é sempre a equipe da
+          Contratante. A Plataforma não recusa candidatos sozinha. A Contratante não deve incluir critérios
+          discriminatórios nas vagas nem nas instruções da automação, e responde pelas decisões do processo seletivo.
+        </p>
+        <p>
+          <strong>Candidatos.</strong> Cabe à Contratante informar os candidatos sobre o tratamento dos dados deles,
+          atender aos pedidos de acesso, correção e exclusão e apagar currículos que não precisar mais guardar. Entrevistas
+          marcadas na Plataforma são só um registro: a Contratante combina e confirma o compromisso diretamente com o
+          candidato.
         </p>
       </>
     ),
@@ -333,7 +372,9 @@ const sections: LegalSection[] = [
           <li>exatidão das informações lançadas pelos Usuários;</li>
           <li>falhas de fornecedores, da internet, de energia ou dos aparelhos dos Usuários;</li>
           <li>acesso indevido causado por senha compartilhada, aparelho desprotegido ou descuido da Contratante ou da equipe;</li>
-          <li>uso dos Dados de Clientes pela Contratante em desacordo com a lei.</li>
+          <li>uso dos Dados de Clientes ou de Candidatos pela Contratante em desacordo com a lei;</li>
+          <li>decisões de seleção ou contratação tomadas pela Contratante, inclusive com base na nota sugerida pela inteligência artificial;</li>
+          <li>bloqueio, limitação ou instabilidade do número de WhatsApp conectado.</li>
         </ul>
         <p>
           Em qualquer caso, a responsabilidade total da DomuTech fica limitada ao valor pago pela Contratante nos 3 meses

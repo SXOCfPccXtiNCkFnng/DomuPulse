@@ -65,11 +65,19 @@ export function SignInForm() {
   );
 }
 
+const SEGMENTS = [
+  { id: "brokers", title: "Gestão de corretores", desc: "Acompanhe a equipe de vendas ao vivo." },
+  { id: "hr", title: "Recrutamento (RH)", desc: "Receba e organize os candidatos automaticamente, muito mais rápido." },
+] as const;
+
 export function SignUpForm() {
   const [state, action, pending] = useActionState(signUp, initial);
   const v = state.values ?? {};
   // key força os campos a reaparecerem com o valor devolvido pelo servidor.
   const k = JSON.stringify(v);
+  // Os atalhos da página inicial chegam com ?modulo=rh ou ?modulo=corretores.
+  const params = useSearchParams();
+  const [segment, setSegment] = useState<"brokers" | "hr">(params.get("modulo") === "rh" ? "hr" : "brokers");
 
   return (
     <form action={action} className="relative flex flex-col gap-4" noValidate>
@@ -83,10 +91,36 @@ export function SignUpForm() {
         aria-hidden="true"
         className="absolute -left-[9999px] h-0 w-0 opacity-0"
       />
+
+      <input type="hidden" name="segment" value={segment} />
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-1 text-sm font-medium">O que você quer gerenciar?</legend>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SEGMENTS.map((s) => {
+            const active = segment === s.id;
+            return (
+              <button
+                type="button"
+                key={s.id}
+                onClick={() => setSegment(s.id)}
+                aria-pressed={active}
+                className={clsx(
+                  "rounded-xl border p-3 text-left transition-colors",
+                  active ? "border-brand bg-brand-soft" : "border-line hover:border-line-strong",
+                )}
+              >
+                <span className="block text-sm font-semibold">{s.title}</span>
+                <span className="mt-0.5 block text-xs text-muted">{s.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
       <Field label="Nome e sobrenome" error={state.fieldErrors?.fullName}>
         <Input name="fullName" autoComplete="name" required autoFocus defaultValue={v.fullName} key={`n${k}`} />
       </Field>
-      <Field label="Nome da imobiliária" error={state.fieldErrors?.orgName}>
+      <Field label="Nome da empresa" error={state.fieldErrors?.orgName}>
         <Input name="orgName" autoComplete="organization" required defaultValue={v.orgName} key={`o${k}`} />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -102,6 +136,7 @@ export function SignUpForm() {
         error={state.fieldErrors?.password}
         showRules
       />
+      <PasswordField name="confirm" label="Confirme a senha" autoComplete="new-password" error={state.fieldErrors?.confirm} />
       <TermsCheckbox error={state.fieldErrors?.acceptTerms} />
       <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending} className="mt-1">
@@ -112,7 +147,7 @@ export function SignUpForm() {
 }
 
 /** Corretor entrando pelo link de convite da conta. */
-export function JoinForm({ code, teams }: { code: string; teams: { id: string; name: string }[] }) {
+export function JoinForm({ code, teams, hideTeam = false }: { code: string; teams: { id: string; name: string }[]; hideTeam?: boolean }) {
   const [state, action, pending] = useActionState(joinWithInvite, initial);
   const v = state.values ?? {};
   const k = JSON.stringify(v);
@@ -135,7 +170,7 @@ export function JoinForm({ code, teams }: { code: string; teams: { id: string; n
       <Field label="E-mail" error={state.fieldErrors?.email}>
         <Input name="email" type="email" autoComplete="email" inputMode="email" required defaultValue={v.email} key={`e${k}`} />
       </Field>
-      {teams.length === 1 ? (
+      {hideTeam || teams.length === 1 ? (
         <input type="hidden" name="teamId" value={teams[0].id} />
       ) : (
         <Field label="Sua equipe" error={state.fieldErrors?.teamId}>
@@ -158,6 +193,7 @@ export function JoinForm({ code, teams }: { code: string; teams: { id: string; n
         error={state.fieldErrors?.password}
         showRules
       />
+      <PasswordField name="confirm" label="Confirme a senha" autoComplete="new-password" error={state.fieldErrors?.confirm} />
       <TermsCheckbox error={state.fieldErrors?.acceptTerms} />
       <Captcha resetKey={state} />
       <Button type="submit" size="lg" disabled={pending} className="mt-1">

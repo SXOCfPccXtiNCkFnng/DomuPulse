@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPlatformAdminEmail } from "@/lib/platform-admins";
 
-const APP_ROUTES = ["/painel", "/ativar", "/termos-atualizados", "/notas", "/clientes", "/relatorios", "/metas", "/agenda", "/equipe", "/conta"];
+const APP_ROUTES = ["/painel", "/ativar", "/termos-atualizados", "/notas", "/clientes", "/relatorios", "/metas", "/agenda", "/equipe", "/conta", "/recrutamento", "/vagas", "/candidatos", "/automacao"];
 const AUTH_ROUTES = ["/entrar", "/criar-conta"];
 
 function matches(path: string, routes: string[]) {

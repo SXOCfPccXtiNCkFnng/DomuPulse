@@ -33,7 +33,7 @@ const sections: LegalSection[] = [
           &quot;LGPD&quot;) e o Marco Civil da Internet (Lei 12.965/2014).
         </p>
         <p>
-          Ela vale para quem visita o site, para as imobiliárias que contratam a Plataforma (&quot;Contratante&quot;) e para
+          Ela vale para quem visita o site, para as empresas que contratam a Plataforma (&quot;Contratante&quot;) e para
           as pessoas da equipe delas que usam o sistema (&quot;Usuários&quot;). Ela completa os {terms}.
         </p>
       </>
@@ -49,7 +49,7 @@ const sections: LegalSection[] = [
         </p>
         <p>
           <strong>Operadora:</strong> nos dados de clientes e interessados que a equipe cadastra na carteira de clientes e na
-          agenda, a controladora é a imobiliária. A DomuTech só armazena e organiza esses dados para prestar o serviço,
+          agenda, e nos dados de candidatos às vagas da empresa, a controladora é a empresa. A DomuTech só armazena e organiza esses dados para prestar o serviço,
           conforme o uso da Plataforma pela Contratante, que responde pela origem, pela base legal e pelos pedidos desses
           titulares.
         </p>
@@ -60,12 +60,13 @@ const sections: LegalSection[] = [
     title: "Dados que tratamos",
     body: (
       <ul>
-        <li><strong>Cadastro:</strong> nome, e-mail, WhatsApp de contato, cargo, equipe e imobiliária.</li>
+        <li><strong>Cadastro:</strong> nome, e-mail, WhatsApp de contato, cargo, equipe e empresa.</li>
         <li><strong>Acesso:</strong> senha (guardada de forma irreversível pelo provedor de login, que ninguém consegue ler), código da verificação em duas etapas, quando ativada, e sessões ativas.</li>
         <li><strong>Operação:</strong> relatórios de produção, presença do dia, metas, comissões, observações e visitas agendadas.</li>
         <li><strong>Clientes da carteira:</strong> nome, telefone, e-mail, origem, interesse, valor do negócio, etapa e anotações inseridos pela equipe.</li>
+        <li><strong>Candidatos (contas de recrutamento):</strong> nome, telefone, e-mail, cidade, currículo, resumo e nota gerados pela inteligência artificial, mensagens trocadas com o atendimento automático no WhatsApp, situação no processo seletivo e entrevistas marcadas.</li>
         <li><strong>Cobrança:</strong> CPF ou CNPJ, valores, faturas e situação dos pagamentos, processados pelo Asaas.</li>
-        <li><strong>Notas fiscais:</strong> dados fiscais do corretor e da imobiliária (CNPJ, razão social, regime, inscrição municipal e endereço), as notas emitidas ou enviadas e os arquivos delas. O certificado digital A1 do corretor e a senha dele ficam guardados criptografados (AES-256), só são abertos no servidor no momento de emitir ou cancelar uma nota pedida pelo próprio corretor e são apagados junto com a conta.</li>
+        <li><strong>Notas fiscais:</strong> dados fiscais do corretor e da empresa (CNPJ, razão social, regime, inscrição municipal e endereço), as notas emitidas ou enviadas e os arquivos delas. O certificado digital A1 do corretor e a senha dele ficam guardados criptografados (AES-256), só são abertos no servidor no momento de emitir ou cancelar uma nota pedida pelo próprio corretor e são apagados junto com a conta.</li>
         <li><strong>Aparelhos:</strong> endereço técnico de notificação e tipo de navegador de cada aparelho que ativar os avisos.</li>
         <li><strong>Segurança e registros:</strong> endereço IP, data e hora de acesso, tentativas de login, aceite destes documentos e registro de alterações feitas na conta.</li>
         <li><strong>Contato:</strong> mensagens trocadas com o suporte por e-mail ou WhatsApp.</li>
@@ -77,7 +78,7 @@ const sections: LegalSection[] = [
     body: (
       <ul>
         <li>Informados por você, no cadastro, no uso da Plataforma e no contato com o suporte.</li>
-        <li>Informados pela sua imobiliária, quando o administrador ou a liderança convidam você ou cadastram sua equipe.</li>
+        <li>Informados pela sua empresa, quando o administrador ou a liderança convidam você ou cadastram sua equipe.</li>
         <li>Gerados automaticamente pelo uso, como registros de acesso, IP e tipo de aparelho.</li>
         <li>Recebidos de parceiros, como a confirmação de pagamento enviada pelo Asaas e o resultado da verificação contra robôs.</li>
       </ul>
@@ -137,18 +138,18 @@ const sections: LegalSection[] = [
         <li>Não vendemos nem alugamos dados pessoais.</li>
         <li>Não usamos dados para publicidade nem os compartilhamos para que terceiros façam publicidade.</li>
         <li>Não usamos cookies de rastreamento ou de anúncios.</li>
-        <li>Não tomamos decisões automatizadas que afetem seus direitos.</li>
-        <li>Não acessamos os dados das imobiliárias, salvo para suporte pedido por elas, segurança ou obrigação legal.</li>
+        <li>Não tomamos decisões automatizadas que afetem seus direitos. A nota que a inteligência artificial sugere para um currículo é só um apoio: quem aprova ou recusa um candidato é sempre uma pessoa da empresa.</li>
+        <li>Não acessamos os dados das empresas, salvo para suporte pedido por elas, segurança ou obrigação legal.</li>
       </ul>
     ),
   },
   {
-    title: "Quem vê seus dados dentro da sua imobiliária",
+    title: "Quem vê seus dados dentro da sua empresa",
     body: (
       <p>
-        Cada imobiliária é isolada das demais. Dentro dela, cada cargo vê apenas o que lhe cabe: o corretor vê os próprios
+        Cada empresa é isolada das demais. Dentro dela, cada cargo vê apenas o que lhe cabe: o corretor vê os próprios
         números e clientes, o gerente vê a equipe dele, o superintendente vê a diretoria dele e o administrador vê a
-        imobiliária inteira. A liderança acompanha a carteira de clientes da equipe, mas só o corretor responsável altera os
+        empresa inteira. A liderança acompanha a carteira de clientes da equipe, mas só o corretor responsável altera os
         clientes dele.
       </p>
     ),
@@ -165,6 +166,8 @@ const sections: LegalSection[] = [
           <li><strong>Asaas:</strong> cobrança, faturas e confirmação de pagamentos.</li>
           <li><strong>Cloudflare (Turnstile):</strong> verificação contra robôs nas telas de entrada e cadastro.</li>
           <li><strong>Sistema Nacional da NFS-e (Receita Federal):</strong> autorização e cancelamento das notas fiscais de serviço dos corretores. É o sistema oficial do governo; o Pulse envia a nota assinada com o certificado do corretor.</li>
+          <li><strong>Google (Gemini):</strong> leitura dos currículos e sugestão de nota nas contas de recrutamento. Recebe o currículo e os critérios da vaga.</li>
+          <li><strong>Evolution API e WhatsApp:</strong> conexão do número de WhatsApp da empresa, para receber e enviar as mensagens dos candidatos.</li>
           <li><strong>ViaCEP:</strong> consulta de endereço pelo CEP no cadastro fiscal (só o CEP é enviado).</li>
           <li><strong>Serviços de notificação do navegador</strong> (Google, Apple, Mozilla ou Microsoft, conforme o aparelho): entrega dos avisos.</li>
         </ul>
@@ -209,7 +212,7 @@ const sections: LegalSection[] = [
         </thead>
         <tbody>
           <tr>
-            <td>Cadastro, Dados da Operação e carteira de clientes</td>
+            <td>Cadastro, Dados da Operação, carteira de clientes e candidatos</td>
             <td>Enquanto a conta existir e até 90 dias após o encerramento, salvo exclusão antes pelo próprio usuário</td>
           </tr>
           <tr>
@@ -261,7 +264,7 @@ const sections: LegalSection[] = [
         <p>
           <strong>Pela própria Plataforma:</strong> em Conta, aba Privacidade e dados, você baixa uma cópia dos seus dados e
           pode excluir sua conta a qualquer momento. Nome, e-mail e cargo podem ser corrigidos pela liderança da sua
-          imobiliária, e as notificações são desativadas em Conta, aba Notificações.
+          empresa, e as notificações são desativadas em Conta, aba Notificações.
         </p>
         <p>
           <strong>Por e-mail:</strong> pelo {mail}. Respondemos em até 15 dias e podemos pedir informações para confirmar
@@ -279,11 +282,11 @@ const sections: LegalSection[] = [
       <>
         <p>
           <strong>Corretor, gerente e superintendente:</strong> nome, e-mail, aparelhos, avisos e registros de alteração do
-          cadastro são apagados, e o acesso é bloqueado de vez. Os números de produção lançados ficam com a imobiliária, sem
+          cadastro são apagados, e o acesso é bloqueado de vez. Os números de produção lançados ficam com a empresa, sem
           identificar a pessoa, porque fazem parte do histórico de trabalho da empresa.
         </p>
         <p>
-          <strong>Administrador:</strong> como é o titular da conta, a exclusão apaga a imobiliária inteira, com equipe,
+          <strong>Administrador:</strong> como é o titular da conta, a exclusão apaga a empresa inteira, com equipe,
           relatórios, clientes, agenda e metas, e cancela a assinatura. Ficam guardados só os registros que a lei manda
           manter, como os de cobrança.
         </p>
@@ -291,11 +294,11 @@ const sections: LegalSection[] = [
     ),
   },
   {
-    title: "Dados de clientes cadastrados pela imobiliária",
+    title: "Dados de clientes e candidatos cadastrados pela empresa",
     body: (
       <p>
-        Se você é cliente ou interessado de uma imobiliária que usa o Pulse, quem decide sobre os seus dados é a
-        imobiliária. Procure-a primeiro para exercer seus direitos. Se nos procurar, encaminhamos o pedido à imobiliária
+        Se você é cliente, interessado ou candidato a uma vaga de uma empresa que usa o Pulse, quem decide sobre os seus dados é a
+        empresa. Procure-a primeiro para exercer seus direitos. Se nos procurar, encaminhamos o pedido à empresa
         responsável e a apoiamos no atendimento.
       </p>
     ),

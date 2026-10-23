@@ -10,11 +10,11 @@ export const metadata: Metadata = { title: "Termos atualizados" };
 
 // O que mudou nesta versão, em linguagem simples. Atualize junto com LEGAL_DOCS_VERSION.
 const CHANGES = [
-  "Emissão de notas fiscais pelos corretores: responsabilidades do corretor, da imobiliária e do emissor parceiro.",
-  "Regras mais claras de assinatura, cancelamento, reajuste e suspensão por falta de pagamento ou contestação.",
-  "Responsabilidades de cada parte sobre os dados de clientes que a equipe cadastra.",
-  "Como pedir uma cópia dos seus dados ou excluir a conta pelo próprio Pulse.",
-  "Prazos de guarda de cada tipo de dado e lista dos fornecedores que ajudam a operar o serviço.",
+  "Contas de recrutamento: vagas, candidatos, currículos e agenda de entrevistas.",
+  "Atendimento automático pelo WhatsApp da empresa e o que acontece quando alguém da equipe assume a conversa.",
+  "Nota de currículo por inteligência artificial: é só um apoio, quem decide é sempre a equipe.",
+  "Responsabilidades da empresa sobre os dados dos candidatos e proibição de critérios discriminatórios.",
+  "Novos fornecedores na Política de Privacidade: Google (Gemini) e a conexão com o WhatsApp.",
 ];
 
 export default function UpdatedTermsPage() {

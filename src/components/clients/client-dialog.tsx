@@ -219,7 +219,7 @@ export function ClientDialog({
           ) : null}
           {form.stage === "lost" ? (
             <Field label="Motivo da perda" className="sm:col-span-2">
-              <Input value={form.lostReason} onChange={(e) => set("lostReason", e.target.value)} maxLength={200} placeholder="Comprou com outra imobiliária, desistiu, sem crédito..." />
+              <Input value={form.lostReason} onChange={(e) => set("lostReason", e.target.value)} maxLength={200} placeholder="Comprou com outra empresa, desistiu, sem crédito..." />
             </Field>
           ) : null}
           <Field label="Anotações" className="sm:col-span-2">

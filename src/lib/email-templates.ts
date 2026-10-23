@@ -1,6 +1,6 @@
 import "server-only";
-import { brandedEmail, contactFooterText, escapeHtml, sendEmail, siteUrl } from "@/lib/email";
-import { WELCOME_SUBJECT, welcomeEmailHtml, welcomeEmailText } from "@/lib/email-welcome";
+import { brandedEmail, contactFooterText, emailAssetUrl, escapeHtml, sendEmail, siteUrl } from "@/lib/email";
+import { SEGMENT_LABEL, type WelcomeSegment, welcomeEmailHtml, welcomeEmailText, welcomeSubject } from "@/lib/email-welcome";
 import { CONTACT_EMAIL, contactWhatsappUrl } from "@/lib/legal";
 import { formatMoney } from "@/lib/metrics";
 
@@ -14,15 +14,19 @@ function firstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] ?? "";
 }
 
-export function sendWelcomeEmail(input: { to: string; fullName: string; orgName: string }) {
+export function sendWelcomeEmail(input: { to: string; fullName: string; orgName: string; segment: WelcomeSegment }) {
   const welcome = {
     firstName: firstName(input.fullName),
     orgName: input.orgName,
+    segment: input.segment,
     baseUrl: siteUrl(),
-    whatsappUrl: contactWhatsappUrl("Olá! Acabei de criar a conta no Domu Pulse e quero ajuda para começar."),
+    logoUrl: emailAssetUrl("/brand/mark-white.png"),
+    whatsappUrl: contactWhatsappUrl(
+      `Olá! Acabei de criar a conta no Domu Pulse (${SEGMENT_LABEL[input.segment]}) e quero ajuda para começar.`,
+    ),
     contactEmail: CONTACT_EMAIL,
   };
-  return sendEmail({ to: input.to, subject: WELCOME_SUBJECT, html: welcomeEmailHtml(welcome), text: welcomeEmailText(welcome) });
+  return sendEmail({ to: input.to, subject: welcomeSubject(input.segment), html: welcomeEmailHtml(welcome), text: welcomeEmailText(welcome) });
 }
 
 export function sendInviteEmail(input: { to: string; fullName: string; orgName: string; roleLabel: string; invitedBy: string; link: string }) {
@@ -380,8 +384,10 @@ export async function sendNewSignupAlert(input: {
   email: string;
   orgName: string;
   phone: string;
+  segment: WelcomeSegment;
   ip?: string;
 }) {
+  const moduleLabel = SEGMENT_LABEL[input.segment];
   const { getSignupAlertEmails } = await import("@/lib/interno");
   const recipients = await getSignupAlertEmails();
   if (!recipients.length) return;
@@ -406,8 +412,12 @@ export async function sendNewSignupAlert(input: {
         <td style="padding:6px 0;color:#111"><strong>${escapeHtml(input.fullName)}</strong></td>
       </tr>
       <tr>
-        <td style="padding:6px 0;color:#666"><strong>Imobiliária:</strong></td>
+        <td style="padding:6px 0;color:#666"><strong>Empresa:</strong></td>
         <td style="padding:6px 0;color:#111">${escapeHtml(input.orgName)}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px 0;color:#666"><strong>Módulo:</strong></td>
+        <td style="padding:6px 0;color:#111"><strong>${escapeHtml(moduleLabel)}</strong></td>
       </tr>
       <tr>
         <td style="padding:6px 0;color:#666"><strong>E-mail:</strong></td>
@@ -423,19 +433,19 @@ export async function sendNewSignupAlert(input: {
       </tr>
     </table>`;
 
-  const text = `Novo cadastro no Domu Pulse!\n\nNome: ${input.fullName}\nImobiliária: ${input.orgName}\nE-mail: ${input.email}\nWhatsApp: ${input.phone}${waUrl ? ` (${waUrl})` : ""}\nData/Hora: ${now}\n\nVer no painel: ${url}`;
+  const text = `Novo cadastro no Domu Pulse!\n\nNome: ${input.fullName}\nEmpresa: ${input.orgName}\nMódulo: ${moduleLabel}\nE-mail: ${input.email}\nWhatsApp: ${input.phone}${waUrl ? ` (${waUrl})` : ""}\nData/Hora: ${now}\n\nVer no painel: ${url}`;
 
   await Promise.allSettled(
     recipients.map((to) =>
       sendEmail(
         {
           to,
-          subject: `[Novo Cliente] ${input.fullName} cadastrou a imobiliária ${input.orgName}`,
+          subject: `[Novo Cliente · ${moduleLabel}] ${input.fullName} cadastrou a empresa ${input.orgName}`,
           html: brandedEmail({
-            eyebrow: "Novo Cliente",
+            eyebrow: `Novo Cliente · ${moduleLabel}`,
             heading: "Novo cadastro no Pulse!",
-            intro: `${input.fullName} acabou de criar a conta da ${input.orgName}.`,
-            preheader: `Novo cadastro: ${input.fullName} (${input.orgName})`,
+            intro: `${input.fullName} acabou de criar a conta da ${input.orgName} no módulo ${moduleLabel}.`,
+            preheader: `Novo cadastro em ${moduleLabel}: ${input.fullName} (${input.orgName})`,
             bodyHtml,
             cta: { label: "Abrir painel interno", url },
           }),

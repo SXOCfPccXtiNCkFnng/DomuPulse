@@ -118,14 +118,14 @@ async function Overview() {
           emphasis
         />
         <StatTile label="Receita mensal recorrente" value={Math.round(o.mrrCents / 100)} detail="em reais, assinaturas ativas e em atraso" emphasis />
-        <StatTile label="Imobiliárias" value={o.totalOrgs} detail={`${o.newThisWeek} novas nos últimos 7 dias`} />
+        <StatTile label="Empresas" value={o.totalOrgs} detail={`${o.newThisWeek} novas nos últimos 7 dias`} />
         <StatTile label="Pessoas ativas" value={o.activeMembers} detail={`${formatNumber(o.brokers)} corretores`} />
         <StatTile label="Relatórios hoje" value={o.reportsToday} detail={`${o.openErrors} erros em aberto`} />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Imobiliárias por situação" />
+          <CardHeader title="Empresas por situação" />
           <ul className="flex flex-col gap-1 p-4 sm:p-5">
             {(Object.keys(STATUS) as OrgStatusView[]).map((s) => (
               <li key={s} className="flex items-center justify-between rounded-xl px-3 py-2 hover:bg-surface-2">
@@ -297,7 +297,7 @@ async function ClientsTab({ search, status }: { search: string; status: string }
           <input
             name="q"
             defaultValue={search}
-            placeholder="Buscar por nome, e-mail, telefone ou imobiliária"
+            placeholder="Buscar por nome, e-mail, telefone ou empresa"
             className="h-10 w-full max-w-md rounded-xl border border-line bg-surface-2 px-3 text-sm outline-none focus:border-ink"
           />
           <button type="submit" className={buttonClass("secondary", "md")}>
@@ -516,7 +516,7 @@ async function Commercial() {
   );
 }
 
-// O painel mexe em todas as imobiliárias: só abre com a verificação em duas
+// O painel mexe em todas as empresas: só abre com a verificação em duas
 // etapas confirmada. Quem já ativou passa pela tela do código no login.
 function EnableMfa() {
   return (
@@ -525,7 +525,7 @@ function EnableMfa() {
         <BrandMark className="mx-auto size-10" />
         <h1 className="mt-5 font-display text-2xl font-semibold tracking-tight">Ative a verificação em duas etapas</h1>
         <p className="mt-2 text-sm text-muted">
-          O painel interno mexe em todas as imobiliárias. Para abrir, sua conta precisa da verificação em duas etapas, com o código
+          O painel interno mexe em todas as empresas. Para abrir, sua conta precisa da verificação em duas etapas, com o código
           confirmado nesta sessão. Ative em Conta e entre de novo.
         </p>
         <Link href="/conta?aba=seguranca" className={buttonClass("primary", "md", "mt-6")}>

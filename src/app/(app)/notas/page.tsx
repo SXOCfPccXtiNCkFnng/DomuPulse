@@ -36,7 +36,7 @@ export default async function NotasPage(props: PageProps<"/notas">) {
 
   const commissionParam = typeof sp.comissao === "string" ? sp.comissao : null;
 
-  // Cadastro fiscal (sem o token secreto) e se a imobiliária já pode receber notas.
+  // Cadastro fiscal (sem o token secreto) e se a empresa já pode receber notas.
   const admin = createAdminClient();
   const [{ data: profile }, { data: orgFiscal }] = await Promise.all([
     isBroker

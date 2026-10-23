@@ -89,9 +89,9 @@ export async function startSubscription(_: BillingState, formData: FormData): Pr
 }
 
 /**
- * Aplica um cupom à imobiliária. "Dias grátis" libera o acesso na hora, sem
+ * Aplica um cupom à empresa. "Dias grátis" libera o acesso na hora, sem
  * pagamento; "desconto" fica guardado e vale em todas as faturas da assinatura.
- * O banco garante que cada imobiliária usa cada cupom uma vez só.
+ * O banco garante que cada empresa usa cada cupom uma vez só.
  */
 export async function redeemCoupon(_: BillingState, formData: FormData): Promise<BillingState> {
   const me = await getCurrentMember();
@@ -115,7 +115,7 @@ export async function redeemCoupon(_: BillingState, formData: FormData): Promise
   const { data } = await admin
     .rpc("redeem_coupon", { p_code: code, p_org: me.org.id })
     .maybeSingle<{ percent_off: number | null; free_days: number | null }>();
-  if (!data) return { fieldErrors: { coupon: "Cupom inválido, vencido, esgotado ou já usado por esta imobiliária." } };
+  if (!data) return { fieldErrors: { coupon: "Cupom inválido, vencido, esgotado ou já usado por esta empresa." } };
 
   if (data.free_days) {
     // Soma a partir de hoje ou do fim do acesso atual, o que for depois.

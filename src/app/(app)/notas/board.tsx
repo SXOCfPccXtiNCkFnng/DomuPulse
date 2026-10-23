@@ -137,14 +137,14 @@ export function InvoiceBoard({
         <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
           {issuing.isOwner ? (
             <>
-              Para os corretores emitirem notas pelo Pulse, cadastre os dados fiscais da imobiliária em{" "}
+              Para os corretores emitirem notas pelo Pulse, cadastre os dados fiscais da empresa em{" "}
               <Link href="/conta?aba=imobiliaria" className="font-semibold underline underline-offset-4">
-                Conta, aba Imobiliária
+                Conta, aba Empresa
               </Link>
               .
             </>
           ) : (
-            "A emissão de notas pelo Pulse fica disponível quando o administrador cadastrar os dados fiscais da imobiliária. Por enquanto, envie a nota pronta."
+            "A emissão de notas pelo Pulse fica disponível quando o administrador cadastrar os dados fiscais da empresa. Por enquanto, envie a nota pronta."
           )}
         </p>
       ) : null}

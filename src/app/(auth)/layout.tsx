@@ -2,11 +2,11 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme";
 import { Logo } from "@/components/ui/logo";
 
-// Do cadastro ao primeiro relatório: o caminho que a pessoa vai seguir.
+// Do cadastro ao primeiro uso, nos dois módulos: o caminho que a pessoa vai seguir.
 const STEPS = [
-  { title: "Crie a conta", text: "Nome da imobiliária, seu e-mail e uma senha. Leva um minuto." },
-  { title: "Convide a equipe", text: "Um a um ou todos de uma vez com uma planilha." },
-  { title: "Receba o primeiro relatório", text: "Seus corretores lançam pelo celular e você acompanha ao vivo." },
+  { title: "Crie a conta e escolha o módulo", text: "Gestão de corretores ou recrutamento. Nome da empresa, seu e-mail e uma senha. Leva um minuto." },
+  { title: "Prepare em poucos minutos", text: "Convide os corretores por e-mail ou planilha. No RH, conecte o WhatsApp da empresa e abra as vagas." },
+  { title: "Acompanhe ao vivo", text: "Relatórios chegando do celular dos corretores, ou currículos chegando com a nota da IA." },
 ];
 
 const NOTES = ["Sem instalar nada", "Pix, boleto ou cartão", "Cancela quando quiser"];
@@ -44,7 +44,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
             Como começa
           </p>
           <p className="mt-6 font-display text-[2.5rem] leading-[1.04] font-bold tracking-[-0.03em]">
-            Sua equipe usando <span className="text-[#7ea5ff]">no mesmo dia.</span>
+            Sua empresa usando <span className="text-[#7ea5ff]">no mesmo dia.</span>
           </p>
 
           <ol className="mt-12 border-t border-white/10">

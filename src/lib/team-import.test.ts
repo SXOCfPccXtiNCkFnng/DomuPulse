@@ -6,7 +6,7 @@ describe("planilha de equipe", () => {
   it("lê o modelo com cabeçalho e ponto e vírgula", () => {
     const rows = parseTeamCsv(IMPORT_TEMPLATE);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toEqual({ line: 2, fullName: "Maria Souza", email: "maria@imobiliaria.com.br", role: "corretor", team: "Equipe Norte" });
+    expect(rows[0]).toEqual({ line: 2, fullName: "Maria Souza", email: "maria@empresa.com.br", role: "corretor", team: "Equipe Norte" });
   });
 
   it("aceita vírgula, aspas, colunas em outra ordem e BOM do Excel", () => {

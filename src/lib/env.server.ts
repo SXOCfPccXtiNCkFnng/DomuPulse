@@ -53,6 +53,31 @@ export const asaasEnv = lazy(() =>
     }),
 );
 
+// IA do recrutamento (Google Gemini). GEMINI_API_KEY vem do Google AI Studio.
+// GEMINI_MODEL é opcional (padrão abaixo) para trocar o modelo sem mexer no código.
+export const geminiEnv = lazy(() =>
+  z
+    .object({ apiKey: z.string().min(10), model: z.string().min(2).default("gemini-2.5-flash") })
+    .parse({ apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL }),
+);
+
+// Evolution API (WhatsApp do módulo de RH). EVOLUTION_API_URL é a URL do
+// servidor (ex.: no Render), EVOLUTION_API_KEY é a AUTHENTICATION_API_KEY dele,
+// e EVOLUTION_WEBHOOK_TOKEN é o segredo que confere os avisos que chegam.
+export const evolutionEnv = lazy(() =>
+  z
+    .object({
+      url: z.string().url().transform((u) => u.replace(/\/$/, "")),
+      apiKey: z.string().min(1),
+      webhookToken: z.string().min(16, "EVOLUTION_WEBHOOK_TOKEN precisa de 16+ caracteres"),
+    })
+    .parse({
+      url: process.env.EVOLUTION_API_URL,
+      apiKey: process.env.EVOLUTION_API_KEY,
+      webhookToken: process.env.EVOLUTION_WEBHOOK_TOKEN,
+    }),
+);
+
 // Emissão de NFS-e direto na API nacional. NFSE_ENV escolhe o ambiente:
 // "homologacao" (testes, sem valor fiscal) ou "producao". NFSE_CERT_KEY
 // (32 bytes em base64) criptografa os certificados digitais dos corretores.

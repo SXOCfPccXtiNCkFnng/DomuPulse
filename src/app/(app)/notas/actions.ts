@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fieldErrors, type FormState } from "@/lib/validation";
 
 const BUCKET = "invoices";
-const READ_ONLY = { error: "A assinatura da imobiliária está inativa. Fale com o administrador." };
+const READ_ONLY = { error: "A assinatura da empresa está inativa. Fale com o administrador." };
 
 /**
  * Primeiro passo do envio: o servidor confere quem é e o arquivo, e devolve um

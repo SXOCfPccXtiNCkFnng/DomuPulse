@@ -5,7 +5,7 @@ import { describeError, logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWeeklyDigests } from "@/lib/weekly-digest";
 
-// Resumos podem demorar com muitas imobiliárias: até 60 s no plano gratuito.
+// Resumos podem demorar com muitas empresas: até 60 s no plano gratuito.
 export const maxDuration = 60;
 
 /**
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
       try {
         sent += await sendWeeklyDigests(org);
       } catch (err) {
-        // Uma imobiliária com problema não impede o resumo das outras.
+        // Uma empresa com problema não impede o resumo das outras.
         logger.error("cron.weekly_org", { message: describeError(err), orgId: org.id });
       }
     }

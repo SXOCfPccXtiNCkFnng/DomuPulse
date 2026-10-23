@@ -5,8 +5,9 @@ import Link from "next/link";
 import { ThemeSwitcher } from "@/components/theme";
 import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
-import { requireActivatedMember, orgCanWrite, ROLE_LABEL, type OrgStatus } from "@/lib/auth";
+import { requireActivatedMember, orgCanWrite, roleLabel, type OrgStatus } from "@/lib/auth";
 import { vapidPublicKeyOrNull } from "@/lib/env";
+import { evolutionConfigured } from "@/lib/evolution";
 import { formatMoney } from "@/lib/metrics";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -16,6 +17,7 @@ import { CouponForm, DigestSettings, HashToTab, InstallGuide, PushSettings, Subs
 import { OrgSettingsForm } from "./org-settings";
 import { CancelSubscriptionButton, DeleteAccountForm } from "./privacy";
 import { ProfileForm } from "./profile";
+import { WhatsappConnect } from "../whatsapp/whatsapp-client";
 import { OrgFiscalForm } from "../notas/fiscal";
 import { ORG_FISCAL_COLUMNS, type OrgFiscal as OrgFiscalRow } from "@/lib/nfse";
 import { ChangePasswordForm, MfaSettings, SignOutEverywhere } from "./security";
@@ -32,7 +34,7 @@ const STATUS_LABEL: Record<OrgStatus, { label: string; tone: "brand" | "warn" | 
 // Abas da conta. As do administrador aparecem primeiro; o corretor vê só as dele.
 const TABS = [
   { id: "perfil", label: "Perfil", Icon: UserRound, ownerOnly: false },
-  { id: "imobiliaria", label: "Imobiliária", Icon: Building2, ownerOnly: true },
+  { id: "imobiliaria", label: "Empresa", Icon: Building2, ownerOnly: true },
   { id: "assinatura", label: "Assinatura", Icon: CreditCard, ownerOnly: true },
   { id: "notificacoes", label: "Notificações", Icon: Bell, ownerOnly: false },
   { id: "seguranca", label: "Segurança", Icon: ShieldCheck, ownerOnly: false },
@@ -44,6 +46,7 @@ type TabId = (typeof TABS)[number]["id"];
 export default async function ContaPage(props: PageProps<"/conta">) {
   const me = await requireActivatedMember();
   const sp = await props.searchParams;
+  const hr = me.org.segment === "hr";
   const tabs = TABS.filter((t) => !t.ownerOnly || me.role === "owner");
   const requested = typeof sp.aba === "string" ? sp.aba : "";
   const tab: TabId = tabs.find((t) => t.id === requested)?.id ?? tabs[0].id;
@@ -53,7 +56,7 @@ export default async function ContaPage(props: PageProps<"/conta">) {
       <HashToTab />
       <header className="animate-rise">
         <p className="text-sm text-muted">
-          {ROLE_LABEL[me.role]} em {me.org.name}
+          {roleLabel(me.role, me.org.segment)} em {me.org.name}
         </p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{me.fullName}</h1>
       </header>
@@ -88,16 +91,16 @@ export default async function ContaPage(props: PageProps<"/conta">) {
       {tab === "imobiliaria" ? (
         <div className="grid items-start gap-5 xl:grid-cols-2">
           <Card>
-            <CardHeader title="Imobiliária" description="Nome, fuso e horários de relatório da equipe" />
-            <OrgSettingsForm name={me.org.name} timezone={me.org.timezone} slots={me.org.reportSlots} />
+            <CardHeader title="Empresa" description={hr ? "Nome e fuso horário da conta" : "Nome, fuso e horários de relatório da equipe"} />
+            <OrgSettingsForm name={me.org.name} timezone={me.org.timezone} slots={me.org.reportSlots} showSlots={!hr} />
           </Card>
-          <OrgFiscal orgId={me.org.id} />
+          {hr ? <WhatsappCard orgId={me.org.id} isOwner={me.role === "owner"} /> : <OrgFiscal orgId={me.org.id} />}
         </div>
       ) : null}
 
       {tab === "assinatura" ? <Subscription orgStatus={me.org.status} trialEndsAt={me.org.trialEndsAt} canWrite={orgCanWrite(me.org)} /> : null}
 
-      {tab === "notificacoes" ? <Notifications showDigest={me.role !== "broker"} memberId={me.id} /> : null}
+      {tab === "notificacoes" ? <Notifications showDigest={me.role !== "broker" && !hr} memberId={me.id} /> : null}
 
       {tab === "seguranca" ? (
         <div className="grid items-start gap-5 xl:grid-cols-2">
@@ -154,7 +157,7 @@ export default async function ContaPage(props: PageProps<"/conta">) {
             </div>
           </Card>
           <Card>
-            <CardHeader title="Excluir minha conta" description={me.role === "owner" ? "Apaga a imobiliária inteira" : "Remove seus dados pessoais do Pulse"} />
+            <CardHeader title="Excluir minha conta" description={me.role === "owner" ? "Apaga a empresa inteira" : "Remove seus dados pessoais do Pulse"} />
             <DeleteAccountForm isOwner={me.role === "owner"} orgName={me.org.name} />
           </Card>
         </div>
@@ -173,7 +176,7 @@ async function Notifications({ showDigest, memberId }: { showDigest: boolean; me
   return (
     <div className="max-w-3xl">
       <Card>
-        <CardHeader title="Notificações" description="Lembretes de relatório e alertas da equipe neste aparelho" />
+        <CardHeader title="Notificações" description="Avisos do Pulse neste aparelho" />
         {vapidKey ? (
           <PushSettings vapidKey={vapidKey} />
         ) : (
@@ -264,12 +267,33 @@ async function Profile({ name }: { name: string }) {
   );
 }
 
-/** Dados da imobiliária como tomadora das notas fiscais dos corretores. */
+/** Dados da empresa como tomadora das notas fiscais dos corretores. */
+async function WhatsappCard({ orgId, isOwner }: { orgId: string; isOwner: boolean }) {
+  const { data: conn } = await createAdminClient().from("wa_connections").select("status, phone").eq("org_id", orgId).maybeSingle();
+  const status = (conn?.status as "disconnected" | "connecting" | "connected") ?? "disconnected";
+  return (
+    <Card>
+      <CardHeader title="WhatsApp do recrutamento" description="Conecte um número para receber os candidatos automaticamente" />
+      <div className="p-5 sm:p-6">
+        {!evolutionConfigured() ? (
+          <p className="text-sm text-muted">A conexão de WhatsApp ainda não foi ativada neste ambiente.</p>
+        ) : !isOwner ? (
+          <p className="text-sm text-muted">
+            {status === "connected" ? "WhatsApp conectado." : "WhatsApp não conectado."} Só o administrador gerencia a conexão.
+          </p>
+        ) : (
+          <WhatsappConnect initialStatus={status} phone={(conn?.phone as string | null) ?? null} />
+        )}
+      </div>
+    </Card>
+  );
+}
+
 async function OrgFiscal({ orgId }: { orgId: string }) {
   const { data } = await createAdminClient().from("organizations").select(ORG_FISCAL_COLUMNS).eq("id", orgId).single<OrgFiscalRow>();
   return (
     <Card>
-      <CardHeader title="Dados fiscais" description="Para os corretores emitirem as notas contra a imobiliária pelo Pulse" />
+      <CardHeader title="Dados fiscais" description="Para os corretores emitirem as notas contra a empresa pelo Pulse" />
       <OrgFiscalForm
         initial={{
           legalName: data?.fiscal_legal_name ?? "",
