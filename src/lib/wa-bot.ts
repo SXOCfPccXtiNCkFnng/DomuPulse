@@ -35,6 +35,18 @@ const NO_VAGAS = "No momento não temos vagas abertas, mas obrigado pelo interes
 const greeting = (name: string | undefined, company: string | null, custom: string | null) =>
   `${fillBotText(custom?.trim() || DEFAULT_GREETING, { name, company })}\n\n${MENU}`;
 
+const welcomeBack = (name: string | null | undefined, sentResume: boolean) => {
+  const first = name?.trim().split(/\s+/)[0];
+  const hello = `Olá${first ? `, ${first}` : ""}! Que bom falar com você de novo. 🙂`;
+  const status = sentResume ? "\n\nSeu currículo já está com a nossa equipe. Se for selecionado(a), a gente te chama por aqui." : "";
+  return `${hello}${status}\n\n${MENU}`;
+};
+
+// Depois de encerrar (currículo recebido), quanto tempo o bot ignora mensagens soltas.
+const DONE_QUIET_MS = 30 * 60 * 1000;
+// Conversa parada no meio (escolhendo vaga, aguardando currículo): recomeça.
+const IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
+
 // Palavras que indicam o que a pessoa quer, para não obrigar a responder só o número.
 const APPLY_WORDS = /\b(vaga|curr[ií]culo|cv\b|candidat|emprego|trabalh|oportunidade|contrat)/i;
 const QUESTION_WORDS = /\b(d[uú]vida|pergunt|informa[cç]|falar|atendente|algu[eé]m|pessoa|humano)/i;
@@ -103,10 +115,23 @@ export async function handleIncoming(orgId: string, incoming: Incoming) {
 
   // Conversa (memória por número).
   const { data: convRaw } = await admin.from("wa_conversations").select("*").eq("org_id", orgId).eq("phone", phone).maybeSingle();
-  let conv = convRaw as { id: string; stage: string; vaga_id: string | null; candidato_id: string | null; name: string | null } | null;
+  let conv = convRaw as { id: string; stage: string; vaga_id: string | null; candidato_id: string | null; name: string | null; updated_at: string } | null;
 
   // Handoff: se o recrutador assumiu a conversa, o bot fica calado.
   if (conv?.stage === "human") return;
+
+  // Quem volta depois de um tempo é recepcionado de novo, como faria alguém do
+  // RH. Logo depois de encerrar, fica calado (é o "obrigado" do candidato).
+  if (conv) {
+    const idle = Date.now() - new Date(conv.updated_at).getTime();
+    const now = new Date().toISOString();
+    if (!doc && idle > (conv.stage === "done" ? DONE_QUIET_MS : IDLE_RESTART_MS)) {
+      await admin.from("wa_conversations").update({ stage: "awaiting_intent", vaga_id: null, updated_at: now }).eq("id", conv.id);
+      await say(welcomeBack(incoming.pushName ?? conv.name, Boolean(conv.candidato_id)));
+      return;
+    }
+    await admin.from("wa_conversations").update({ updated_at: now }).eq("id", conv.id);
+  }
 
   // Vagas abertas da empresa.
   const { data: vagasRaw } = await admin
@@ -123,7 +148,7 @@ export async function handleIncoming(orgId: string, incoming: Incoming) {
     const { data, error } = await admin
       .from("wa_conversations")
       .insert({ org_id: orgId, phone, name: incoming.pushName ?? null, stage: "awaiting_intent" })
-      .select("id, stage, vaga_id, candidato_id, name")
+      .select("id, stage, vaga_id, candidato_id, name, updated_at")
       .single();
     conv = data as typeof conv;
     if (!conv) {
