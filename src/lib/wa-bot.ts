@@ -120,13 +120,17 @@ export async function handleIncoming(orgId: string, incoming: Incoming) {
   // Primeiro contato: recepciona e pergunta o que a pessoa quer. Quem já chega
   // mandando o currículo pula a pergunta.
   if (!conv) {
-    const { data } = await admin
+    const { data, error } = await admin
       .from("wa_conversations")
       .insert({ org_id: orgId, phone, name: incoming.pushName ?? null, stage: "awaiting_intent" })
       .select("id, stage, vaga_id, candidato_id, name")
       .single();
     conv = data as typeof conv;
-    if (!conv) return;
+    if (!conv) {
+      // 23514: a etapa 'awaiting_intent' exige a migração 20261101000000_wa_intent.sql.
+      logger.error("wa.conversation", { message: error ? `${error.code}: ${error.message}` : "conversa não criada", orgId });
+      return;
+    }
     if (!doc) {
       await say(greeting(incoming.pushName, company, settings?.greeting ?? null));
       return;
