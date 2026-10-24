@@ -73,14 +73,14 @@ export function AutomationForm({ initial, defaults }: { initial: Values; default
       <MessageField
         name="greeting"
         label="Mensagem de boas-vindas"
-        hint={<>A primeira mensagem a quem chama. Logo depois, o atendimento pergunta se a pessoa quer se candidatar a uma vaga ou tirar uma dúvida. Dúvidas vão para a equipe. {VARS_HINT}</>}
+        hint={<>Base da primeira mensagem a quem chama. O atendimento conversa naturalmente, entende se a pessoa quer se candidatar ou tirar uma dúvida, e o que ele não souber responder vai para a equipe. {VARS_HINT}</>}
         initial={initial.greeting}
         fallback={defaults.greeting}
         rows={3}
         error={state.fieldErrors?.greeting}
       />
 
-      <Field label="Instruções para o atendimento" hint="Opcional. Contexto da empresa e o que valorizar na avaliação. Usado ao conversar e pontuar." error={state.fieldErrors?.instructions}>
+      <Field label="Instruções para o atendimento" hint="Opcional. Contexto da empresa, informações que o atendimento pode passar (horário, local, benefícios) e o que valorizar na avaliação. O que não estiver aqui, ele não inventa: passa para a equipe." error={state.fieldErrors?.instructions}>
         <textarea
           name="instructions"
           defaultValue={initial.instructions}
