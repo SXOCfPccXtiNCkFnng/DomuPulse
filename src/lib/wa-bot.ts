@@ -196,7 +196,8 @@ export async function handleIncoming(orgId: string, incoming: Incoming) {
     if (!doc) return; // encerrado; só reage a um currículo novo
   }
   if (vagas.length === 0) {
-    if (doc) await say(NO_VAGAS);
+    await say(NO_VAGAS);
+    await admin.from("wa_conversations").update({ stage: "done", updated_at: new Date().toISOString() }).eq("id", conv.id);
     return;
   }
 
