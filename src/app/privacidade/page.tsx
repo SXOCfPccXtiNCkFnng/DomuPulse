@@ -64,7 +64,7 @@ const sections: LegalSection[] = [
         <li><strong>Acesso:</strong> senha (guardada de forma irreversível pelo provedor de login, que ninguém consegue ler), código da verificação em duas etapas, quando ativada, e sessões ativas.</li>
         <li><strong>Operação:</strong> relatórios de produção, presença do dia, metas, comissões, observações e visitas agendadas.</li>
         <li><strong>Clientes da carteira:</strong> nome, telefone, e-mail, origem, interesse, valor do negócio, etapa e anotações inseridos pela equipe.</li>
-        <li><strong>Candidatos (contas de recrutamento):</strong> nome, telefone, e-mail, cidade, currículo, resumo e nota gerados pela inteligência artificial, mensagens trocadas com o atendimento automático no WhatsApp, situação no processo seletivo e entrevistas marcadas.</li>
+        <li><strong>Candidatos (contas de recrutamento):</strong> nome, telefone, nome de perfil do WhatsApp, e-mail, cidade, currículo, resumo e nota gerados pela inteligência artificial, histórico das mensagens trocadas com o atendimento automático no WhatsApp (incluindo as respostas escritas pela inteligência artificial), vaga escolhida, situação no processo seletivo e entrevistas marcadas.</li>
         <li><strong>Cobrança:</strong> CPF ou CNPJ, valores, faturas e situação dos pagamentos, processados pelo Asaas.</li>
         <li><strong>Notas fiscais:</strong> dados fiscais do corretor e da empresa (CNPJ, razão social, regime, inscrição municipal e endereço), as notas emitidas ou enviadas e os arquivos delas. O certificado digital A1 do corretor e a senha dele ficam guardados criptografados (AES-256), só são abertos no servidor no momento de emitir ou cancelar uma nota pedida pelo próprio corretor e são apagados junto com a conta.</li>
         <li><strong>Aparelhos:</strong> endereço técnico de notificação e tipo de navegador de cada aparelho que ativar os avisos.</li>
@@ -120,8 +120,15 @@ const sections: LegalSection[] = [
             <td>Cumprimento de obrigação legal (Marco Civil e legislação fiscal)</td>
           </tr>
           <tr>
-            <td>Defender direitos em processos e reclamações</td>
+            <td>Registrar o aceite dos Termos e desta Política e defender direitos em processos e reclamações</td>
             <td>Exercício regular de direitos</td>
+          </tr>
+          <tr>
+            <td>
+              Guardar, organizar e processar dados de clientes e de candidatos, inclusive com inteligência artificial,
+              como operadora da Contratante
+            </td>
+            <td>A base legal é definida pela Contratante, que é a controladora desses dados</td>
           </tr>
           <tr>
             <td>Melhorar a Plataforma com estatísticas anonimizadas</td>
@@ -138,7 +145,8 @@ const sections: LegalSection[] = [
         <li>Não vendemos nem alugamos dados pessoais.</li>
         <li>Não usamos dados para publicidade nem os compartilhamos para que terceiros façam publicidade.</li>
         <li>Não usamos cookies de rastreamento ou de anúncios.</li>
-        <li>Não tomamos decisões automatizadas que afetem seus direitos. A nota que a inteligência artificial sugere para um currículo é só um apoio: quem aprova ou recusa um candidato é sempre uma pessoa da empresa.</li>
+        <li>Não tomamos decisões automatizadas que afetem seus direitos. A nota que a inteligência artificial sugere para um currículo é só um apoio: quem aprova ou recusa um candidato é sempre uma pessoa da empresa. Ainda assim, o candidato pode pedir à empresa informações sobre os critérios usados e a revisão de qualquer avaliação feita de forma automática (LGPD, art. 20).</li>
+        <li>Não usamos os currículos, as conversas nem os demais dados das empresas para treinar modelos de inteligência artificial próprios.</li>
         <li>Não acessamos os dados das empresas, salvo para suporte pedido por elas, segurança ou obrigação legal.</li>
       </ul>
     ),
@@ -166,8 +174,8 @@ const sections: LegalSection[] = [
           <li><strong>Asaas:</strong> cobrança, faturas e confirmação de pagamentos.</li>
           <li><strong>Cloudflare (Turnstile):</strong> verificação contra robôs nas telas de entrada e cadastro.</li>
           <li><strong>Sistema Nacional da NFS-e (Receita Federal):</strong> autorização e cancelamento das notas fiscais de serviço dos corretores. É o sistema oficial do governo; o Pulse envia a nota assinada com o certificado do corretor.</li>
-          <li><strong>Google (Gemini):</strong> leitura dos currículos e sugestão de nota nas contas de recrutamento. Recebe o currículo e os critérios da vaga.</li>
-          <li><strong>Evolution API e WhatsApp:</strong> conexão do número de WhatsApp da empresa, para receber e enviar as mensagens dos candidatos.</li>
+          <li><strong>Google (Gemini):</strong> inteligência artificial das contas de recrutamento. Lê os currículos e sugere a nota (recebe o currículo e os critérios da vaga) e escreve as respostas do atendimento automático no WhatsApp e identifica a vaga de interesse (recebe as mensagens da conversa, o nome do candidato, as vagas abertas e as instruções configuradas pela empresa).</li>
+          <li><strong>Evolution API e WhatsApp:</strong> conexão do número de WhatsApp da empresa, para receber e enviar as mensagens dos candidatos. O servidor da Evolution API é operado pela DomuTech em provedor de nuvem contratado, e as mensagens também trafegam pelo próprio WhatsApp (Meta).</li>
           <li><strong>ViaCEP:</strong> consulta de endereço pelo CEP no cadastro fiscal (só o CEP é enviado).</li>
           <li><strong>Serviços de notificação do navegador</strong> (Google, Apple, Mozilla ou Microsoft, conforme o aparelho): entrega dos avisos.</li>
         </ul>
@@ -181,10 +189,18 @@ const sections: LegalSection[] = [
   {
     title: "Transferência internacional",
     body: (
-      <p>
-        Alguns fornecedores podem armazenar ou processar dados fora do Brasil. Nesses casos, a transferência segue o art. 33
-        da LGPD, com fornecedores que adotam cláusulas contratuais e padrões de proteção compatíveis com a lei brasileira.
-      </p>
+      <>
+        <p>
+          Alguns dos fornecedores listados acima, como Vercel, Resend, Cloudflare e Google, podem armazenar ou processar
+          dados fora do Brasil, principalmente nos Estados Unidos e na União Europeia.
+        </p>
+        <p>
+          Essas transferências seguem o art. 33 da LGPD e o regulamento de transferência internacional da ANPD (Resolução
+          CD/ANPD nº 19/2024), com base em cláusulas contratuais de proteção de dados firmadas com os fornecedores ou em
+          outro mecanismo admitido pela lei. Você pode pedir mais informações sobre essas transferências pelo canal do
+          encarregado, no fim desta Política.
+        </p>
+      </>
     ),
   },
   {
@@ -212,8 +228,11 @@ const sections: LegalSection[] = [
         </thead>
         <tbody>
           <tr>
-            <td>Cadastro, Dados da Operação, carteira de clientes e candidatos</td>
-            <td>Enquanto a conta existir e até 90 dias após o encerramento, salvo exclusão antes pelo próprio usuário</td>
+            <td>Cadastro, Dados da Operação, carteira de clientes, candidatos e conversas do WhatsApp</td>
+            <td>
+              Enquanto a conta existir e até 90 dias após o encerramento, salvo exclusão antes pelo próprio usuário ou pela
+              empresa (excluir um candidato apaga também o currículo e as conversas dele)
+            </td>
           </tr>
           <tr>
             <td>Registros de acesso à aplicação (IP, data e hora)</td>
@@ -234,6 +253,10 @@ const sections: LegalSection[] = [
           <tr>
             <td>Avisos dentro da Plataforma</td>
             <td>60 dias depois de lidos, ou 180 dias se não lidos</td>
+          </tr>
+          <tr>
+            <td>Histórico de envio de notificações ao celular e ao computador</td>
+            <td>30 dias</td>
           </tr>
           <tr>
             <td>Tentativas de acesso usadas no limite de segurança</td>
@@ -259,7 +282,9 @@ const sections: LegalSection[] = [
           <li>portabilidade dos dados a outro fornecedor;</li>
           <li>eliminação dos dados tratados com base no consentimento, e informação sobre a possibilidade de não consentir;</li>
           <li>informação sobre com quem compartilhamos seus dados;</li>
-          <li>revogação do consentimento, como desativar as notificações.</li>
+          <li>revogação do consentimento, como desativar as notificações;</li>
+          <li>oposição a tratamento feito com base em outra hipótese legal, quando estiver em desacordo com a LGPD;</li>
+          <li>revisão de decisões tomadas unicamente com base em tratamento automatizado (art. 20).</li>
         </ul>
         <p>
           <strong>Pela própria Plataforma:</strong> em Conta, aba Privacidade e dados, você baixa uma cópia dos seus dados e
@@ -267,11 +292,13 @@ const sections: LegalSection[] = [
           empresa, e as notificações são desativadas em Conta, aba Notificações.
         </p>
         <p>
-          <strong>Por e-mail:</strong> pelo {mail}. Respondemos em até 15 dias e podemos pedir informações para confirmar
-          sua identidade. Alguns pedidos podem ser limitados quando a lei exigir a guarda dos dados.
+          <strong>Por e-mail:</strong> pelo {mail}. A confirmação de que tratamos seus dados é dada de imediato, em formato
+          simplificado, e a declaração completa, em até 15 dias do pedido (LGPD, art. 19). Podemos pedir informações para
+          confirmar sua identidade. Alguns pedidos podem ser limitados quando a lei exigir a guarda dos dados, e nesse caso
+          explicamos o motivo.
         </p>
         <p>
-          Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD), em gov.br/anpd.
+          Você também pode reclamar à Agência Nacional de Proteção de Dados (ANPD), em gov.br/anpd.
         </p>
       </>
     ),
@@ -307,8 +334,10 @@ const sections: LegalSection[] = [
     title: "Menores de idade",
     body: (
       <p>
-        A Plataforma é destinada a uso profissional por maiores de 18 anos. Não coletamos, de forma consciente, dados de
-        crianças e adolescentes.
+        A Plataforma é destinada a uso profissional por maiores de 18 anos e não é direcionada a crianças e adolescentes.
+        Não coletamos, de forma consciente, dados deles. Se a empresa receber a candidatura de um menor de idade, por
+        exemplo a vagas de jovem aprendiz, cabe a ela tratar esses dados no melhor interesse do adolescente, como exige o
+        art. 14 da LGPD.
       </p>
     ),
   },
@@ -333,11 +362,20 @@ const sections: LegalSection[] = [
   {
     title: "Incidentes de segurança",
     body: (
-      <p>
-        Se ocorrer um incidente que possa gerar risco ou dano relevante aos titulares, adotaremos medidas para conter seus
-        efeitos e comunicaremos a ANPD e as pessoas afetadas em prazo razoável, como exige o art. 48 da LGPD, informando o
-        que aconteceu, quais dados foram afetados e o que está sendo feito.
-      </p>
+      <>
+        <p>
+          Se ocorrer um incidente que possa gerar risco ou dano relevante aos titulares, adotaremos medidas para conter seus
+          efeitos e comunicaremos a ANPD e as pessoas afetadas em até 3 dias úteis contados de quando soubermos que dados
+          pessoais foram afetados, como exigem o art. 48 da LGPD e o Regulamento de Comunicação de Incidente de Segurança
+          (Resolução CD/ANPD nº 15/2024).
+        </p>
+        <p>
+          A comunicação, em linguagem simples e de preferência direta para cada pessoa afetada, informa o que aconteceu,
+          quais dados foram afetados, os riscos, as medidas adotadas e o canal para esclarecimentos. Nos dados de clientes e
+          de candidatos, em que a empresa é a controladora, avisamos a empresa sem demora para que ela faça essas
+          comunicações dentro do prazo. Todos os incidentes ficam registrados por pelo menos 5 anos.
+        </p>
+      </>
     ),
   },
   {

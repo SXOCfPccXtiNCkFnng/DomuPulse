@@ -1,7 +1,7 @@
 // Versão vigente dos Termos e da Política. Troque a data ao alterar o texto:
 // é ela que fica registrada no aceite de cada pessoa, e quem aceitou uma
 // versão anterior é levado a aceitar a nova antes de continuar.
-export const LEGAL_DOCS_VERSION = "2026-10-23";
+export const LEGAL_DOCS_VERSION = "2026-10-25";
 
 export const CONTACT_EMAIL = "contato@domutech.digital";
 export const CONTACT_WHATSAPP_NUMBER = "5511921474360";
@@ -23,7 +23,12 @@ export const COMPANY = {
   address: "São Roque - SP",
   /** Cidade e UF do foro escolhido para disputas, por exemplo "São Paulo/SP". */
   forumCity: "",
-  /** Nome do encarregado de dados (LGPD, art. 41). Vazio usa o e-mail de contato. */
+  /**
+   * Nome do encarregado de dados (LGPD, art. 41). Vazio usa o e-mail de contato.
+   * A LGPD (art. 41, § 1º) e a Resolução CD/ANPD nº 18/2024 pedem a identidade e o
+   * contato do encarregado divulgados publicamente. Só deixe vazio se a DomuTech for
+   * agente de pequeno porte dispensada de indicar encarregado (Resolução CD/ANPD nº 2/2022).
+   */
   dpoName: "",
 };
 

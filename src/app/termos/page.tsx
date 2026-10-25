@@ -149,7 +149,7 @@ const sections: LegalSection[] = [
           <li>revender, sublicenciar ou disponibilizar a Plataforma a terceiros fora da Contratante;</li>
           <li>inserir vírus, código malicioso, conteúdo ofensivo, discriminatório ou que viole direitos de imagem e privacidade;</li>
           <li>usar Dados de Clientes ou de Candidatos para envio de mensagens em massa não solicitadas;</li>
-          <li>usar critérios discriminatórios na seleção de candidatos, como sexo, origem, raça, cor, estado civil, situação familiar, deficiência ou idade, salvo nas exceções previstas em lei.</li>
+          <li>usar critérios discriminatórios na seleção de candidatos, como sexo, origem, raça, cor, estado civil, situação familiar, deficiência, reabilitação profissional ou idade, ou exigir atestado de gravidez ou de esterilização, como proíbem a Lei 9.029/1995 e o art. 373-A da CLT, salvo nas exceções previstas em lei.</li>
         </ul>
         <p>
           O descumprimento autoriza a suspensão imediata do acesso, sem prejuízo das medidas legais e da cobrança dos danos
@@ -174,6 +174,14 @@ const sections: LegalSection[] = [
           <li>cadastrar apenas os dados necessários, sem dados sensíveis (saúde, religião, biometria e afins);</li>
           <li>orientar a equipe sobre o uso correto e o sigilo das informações.</li>
         </ul>
+        <p>Como operadora, a DomuTech se compromete a:</p>
+        <ul>
+          <li>tratar esses dados só para prestar o serviço e conforme as instruções da Contratante, sem usá-los para fins próprios;</li>
+          <li>manter as medidas de segurança descritas na {privacy} e exigir o mesmo dos fornecedores que listamos lá;</li>
+          <li>apoiar a Contratante, no que estiver ao seu alcance, no atendimento a pedidos de titulares e da ANPD;</li>
+          <li>avisar a Contratante sem demora sobre incidentes de segurança que afetem esses dados;</li>
+          <li>apagar os dados ao fim do contrato, nos prazos da cláusula &quot;Dados após o encerramento&quot;.</li>
+        </ul>
         <p>
           Se um titular, terceiro ou autoridade reclamar de dado inserido sem esse direito, a Contratante assume a defesa e
           os prejuízos, multas, honorários e despesas decorrentes, e mantém a DomuTech livre de responsabilidade.
@@ -195,11 +203,19 @@ const sections: LegalSection[] = [
           automático para naquela conversa.
         </p>
         <p>
-          <strong>Inteligência artificial.</strong> Os currículos podem ser lidos por um serviço de inteligência artificial
-          contratado pela DomuTech, que extrai os dados principais e sugere uma nota de 0 a 100 conforme os critérios da
-          vaga. A nota é só um apoio: ela pode errar, e quem decide aprovar, recusar ou contratar é sempre a equipe da
-          Contratante. A Plataforma não recusa candidatos sozinha. A Contratante não deve incluir critérios
-          discriminatórios nas vagas nem nas instruções da automação, e responde pelas decisões do processo seletivo.
+          <strong>Inteligência artificial.</strong> A Plataforma usa um serviço de inteligência artificial contratado pela
+          DomuTech para ler os currículos, extrair os dados principais e sugerir uma nota de 0 a 100 conforme os critérios
+          da vaga, e para conduzir o atendimento automático no WhatsApp: escrever as respostas aos candidatos, identificar
+          a vaga de interesse e passar a conversa para a equipe. A nota e as respostas são só um apoio e podem errar. Quem
+          decide aprovar, recusar ou contratar é sempre a equipe da Contratante, e a Plataforma não recusa candidatos
+          sozinha.
+        </p>
+        <p>
+          A Contratante deve informar os candidatos de que conversam com um atendimento automático com inteligência
+          artificial, e não com uma pessoa, e atender aos pedidos deles de informação sobre os critérios usados e de revisão
+          de avaliações automatizadas (LGPD, art. 20). A Contratante não deve incluir critérios discriminatórios nas vagas
+          nem nas instruções da automação, deve revisar as respostas padrão que configurar e responde pelas decisões do
+          processo seletivo.
         </p>
         <p>
           <strong>Candidatos.</strong> Cabe à Contratante informar os candidatos sobre o tratamento dos dados deles,
@@ -397,11 +413,20 @@ const sections: LegalSection[] = [
   {
     title: "Incidentes de segurança",
     body: (
-      <p>
-        Se um incidente de segurança puder gerar risco ou dano relevante aos titulares, a DomuTech avisará a Contratante em
-        prazo razoável, explicando o que aconteceu, quais dados foram afetados e as medidas adotadas, e fará as comunicações
-        exigidas pela LGPD. A Contratante deve avisar a DomuTech imediatamente sobre qualquer incidente que perceber.
-      </p>
+      <>
+        <p>
+          A LGPD (art. 48) e o Regulamento de Comunicação de Incidente de Segurança da ANPD (Resolução CD/ANPD nº 15/2024)
+          exigem que o controlador comunique à ANPD e aos titulares, em até 3 dias úteis, o incidente que possa gerar risco
+          ou dano relevante.
+        </p>
+        <p>
+          Nos Dados de Clientes e de Candidatos, em que a Contratante é a controladora, a DomuTech avisará a Contratante sem
+          demora, em até 48 horas depois de confirmar que esses dados foram afetados, explicando o que aconteceu, quais dados
+          foram atingidos, os riscos e as medidas adotadas, e fornecerá as informações de que ela precisar para fazer as
+          comunicações no prazo. Nos dados em que a DomuTech é a controladora, ela mesma faz as comunicações exigidas. A
+          Contratante deve avisar a DomuTech imediatamente sobre qualquer incidente que perceber.
+        </p>
+      </>
     ),
   },
   {
