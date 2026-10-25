@@ -167,14 +167,16 @@ export function CandidatosBoard({
           <p className="text-sm text-muted">Recrutamento</p>
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Candidatos</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
           <Button variant="secondary" onClick={() => exportCsv(visible, from, to)} disabled={visible.length === 0}>
             <Download className="size-4" />
-            Exportar planilha
+            <span className="sm:hidden">Planilha</span>
+            <span className="hidden sm:inline">Exportar planilha</span>
           </Button>
           <Button onClick={() => setAdding(true)} disabled={vagas.length === 0}>
             <Plus className="size-4" />
-            Adicionar candidato
+            <span className="sm:hidden">Adicionar</span>
+            <span className="hidden sm:inline">Adicionar candidato</span>
           </Button>
         </div>
       </header>
@@ -183,8 +185,8 @@ export function CandidatosBoard({
         <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">Crie uma vaga antes de adicionar candidatos.</p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative w-full sm:max-w-xs">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <label className="relative col-span-2 w-full sm:max-w-xs">
           <span className="sr-only">Buscar candidato</span>
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
           <input
@@ -194,7 +196,7 @@ export function CandidatosBoard({
             className="h-10 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-sm outline-none focus:border-ink"
           />
         </label>
-        <select value={vaga} onChange={(e) => setVaga(e.target.value)} aria-label="Vaga" className="h-10 rounded-xl border border-line bg-surface px-3 text-sm">
+        <select value={vaga} onChange={(e) => setVaga(e.target.value)} aria-label="Vaga" className="h-10 min-w-0 rounded-xl border border-line bg-surface px-3 text-sm">
           <option value="all">Todas as vagas</option>
           {vagas.map((v) => (
             <option key={v.id} value={v.id}>
@@ -202,18 +204,24 @@ export function CandidatosBoard({
             </option>
           ))}
         </select>
-        <label className="flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-muted">
+        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Ordenar" className="h-10 min-w-0 rounded-xl border border-line bg-surface px-3 text-sm sm:order-last">
+          <option value="score">Maior nota</option>
+          <option value="recent">Mais recentes</option>
+          <option value="oldest">Mais antigos</option>
+        </select>
+        <label className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-muted">
           De
-          <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="Candidatou-se a partir de" className="bg-transparent text-ink outline-none" />
+          <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} aria-label="Candidatou-se a partir de" className="min-w-0 flex-1 bg-transparent text-ink outline-none" />
         </label>
-        <label className="flex h-10 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-muted">
+        <label className="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm text-muted">
           Até
-          <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Candidatou-se até" className="bg-transparent text-ink outline-none" />
+          <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} aria-label="Candidatou-se até" className="min-w-0 flex-1 bg-transparent text-ink outline-none" />
         </label>
         {from || to ? (
           <Button
             size="sm"
             variant="ghost"
+            className="col-span-2 sm:col-span-1"
             onClick={() => {
               setFrom("");
               setTo("");
@@ -222,14 +230,9 @@ export function CandidatosBoard({
             Limpar datas
           </Button>
         ) : null}
-        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Ordenar" className="h-10 rounded-xl border border-line bg-surface px-3 text-sm">
-          <option value="score">Maior nota</option>
-          <option value="recent">Mais recentes</option>
-          <option value="oldest">Mais antigos</option>
-        </select>
       </div>
 
-      <div role="tablist" aria-label="Situação" className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl bg-surface-2 p-1">
+      <div role="tablist" aria-label="Situação" className="flex max-w-full gap-1 self-stretch overflow-x-auto rounded-xl bg-surface-2 p-1 [scrollbar-width:none] sm:self-start">
         {(["all", ...STATUS_KEYS] as const).map((s) => (
           <button
             key={s}
@@ -313,7 +316,7 @@ function CandidateRow({ row, ctx }: { row: Row; ctx: BoardCtx }) {
   return (
     <li
       onClick={() => setViewing(true)}
-      className="group cursor-pointer px-5 py-4 transition-colors hover:bg-surface-2/60 sm:px-6 lg:grid lg:grid-cols-[3rem_minmax(0,1.7fr)_minmax(0,1fr)_9rem_auto] lg:items-center lg:gap-5"
+      className="group cursor-pointer px-4 py-4 transition-colors hover:bg-surface-2/60 active:bg-surface-2/60 sm:px-6 lg:grid lg:grid-cols-[3rem_minmax(0,1.7fr)_minmax(0,1fr)_9rem_auto] lg:items-center lg:gap-5"
     >
       <div className="flex items-start gap-3 lg:contents">
         <ScoreBadge score={row.score} />
@@ -345,42 +348,43 @@ function CandidateRow({ row, ctx }: { row: Row; ctx: BoardCtx }) {
         </p>
       </div>
 
-      <div className="mt-3 flex items-center gap-2 lg:mt-0" onClick={stop}>
-        <select
-          value={row.status}
-          onChange={(e) => change(e.target.value as CandidaturaStatus)}
-          disabled={pending}
-          aria-label={`Situação de ${row.name}`}
-          className={clsx(
-            "h-9 w-full rounded-lg border px-2 text-sm font-medium lg:w-36",
-            row.status === "novo" ? "border-brand/40 bg-brand-soft text-brand-text" : "border-line bg-surface",
-          )}
-        >
-          {STATUS_KEYS.map((s) => (
-            <option key={s} value={s}>
-              {STATUS[s].label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="mt-3 flex items-center gap-2 lg:contents" onClick={stop}>
+        <div className="min-w-0 flex-1 lg:flex-none" onClick={stop}>
+          <select
+            value={row.status}
+            onChange={(e) => change(e.target.value as CandidaturaStatus)}
+            disabled={pending}
+            aria-label={`Situação de ${row.name}`}
+            className={clsx(
+              "h-9 w-full rounded-lg border px-2 text-sm font-medium lg:w-36",
+              row.status === "novo" ? "border-brand/40 bg-brand-soft text-brand-text" : "border-line bg-surface",
+            )}
+          >
+            {STATUS_KEYS.map((s) => (
+              <option key={s} value={s}>
+                {STATUS[s].label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 lg:mt-0" onClick={stop}>
-        <Button size="sm" variant="ghost" onClick={() => setViewing(true)}>
-          <Eye className="size-4" />
-          Ver ficha
-        </Button>
-        {row.hasResume ? (
-          <Button size="sm" variant="ghost" onClick={openResume} disabled={pending} title="Baixar currículo">
-            <Download className="size-4" />
-            <span className="lg:sr-only xl:not-sr-only">Currículo</span>
+        <div className="flex shrink-0 items-center gap-1 lg:flex-wrap lg:justify-end lg:gap-1.5" onClick={stop}>
+          <Button size="sm" variant="ghost" onClick={() => setViewing(true)} className="hidden lg:inline-flex">
+            <Eye className="size-4" />
+            Ver ficha
           </Button>
-        ) : null}
-        {canSendDocs ? (
-          <Button size="sm" variant="ghost" onClick={() => setSendingDocs(true)} disabled={pending}>
-            <ListChecks className="size-4" />
-            {row.checklistSentOn ? "Reenviar" : "Checklist"}
-          </Button>
-        ) : null}
+          {row.hasResume ? (
+            <Button size="sm" variant="ghost" onClick={openResume} disabled={pending} title="Baixar currículo" aria-label="Baixar currículo">
+              <Download className="size-4" />
+              <span className="hidden xl:inline">Currículo</span>
+            </Button>
+          ) : null}
+          {canSendDocs ? (
+            <Button size="sm" variant="ghost" onClick={() => setSendingDocs(true)} disabled={pending} title="Checklist de documentos" aria-label="Checklist de documentos">
+              <ListChecks className="size-4" />
+              <span className="hidden sm:inline">{row.checklistSentOn ? "Reenviar" : "Checklist"}</span>
+            </Button>
+          ) : null}
         {row.status !== "aprovado" && row.status !== "reprovado" && row.status !== "contratado" ? (
           <>
             <Button size="sm" variant="secondary" onClick={() => change("aprovado")} disabled={pending}>
@@ -391,6 +395,7 @@ function CandidateRow({ row, ctx }: { row: Row; ctx: BoardCtx }) {
             </Button>
           </>
         ) : null}
+        </div>
       </div>
 
       {error ? (
@@ -518,7 +523,7 @@ function CandidateSheet({ candidatoId, ctx, onClose, onDeleted }: { candidatoId:
               </p>
             ) : null}
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2">
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:size-8">
             <X className="size-4" />
           </button>
         </header>
@@ -718,7 +723,7 @@ function ChecklistDialog({ row, items, onClose, onSent }: { row: Row; items: str
       ref={dialog}
       onClose={onClose}
       onClick={(e) => e.target === dialog.current && onClose()}
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50"
+      className="mx-auto mt-auto mb-0 w-full max-w-none max-h-[90dvh] overflow-y-auto rounded-t-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50 sm:m-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-card sm:w-[min(32rem,calc(100vw-2rem))]"
     >
       <div className="flex flex-col gap-4 p-5 sm:p-6">
         <header className="flex items-start justify-between gap-4">
@@ -728,7 +733,7 @@ function ChecklistDialog({ row, items, onClose, onSent }: { row: Row; items: str
               Para {row.name} pelo WhatsApp {row.phone}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2">
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:size-8">
             <X className="size-4" />
           </button>
         </header>
@@ -785,12 +790,12 @@ function RejectDialog({ name, onClose, onConfirm }: { name: string; onClose: () 
       ref={dialog}
       onClose={onClose}
       onClick={(e) => e.target === dialog.current && onClose()}
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50"
+      className="mx-auto mt-auto mb-0 w-full max-w-none max-h-[90dvh] overflow-y-auto rounded-t-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50 sm:m-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-card sm:w-[min(32rem,calc(100vw-2rem))]"
     >
       <div className="flex flex-col gap-4 p-5 sm:p-6">
         <header className="flex items-start justify-between gap-4">
           <h2 className="font-display text-lg font-semibold tracking-tight">Recusar {name.split(" ")[0]}</h2>
-          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2">
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:size-8">
             <X className="size-4" />
           </button>
         </header>
@@ -866,12 +871,12 @@ function AddDialog({ vagas, onClose }: { vagas: VagaOption[]; onClose: () => voi
       ref={dialog}
       onClose={onClose}
       onClick={(e) => e.target === dialog.current && onClose()}
-      className="m-auto w-[min(34rem,calc(100vw-2rem))] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50"
+      className="mx-auto mt-auto mb-0 w-full max-w-none max-h-[90dvh] overflow-y-auto rounded-t-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50 sm:m-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-card sm:w-[min(34rem,calc(100vw-2rem))]"
     >
       <form onSubmit={submit} className="flex flex-col gap-4 p-5 sm:p-6" noValidate>
         <header className="flex items-start justify-between gap-4">
           <h2 className="font-display text-xl font-semibold tracking-tight">Adicionar candidato</h2>
-          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2">
+          <button type="button" onClick={onClose} aria-label="Fechar" className="grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:size-8">
             <X className="size-4" />
           </button>
         </header>
