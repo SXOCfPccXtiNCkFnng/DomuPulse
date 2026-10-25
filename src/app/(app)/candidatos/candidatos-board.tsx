@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Download, FileText, ListChecks, Paperclip, Plus, Search, Trash2, UserSearch, X } from "lucide-react";
+import { Download, Eye, ListChecks, Paperclip, Plus, Search, Trash2, UserSearch, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ export type Row = {
   vagaId: string;
   vagaTitle: string;
   score: number | null;
+  scoreReason: string | null;
   status: CandidaturaStatus;
   createdAt: string;
   /** Dia da candidatura no fuso da empresa (AAAA-MM-DD). */
@@ -89,6 +90,28 @@ function exportCsv(rows: Row[], from: string, to: string) {
   URL.revokeObjectURL(url);
 }
 
+/** O link assinado já vem como anexo com o nome do candidato; navegar até ele só dispara o download. */
+function downloadFile(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.rel = "noopener";
+  a.click();
+}
+
+function ScoreBadge({ score }: { score: number | null }) {
+  return (
+    <span
+      title={score != null ? `Nota da IA: ${score} de 100` : "Ainda sem nota da IA"}
+      className={clsx(
+        "grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold tabular-nums",
+        score == null ? "bg-surface-2 text-muted" : score >= 70 ? "bg-brand-soft text-brand-text" : score >= 40 ? "bg-warn-soft text-warn" : "bg-surface-2 text-ink-2",
+      )}
+    >
+      {score ?? "-"}
+    </span>
+  );
+}
+
 type BoardCtx = { checklist: string[]; canDelete: boolean; timezone: string };
 
 export function CandidatosBoard({
@@ -126,6 +149,16 @@ export function CandidatosBoard({
     if (sort === "oldest") return [...list].sort((x, y) => x.createdAt.localeCompare(y.createdAt));
     return list;
   }, [rows, vaga, status, q, from, to, sort]);
+
+  const counts = useMemo(() => {
+    const c: Partial<Record<"all" | CandidaturaStatus, number>> = { all: 0 };
+    for (const r of rows) {
+      if (vaga !== "all" && r.vagaId !== vaga) continue;
+      c.all = (c.all ?? 0) + 1;
+      c[r.status] = (c[r.status] ?? 0) + 1;
+    }
+    return c;
+  }, [rows, vaga]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -194,22 +227,24 @@ export function CandidatosBoard({
           <option value="recent">Mais recentes</option>
           <option value="oldest">Mais antigos</option>
         </select>
-        <div role="tablist" aria-label="Situação" className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-surface-2 p-1">
-          {(["all", ...STATUS_KEYS] as const).map((s) => (
-            <button
-              key={s}
-              role="tab"
-              aria-selected={status === s}
-              onClick={() => setStatus(s)}
-              className={clsx(
-                "h-8 shrink-0 rounded-lg px-3 text-[13px] font-medium transition-colors",
-                status === s ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
-              )}
-            >
-              {s === "all" ? "Todos" : STATUS[s].label}
-            </button>
-          ))}
-        </div>
+      </div>
+
+      <div role="tablist" aria-label="Situação" className="flex max-w-full gap-1 self-start overflow-x-auto rounded-xl bg-surface-2 p-1">
+        {(["all", ...STATUS_KEYS] as const).map((s) => (
+          <button
+            key={s}
+            role="tab"
+            aria-selected={status === s}
+            onClick={() => setStatus(s)}
+            className={clsx(
+              "flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
+              status === s ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
+            )}
+          >
+            {s === "all" ? "Todos" : STATUS[s].label}
+            <span className="text-xs tabular-nums text-muted">{counts[s] ?? 0}</span>
+          </button>
+        ))}
       </div>
 
       <p className="-mt-2 text-sm text-muted">
@@ -226,6 +261,16 @@ export function CandidatosBoard({
           </div>
         ) : (
           <ul className="divide-y divide-line">
+            <li
+              aria-hidden
+              className="hidden px-6 py-2.5 text-xs font-medium tracking-wide text-muted uppercase lg:grid lg:grid-cols-[3rem_minmax(0,1.7fr)_minmax(0,1fr)_9rem_auto] lg:gap-5"
+            >
+              <span>Nota</span>
+              <span>Candidato e avaliação da IA</span>
+              <span>Vaga</span>
+              <span>Situação</span>
+              <span className="text-right">Ações</span>
+            </li>
             {visible.map((r) => (
               <CandidateRow key={r.id} row={r} ctx={{ checklist, canDelete, timezone }} />
             ))}
@@ -258,71 +303,103 @@ function CandidateRow({ row, ctx }: { row: Row; ctx: BoardCtx }) {
   const openResume = () =>
     start(async () => {
       const r = await resumeLink(row.candidatoId);
-      if ("url" in r && r.url) window.open(r.url, "_blank", "noopener");
-      else if ("error" in r) setError(r.error);
+      if ("url" in r && r.url) downloadFile(r.url);
+      else if ("error" in r) setError(r.error ?? null);
     });
 
+  // Clique em qualquer parte da linha abre a ficha; botões e campos fazem só a própria ação.
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5 sm:px-6">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-2 text-sm font-semibold tabular-nums">
-        {row.score != null ? row.score : "-"}
-      </span>
-      <span className="min-w-0 flex-1">
-        <button type="button" onClick={() => setViewing(true)} className="block max-w-full truncate text-left text-sm font-medium hover:underline">
-          {row.name}
-        </button>
-        <span className="block truncate text-xs text-muted">
-          {row.vagaTitle}
+    <li
+      onClick={() => setViewing(true)}
+      className="group cursor-pointer px-5 py-4 transition-colors hover:bg-surface-2/60 sm:px-6 lg:grid lg:grid-cols-[3rem_minmax(0,1.7fr)_minmax(0,1fr)_9rem_auto] lg:items-center lg:gap-5"
+    >
+      <div className="flex items-start gap-3 lg:contents">
+        <ScoreBadge score={row.score} />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2">
+            <span className="truncate font-medium group-hover:underline">{row.name}</span>
+            {row.source === "whatsapp" ? <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px] text-muted">WhatsApp</span> : null}
+          </p>
+          <p className="truncate text-xs text-muted lg:hidden">
+            {row.vagaTitle} · {formatDate(row.appliedOn)}
+          </p>
+          {row.scoreReason ? (
+            <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-ink-2 lg:line-clamp-1">
+              <span className="font-medium text-muted">IA: </span>
+              {row.scoreReason}
+            </p>
+          ) : (
+            <p className="mt-1 text-[13px] text-muted">{row.city ?? "Sem avaliação da IA"}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="hidden min-w-0 lg:block">
+        <p className="truncate text-sm">{row.vagaTitle}</p>
+        <p className="truncate text-xs text-muted">
+          {formatDate(row.appliedOn)}
           {row.city ? ` · ${row.city}` : ""}
-          {` · Candidatou-se em ${formatDate(row.appliedOn)}`}
-          {row.source === "whatsapp" ? " pelo WhatsApp" : ""}
-          {row.checklistSentOn ? ` · Checklist enviado em ${formatDate(row.checklistSentOn)}` : ""}
-        </span>
-      </span>
+          {row.checklistSentOn ? ` · Checklist ${formatDate(row.checklistSentOn)}` : ""}
+        </p>
+      </div>
 
-      <Badge tone={STATUS[row.status].tone}>{STATUS[row.status].label}</Badge>
+      <div className="mt-3 flex items-center gap-2 lg:mt-0" onClick={stop}>
+        <select
+          value={row.status}
+          onChange={(e) => change(e.target.value as CandidaturaStatus)}
+          disabled={pending}
+          aria-label={`Situação de ${row.name}`}
+          className={clsx(
+            "h-9 w-full rounded-lg border px-2 text-sm font-medium lg:w-36",
+            row.status === "novo" ? "border-brand/40 bg-brand-soft text-brand-text" : "border-line bg-surface",
+          )}
+        >
+          {STATUS_KEYS.map((s) => (
+            <option key={s} value={s}>
+              {STATUS[s].label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      {row.hasResume ? (
-        <Button size="sm" variant="ghost" onClick={openResume} disabled={pending}>
-          <FileText className="size-4" />
-          <span className="hidden sm:inline">Currículo</span>
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5 lg:mt-0" onClick={stop}>
+        <Button size="sm" variant="ghost" onClick={() => setViewing(true)}>
+          <Eye className="size-4" />
+          Ver ficha
         </Button>
-      ) : null}
-
-      {canSendDocs ? (
-        <Button size="sm" variant="ghost" onClick={() => setSendingDocs(true)} disabled={pending}>
-          <ListChecks className="size-4" />
-          <span className="hidden sm:inline">{row.checklistSentOn ? "Reenviar checklist" : "Checklist"}</span>
-        </Button>
-      ) : null}
-
-      <select
-        value={row.status}
-        onChange={(e) => change(e.target.value as CandidaturaStatus)}
-        disabled={pending}
-        aria-label={`Situação de ${row.name}`}
-        className="h-9 rounded-lg border border-line bg-surface px-2 text-sm"
-      >
-        {STATUS_KEYS.map((s) => (
-          <option key={s} value={s}>
-            {STATUS[s].label}
-          </option>
-        ))}
-      </select>
-
-      {row.status !== "aprovado" && row.status !== "reprovado" ? (
-        <span className="flex gap-1.5">
-          <Button size="sm" variant="secondary" onClick={() => change("aprovado")} disabled={pending}>
-            Aprovar
+        {row.hasResume ? (
+          <Button size="sm" variant="ghost" onClick={openResume} disabled={pending} title="Baixar currículo">
+            <Download className="size-4" />
+            <span className="lg:sr-only xl:not-sr-only">Currículo</span>
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setRejecting(true)} disabled={pending}>
-            Recusar
+        ) : null}
+        {canSendDocs ? (
+          <Button size="sm" variant="ghost" onClick={() => setSendingDocs(true)} disabled={pending}>
+            <ListChecks className="size-4" />
+            {row.checklistSentOn ? "Reenviar" : "Checklist"}
           </Button>
+        ) : null}
+        {row.status !== "aprovado" && row.status !== "reprovado" && row.status !== "contratado" ? (
+          <>
+            <Button size="sm" variant="secondary" onClick={() => change("aprovado")} disabled={pending}>
+              Aprovar
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setRejecting(true)} disabled={pending}>
+              Recusar
+            </Button>
+          </>
+        ) : null}
+      </div>
+
+      {error ? (
+        <span className="mt-2 block text-xs text-danger lg:col-span-5" onClick={stop}>
+          {error}
         </span>
       ) : null}
 
-      {error ? <span className="w-full text-xs text-danger">{error}</span> : null}
-
+      <div className="contents" onClick={stop}>
       {rejecting ? (
         <RejectDialog
           name={row.name}
@@ -357,6 +434,7 @@ function CandidateRow({ row, ctx }: { row: Row; ctx: BoardCtx }) {
           }}
         />
       ) : null}
+      </div>
     </li>
   );
 }
@@ -408,7 +486,7 @@ function CandidateSheet({ candidatoId, ctx, onClose, onDeleted }: { candidatoId:
   const openResume = () =>
     start(async () => {
       const r = await resumeLink(candidatoId);
-      if ("url" in r && r.url) window.open(r.url, "_blank", "noopener");
+      if ("url" in r && r.url) downloadFile(r.url);
       else if ("error" in r) setError(r.error ?? null);
     });
 
@@ -427,7 +505,7 @@ function CandidateSheet({ candidatoId, ctx, onClose, onDeleted }: { candidatoId:
       ref={dialog}
       onClose={onClose}
       onClick={(e) => e.target === dialog.current && onClose()}
-      className="m-0 ml-auto h-dvh max-h-dvh w-[min(36rem,100vw)] max-w-none overflow-y-auto border-l border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50"
+      className="m-0 ml-auto h-dvh max-h-dvh w-[min(40rem,100vw)] max-w-none overflow-y-auto border-l border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50"
     >
       <div className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
         <header className="flex items-start justify-between gap-4">
@@ -479,8 +557,8 @@ function CandidateSheet({ candidatoId, ctx, onClose, onDeleted }: { candidatoId:
                 <p className="text-xs text-muted">Currículo</p>
                 {detail.hasResume ? (
                   <button type="button" onClick={openResume} disabled={pending} className="flex max-w-full items-center gap-1.5 font-medium hover:underline">
-                    <FileText className="size-4 shrink-0" />
-                    <span className="truncate">{detail.resumeName ?? "Abrir"}</span>
+                    <Download className="size-4 shrink-0" />
+                    <span className="truncate">Baixar currículo</span>
                   </button>
                 ) : (
                   <p className="text-muted">Não enviado</p>
@@ -515,6 +593,26 @@ function CandidateSheet({ candidatoId, ctx, onClose, onDeleted }: { candidatoId:
                 })}
               </ul>
             </section>
+
+            {detail.chat.length ? (
+              <section>
+                <h3 className="text-xs font-semibold tracking-wide text-muted uppercase">Conversa no WhatsApp</h3>
+                <ul className="mt-2 flex max-h-80 flex-col gap-1.5 overflow-y-auto rounded-xl bg-surface-2 p-3">
+                  {detail.chat.map((t, i) => (
+                    <li
+                      key={i}
+                      className={clsx(
+                        "max-w-[85%] rounded-2xl px-3 py-2 text-[13px] leading-snug whitespace-pre-line",
+                        t.role === "bot" ? "self-end rounded-br-md bg-brand-soft text-ink" : "self-start rounded-bl-md bg-surface",
+                      )}
+                    >
+                      <span className="mb-0.5 block text-[11px] font-medium text-muted">{t.role === "bot" ? "Atendimento automático" : detail.name.split(" ")[0]}</span>
+                      {t.text}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
             {detail.entrevistas.length ? (
               <section>

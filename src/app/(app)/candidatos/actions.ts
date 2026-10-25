@@ -188,6 +188,8 @@ export type CandidateDetail = {
     createdAt: string;
   }[];
   entrevistas: { id: string; at: string; duration: number; vagaTitle: string }[];
+  /** Últimas mensagens trocadas com o atendimento automático do WhatsApp. */
+  chat: { role: "user" | "bot"; text: string }[];
 };
 
 /** Ficha completa do candidato: dados, resumo da IA, vagas e entrevistas. */
@@ -211,12 +213,25 @@ export async function getCandidateDetail(candidatoId: string): Promise<{ detail:
     .order("created_at", { ascending: false });
   const appIds = (apps ?? []).map((a) => a.id as string);
   const vagaIds = [...new Set((apps ?? []).map((a) => a.vaga_id as string))];
-  const [{ data: vagas }, { data: ents }] = await Promise.all([
+  const [{ data: vagas }, { data: ents }, { data: conv }] = await Promise.all([
     vagaIds.length ? supabase.from("vagas").select("id, title").in("id", vagaIds) : Promise.resolve({ data: [] }),
     appIds.length
       ? supabase.from("entrevistas").select("id, candidatura_id, scheduled_at, duration_min").in("candidatura_id", appIds).order("scheduled_at", { ascending: false })
       : Promise.resolve({ data: [] }),
+    // wa_conversations não é exposta ao cliente; o filtro por org garante o escopo.
+    createAdminClient()
+      .from("wa_conversations")
+      .select("history")
+      .eq("org_id", gate.org.id)
+      .eq("candidato_id", candidatoId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then((r) => (r.error ? { data: null } : r)),
   ]);
+  const chat = (Array.isArray(conv?.history) ? (conv.history as { role?: string; text?: string }[]) : [])
+    .filter((t) => (t.role === "user" || t.role === "bot") && typeof t.text === "string" && t.text.trim())
+    .map((t) => ({ role: t.role as "user" | "bot", text: t.text as string }));
   const vagaTitle = new Map((vagas ?? []).map((v) => [v.id as string, v.title as string]));
   const appVaga = new Map((apps ?? []).map((a) => [a.id as string, vagaTitle.get(a.vaga_id as string) ?? "-"]));
   const resumeData = c.resume_data as { summary?: string } | null;
@@ -249,6 +264,7 @@ export async function getCandidateDetail(candidatoId: string): Promise<{ detail:
         duration: e.duration_min as number,
         vagaTitle: appVaga.get(e.candidatura_id as string) ?? "-",
       })),
+      chat,
     },
   };
 }
@@ -316,9 +332,15 @@ export async function resumeLink(candidatoId: string) {
   if ("error" in gate) return gate;
   if (!z.uuid().safeParse(candidatoId).success) return { error: "Candidato inválido." };
   const supabase = await createClient();
-  const { data } = await supabase.from("candidatos").select("resume_path").eq("id", candidatoId).maybeSingle();
+  const { data } = await supabase.from("candidatos").select("name, resume_path, resume_name").eq("id", candidatoId).maybeSingle();
   if (!data?.resume_path) return { error: "Esse candidato ainda não tem currículo." };
-  const { data: signed, error } = await createAdminClient().storage.from(BUCKET).createSignedUrl(data.resume_path as string, 600);
+  // Baixa já com o nome do candidato, em vez de abrir um link com código aleatório.
+  const path = data.resume_path as string;
+  const ext = path.split(".").pop() || (data.resume_name as string | null)?.split(".").pop() || "pdf";
+  const safeName = String(data.name ?? "Candidato").replace(/[\\/:*?"<>|]+/g, "").trim() || "Candidato";
+  const { data: signed, error } = await createAdminClient()
+    .storage.from(BUCKET)
+    .createSignedUrl(path, 600, { download: `Currículo - ${safeName}.${ext}` });
   if (error || !signed) return { error: "Não foi possível abrir o currículo." };
   return { url: signed.signedUrl };
 }

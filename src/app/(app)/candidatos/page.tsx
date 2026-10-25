@@ -15,7 +15,7 @@ export default async function CandidatosPage() {
 
   const supabase = await createClient();
   const [{ data: apps }, { data: cands }, { data: vagas }, { data: settings }] = await Promise.all([
-    supabase.from("candidaturas").select("id, status, score, candidato_id, vaga_id, created_at, checklist_sent_at"),
+    supabase.from("candidaturas").select("id, status, score, score_reason, candidato_id, vaga_id, created_at, checklist_sent_at"),
     supabase.from("candidatos").select("id, name, city, phone, email, resume_path, source"),
     supabase.from("vagas").select("id, title, status").order("created_at", { ascending: false }),
     createAdminClient().from("rh_settings").select("doc_checklist").eq("org_id", member.org.id).maybeSingle(),
@@ -42,6 +42,7 @@ export default async function CandidatosPage() {
         vagaId: a.vaga_id as string,
         vagaTitle: (v?.title as string) ?? "-",
         score: (a.score as number | null) ?? null,
+        scoreReason: (a.score_reason as string | null) ?? null,
         status: a.status as Row["status"],
         createdAt: a.created_at as string,
         appliedOn: dateIn(a.created_at as string, member.org.timezone),
