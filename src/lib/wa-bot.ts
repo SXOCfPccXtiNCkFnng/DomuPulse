@@ -65,6 +65,8 @@ const DONE_QUIET_MS = 30 * 60 * 1000;
 const IDLE_RESTART_MS = 12 * 60 * 60 * 1000;
 // Quantas mensagens a IA lembra por conversa.
 const HISTORY_KEEP = 20;
+// Pausa entre os balões de uma mesma resposta, como alguém digitando.
+const BALLOON_GAP_MS = 1200;
 
 // Palavras que indicam o que a pessoa quer, para não obrigar a responder só o número.
 const APPLY_WORDS = /\b(vaga|curr[ií]culo|cv\b|candidat|emprego|trabalh|oportunidade|contrat)/i;
@@ -207,7 +209,10 @@ export async function handleIncoming(orgId: string, incoming: Incoming) {
       history,
       message: text,
     });
-    await say(decision.reply);
+    for (const [i, part] of decision.messages.entries()) {
+      if (i > 0) await new Promise((r) => setTimeout(r, BALLOON_GAP_MS));
+      await say(part);
+    }
     const now = new Date().toISOString();
     if (decision.action === "choose_vaga") {
       await admin.from("wa_conversations").update({ vaga_id: decision.vagaId, stage: "awaiting_resume", updated_at: now }).eq("id", c.id);

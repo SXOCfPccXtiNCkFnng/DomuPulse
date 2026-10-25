@@ -57,7 +57,7 @@ export const asaasEnv = lazy(() =>
 // GEMINI_MODEL é opcional (padrão abaixo) para trocar o modelo sem mexer no código.
 export const geminiEnv = lazy(() =>
   z
-    .object({ apiKey: z.string().min(10), model: z.string().min(2).default("gemini-2.5-flash") })
+    .object({ apiKey: z.string().min(10), model: z.string().min(2).default("gemini-3.8-flash") })
     .parse({ apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL }),
 );
 
