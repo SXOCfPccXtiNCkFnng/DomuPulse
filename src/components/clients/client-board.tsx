@@ -1,11 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { Eye, Phone, Plus, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Eye, LayoutGrid, List, Phone, Plus, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
-import { CLIENT_COLUMNS, STAGES, VALUE_STAGES, type Client, type Stage } from "@/lib/clients";
+import { CLIENT_COLUMNS, STAGE_LABEL, STAGES, VALUE_STAGES, type Client, type Stage } from "@/lib/clients";
 import type { LiveMember } from "@/lib/live/use-live-day";
 import { formatMoney } from "@/lib/metrics";
 import { getBrowserClient } from "@/lib/supabase/client";
@@ -14,6 +14,45 @@ import { ClientDialog } from "./client-dialog";
 function daysSince(iso: string) {
   const d = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
   return d === 0 ? "hoje" : d === 1 ? "1 dia" : `${d} dias`;
+}
+
+// Ordem das etapas (para ordenar a visão de lista).
+const STAGE_ORDER = new Map(STAGES.map((s, i) => [s.id, i] as const));
+
+// Estilo da carteira (kanban ou lista), guardado por navegador. Usa um store
+// externo (como o tema) para não dar hidratação divergente nem setState em effect.
+type View = "kanban" | "list";
+const VIEW_KEY = "clients-view";
+const viewListeners = new Set<() => void>();
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "kanban";
+  } catch {
+    return "kanban";
+  }
+}
+
+function subscribeView(callback: () => void) {
+  viewListeners.add(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    viewListeners.delete(callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function writeView(view: View) {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Sem armazenamento (aba anônima): vale só nesta visita.
+  }
+  viewListeners.forEach((l) => l());
+}
+
+function useClientsView(): View {
+  return useSyncExternalStore(subscribeView, readView, () => "kanban");
 }
 
 /**
@@ -33,6 +72,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const view = useClientsView();
 
   const fetchAll = useCallback(async () => {
     const [{ data: c }, { data: m }] = await Promise.all([
@@ -77,6 +117,10 @@ export function ClientBoard({ member }: { member: ClientMember }) {
     (qDigits.length >= 3 && (c.phone ?? "").replace(/\D/g, "").includes(qDigits));
   const visible = clients.filter((c) => (owner === "all" || c.member_id === owner) && matches(c));
   const columns = STAGES.filter((s) => showLost || s.id !== "lost");
+  // Lista: mesmas regras de filtro, ordenada por etapa e depois pelos mais recentes.
+  const listItems = visible
+    .filter((c) => showLost || c.stage !== "lost")
+    .sort((a, b) => (STAGE_ORDER.get(a.stage)! - STAGE_ORDER.get(b.stage)!) || Date.parse(b.stage_changed_at) - Date.parse(a.stage_changed_at));
 
   async function moveTo(id: string, stage: Stage) {
     const client = clients.find((c) => c.id === id);
@@ -142,10 +186,28 @@ export function ClientBoard({ member }: { member: ClientMember }) {
           <input type="checkbox" checked={showLost} onChange={(e) => setShowLost(e.target.checked)} className="size-4 accent-[var(--brand)]" />
           Mostrar perdidos
         </label>
+        <div role="group" aria-label="Estilo de visualização" className="ml-auto flex gap-1 rounded-xl bg-surface-2 p-1">
+          {([["kanban", LayoutGrid, "Kanban"], ["list", List, "Lista"]] as const).map(([id, Icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={view === id}
+              onClick={() => writeView(id)}
+              className={clsx(
+                "flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
+                view === id ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p> : null}
 
+      {view === "kanban" ? (
       <div className="-mx-4 snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0">
         <div className="flex gap-3">
           {columns.map((col) => {
@@ -219,6 +281,32 @@ export function ClientBoard({ member }: { member: ClientMember }) {
           })}
         </div>
       </div>
+      ) : (
+        <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+          {listItems.map((c) => (
+            <li key={c.id}>
+              <button
+                onClick={() => setOpen(c)}
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-surface-2 sm:px-5"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{c.name}</span>
+                  <span className="block truncate text-xs text-ink-2">
+                    {c.interest || (leader ? (brokerName.get(c.member_id) ?? "Corretor") : (c.source ?? ""))}
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-2">{STAGE_LABEL[c.stage]}</span>
+                {c.value_cents ? <span className="shrink-0 text-sm font-semibold tabular-nums">{formatMoney(c.value_cents)}</span> : null}
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted">
+                  {c.phone ? <Phone className="size-3" aria-label="tem telefone" /> : null}
+                  {daysSince(c.stage_changed_at)}
+                </span>
+              </button>
+            </li>
+          ))}
+          {!loading && listItems.length === 0 ? <li className="px-4 py-10 text-center text-sm text-muted">Nenhum cliente</li> : null}
+        </ul>
+      )}
 
       {open ? (
         <ClientDialog
