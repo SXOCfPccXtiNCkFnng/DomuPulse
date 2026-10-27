@@ -1,9 +1,9 @@
 "use client";
 
 import clsx from "clsx";
-import { Download, Eye, ListChecks, Paperclip, Plus, Search, Trash2, UserSearch, X } from "lucide-react";
+import { Download, Eye, LayoutGrid, List, ListChecks, Paperclip, Plus, Search, Trash2, UserSearch, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge, Card } from "@/components/ui/card";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
@@ -55,6 +55,64 @@ const STATUS: Record<CandidaturaStatus, { label: string; tone: "neutral" | "bran
 const STATUS_KEYS = Object.keys(STATUS) as CandidaturaStatus[];
 const RESUME_ACCEPT = ".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png";
 const RESUME_MAX = 10 * 1024 * 1024;
+
+// Estilo da tela. Lista é o padrão (melhor no volume); o kanban mostra o funil.
+// Guardado por navegador num store externo (como o tema), sem setState em effect.
+type View = "list" | "kanban";
+const VIEW_KEY = "candidatos-view";
+const viewListeners = new Set<() => void>();
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "kanban" ? "kanban" : "list";
+  } catch {
+    return "list";
+  }
+}
+
+function subscribeView(callback: () => void) {
+  viewListeners.add(callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    viewListeners.delete(callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function writeView(view: View) {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Sem armazenamento (aba anônima): vale só nesta visita.
+  }
+  viewListeners.forEach((l) => l());
+}
+
+function useCandidatosView(): View {
+  return useSyncExternalStore(subscribeView, readView, () => "list");
+}
+
+function ViewToggle({ view }: { view: View }) {
+  return (
+    <div role="group" aria-label="Estilo de visualização" className="flex shrink-0 gap-1 rounded-xl bg-surface-2 p-1">
+      {([["list", List, "Lista"], ["kanban", LayoutGrid, "Kanban"]] as const).map(([id, Icon, label]) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={view === id}
+          onClick={() => writeView(id)}
+          className={clsx(
+            "flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
+            view === id ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
+          )}
+        >
+          <Icon className="size-4" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // Excel executa células que começam com = + - @ como fórmula.
 function csvCell(value: unknown) {
@@ -127,6 +185,8 @@ export function CandidatosBoard({
   canDelete: boolean;
   timezone: string;
 }) {
+  const router = useRouter();
+  const view = useCandidatosView();
   const [vaga, setVaga] = useState("all");
   const [status, setStatus] = useState<"all" | CandidaturaStatus>("all");
   const [query, setQuery] = useState("");
@@ -134,13 +194,17 @@ export function CandidatosBoard({
   const [to, setTo] = useState("");
   const [sort, setSort] = useState<"score" | "recent" | "oldest">("score");
   const [adding, setAdding] = useState(false);
+  // Arrastar no kanban passa pela mesma regra dos botões (aviso ao aprovar, retorno ao recusar).
+  const [moving, startMove] = useTransition();
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const [reject, setReject] = useState<{ id: string; name: string } | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   const q = query.trim().toLowerCase();
-  const visible = useMemo(() => {
+  const sorted = useMemo(() => {
     const list = rows.filter(
       (r) =>
         (vaga === "all" || r.vagaId === vaga) &&
-        (status === "all" || r.status === status) &&
         (!q || r.name.toLowerCase().includes(q)) &&
         (!from || r.appliedOn >= from) &&
         (!to || r.appliedOn <= to),
@@ -148,7 +212,23 @@ export function CandidatosBoard({
     if (sort === "recent") return [...list].sort((x, y) => y.createdAt.localeCompare(x.createdAt));
     if (sort === "oldest") return [...list].sort((x, y) => x.createdAt.localeCompare(y.createdAt));
     return list;
-  }, [rows, vaga, status, q, from, to, sort]);
+  }, [rows, vaga, q, from, to, sort]);
+  // Lista respeita a aba de situação; o kanban mostra todas as colunas.
+  const visible = useMemo(() => (status === "all" ? sorted : sorted.filter((r) => r.status === status)), [sorted, status]);
+  const shown = view === "kanban" ? sorted : visible;
+
+  const applyStatus = (id: string, next: CandidaturaStatus, note?: string) =>
+    startMove(async () => {
+      setMoveError(null);
+      const r = await setCandidaturaStatus(id, next, note);
+      if ("error" in r) setMoveError(r.error ?? "Não foi possível mover.");
+      else router.refresh();
+    });
+  // Recusar nunca é na hora: abre o diálogo de retorno (aviso com atraso).
+  const onMove = (id: string, name: string, next: CandidaturaStatus) => {
+    if (next === "reprovado") return setReject({ id, name });
+    applyStatus(id, next);
+  };
 
   const counts = useMemo(() => {
     const c: Partial<Record<"all" | CandidaturaStatus, number>> = { all: 0 };
@@ -168,7 +248,7 @@ export function CandidatosBoard({
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Candidatos</h1>
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-          <Button variant="secondary" onClick={() => exportCsv(visible, from, to)} disabled={visible.length === 0}>
+          <Button variant="secondary" onClick={() => exportCsv(shown, from, to)} disabled={shown.length === 0}>
             <Download className="size-4" />
             <span className="sm:hidden">Planilha</span>
             <span className="hidden sm:inline">Exportar planilha</span>
@@ -232,29 +312,41 @@ export function CandidatosBoard({
         ) : null}
       </div>
 
-      <div role="tablist" aria-label="Situação" className="flex max-w-full gap-1 self-stretch overflow-x-auto rounded-xl bg-surface-2 p-1 [scrollbar-width:none] sm:self-start">
-        {(["all", ...STATUS_KEYS] as const).map((s) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={status === s}
-            onClick={() => setStatus(s)}
-            className={clsx(
-              "flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
-              status === s ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
-            )}
-          >
-            {s === "all" ? "Todos" : STATUS[s].label}
-            <span className="text-xs tabular-nums text-muted">{counts[s] ?? 0}</span>
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {view === "list" ? (
+          <div role="tablist" aria-label="Situação" className="flex max-w-full gap-1 self-stretch overflow-x-auto rounded-xl bg-surface-2 p-1 [scrollbar-width:none] sm:self-start">
+            {(["all", ...STATUS_KEYS] as const).map((s) => (
+              <button
+                key={s}
+                role="tab"
+                aria-selected={status === s}
+                onClick={() => setStatus(s)}
+                className={clsx(
+                  "flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-colors",
+                  status === s ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
+                )}
+              >
+                {s === "all" ? "Todos" : STATUS[s].label}
+                <span className="text-xs tabular-nums text-muted">{counts[s] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted">Arraste os candidatos entre as colunas para mudar a situação.</p>
+        )}
+        <ViewToggle view={view} />
       </div>
 
       <p className="-mt-2 text-sm text-muted">
-        {visible.length} {visible.length === 1 ? "candidatura" : "candidaturas"}
+        {shown.length} {shown.length === 1 ? "candidatura" : "candidaturas"}
         {from || to ? ` de ${from ? formatDate(from) : "o início"} até ${to ? formatDate(to) : "hoje"}` : ""}
       </p>
 
+      {moveError ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{moveError}</p> : null}
+
+      {view === "kanban" ? (
+        <KanbanBoard rows={shown} onMove={onMove} onOpen={(id) => setViewingId(id)} dim={moving} />
+      ) : (
       <Card>
         {visible.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
@@ -280,6 +372,31 @@ export function CandidatosBoard({
           </ul>
         )}
       </Card>
+      )}
+
+      {reject ? (
+        <RejectDialog
+          name={reject.name}
+          onClose={() => setReject(null)}
+          onConfirm={(note) => {
+            const id = reject.id;
+            setReject(null);
+            applyStatus(id, "reprovado", note);
+          }}
+        />
+      ) : null}
+
+      {viewingId ? (
+        <CandidateSheet
+          candidatoId={viewingId}
+          ctx={{ checklist, canDelete, timezone }}
+          onClose={() => setViewingId(null)}
+          onDeleted={() => {
+            setViewingId(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
 
       {adding ? <AddDialog vagas={vagas} onClose={() => setAdding(false)} /> : null}
     </div>
@@ -510,9 +627,9 @@ function CandidateSheet({ candidatoId, ctx, onClose, onDeleted }: { candidatoId:
       ref={dialog}
       onClose={onClose}
       onClick={(e) => e.target === dialog.current && onClose()}
-      className="m-0 ml-auto h-dvh max-h-dvh w-[min(40rem,100vw)] max-w-none overflow-y-auto border-l border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50"
+      className="mx-auto mt-auto mb-0 max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50 sm:m-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[min(40rem,calc(100vw-2rem))] sm:rounded-card"
     >
-      <div className="flex min-h-full flex-col gap-6 p-5 sm:p-6">
+      <div className="flex flex-col gap-6 p-5 sm:p-6">
         <header className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-muted">Ficha do candidato</p>
@@ -819,6 +936,89 @@ function RejectDialog({ name, onClose, onConfirm }: { name: string; onClose: () 
         </footer>
       </div>
     </dialog>
+  );
+}
+
+/** Funil em colunas por situação. Arrastar um card chama o mesmo fluxo dos botões. */
+function KanbanBoard({
+  rows,
+  onMove,
+  onOpen,
+  dim,
+}: {
+  rows: Row[];
+  onMove: (id: string, name: string, next: CandidaturaStatus) => void;
+  onOpen: (candidatoId: string) => void;
+  dim: boolean;
+}) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<CandidaturaStatus | null>(null);
+
+  return (
+    <div className={clsx("-mx-4 overflow-x-auto px-4 pb-2 transition-opacity sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0", dim && "opacity-60")}>
+      <div className="flex gap-3">
+        {STATUS_KEYS.map((st) => {
+          const items = rows.filter((r) => r.status === st);
+          return (
+            <section
+              key={st}
+              aria-label={STATUS[st].label}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setOver(st);
+              }}
+              onDragLeave={() => setOver((o) => (o === st ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setOver(null);
+                setDragId(null);
+                const id = e.dataTransfer.getData("text/plain");
+                const row = rows.find((r) => r.id === id);
+                if (row && row.status !== st) onMove(row.id, row.name, st);
+              }}
+              className={clsx(
+                "flex w-[80vw] max-w-[270px] shrink-0 flex-col rounded-2xl border p-2 transition-colors sm:w-[250px]",
+                over === st ? "border-brand-text bg-brand-soft" : "border-line bg-surface-2/60",
+              )}
+            >
+              <header className="flex items-baseline justify-between gap-2 px-2 pt-1 pb-2">
+                <h2 className="text-sm font-semibold">{STATUS[st].label}</h2>
+                <span className="text-xs tabular-nums text-muted">{items.length}</span>
+              </header>
+              <ul className="flex min-h-24 flex-col gap-2">
+                {items.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", r.id);
+                        setDragId(r.id);
+                      }}
+                      onDragEnd={() => setDragId(null)}
+                      onClick={() => onOpen(r.candidatoId)}
+                      className={clsx(
+                        "flex w-full items-center gap-2.5 rounded-xl border border-line bg-surface p-2.5 text-left shadow-card transition hover:border-line-strong",
+                        dragId === r.id && "opacity-40",
+                      )}
+                    >
+                      <ScoreBadge score={r.score} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">{r.name}</span>
+                          {r.source === "whatsapp" ? <span className="shrink-0 rounded bg-surface-2 px-1 py-0.5 text-[10px] text-muted">WA</span> : null}
+                        </span>
+                        <span className="block truncate text-xs text-muted">{r.vagaTitle}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+                {items.length === 0 ? <li className="px-2 py-6 text-center text-xs text-muted">Arraste para cá</li> : null}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
