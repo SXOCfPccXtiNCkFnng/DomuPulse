@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import type { FormState } from "@/lib/validation";
-import { addSignupAlertEmail, createCoupon, removeSignupAlertEmail, setMonthlyPrice } from "./actions";
+import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, setMonthlyPrice } from "./actions";
 
 // Ações que mexem no acesso de um cliente pedem um segundo clique.
 export function ConfirmButton({ label, confirmLabel, danger = false }: { label: string; confirmLabel: string; danger?: boolean }) {
@@ -154,6 +154,135 @@ export function SignupAlertEmailsCard({ initialEmails }: { initialEmails: string
           </Button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function roleText(role: string) {
+  if (role === "owner") return "Administrador";
+  if (role === "manager") return "Gestor";
+  return "Membro";
+}
+
+// Confirmação em dois cliques para desativar a 2FA de alguém.
+function ResetButton({ onConfirm, pending }: { onConfirm: () => void; pending: boolean }) {
+  const [armed, setArmed] = useState(false);
+  if (!armed) {
+    return (
+      <Button size="sm" variant="danger" onClick={() => setArmed(true)}>
+        Desativar verificação
+      </Button>
+    );
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <Button
+        size="sm"
+        variant="danger"
+        disabled={pending}
+        onClick={() => {
+          setArmed(false);
+          onConfirm();
+        }}
+      >
+        {pending ? "Desativando..." : "Confirmar: desativar"}
+      </Button>
+      <Button size="sm" variant="ghost" disabled={pending} onClick={() => setArmed(false)}>
+        Cancelar
+      </Button>
+    </span>
+  );
+}
+
+type Found = Extract<MfaLookup, { found: true }>;
+
+export function MfaResetCard() {
+  const [email, setEmail] = useState("");
+  const [result, setResult] = useState<Found | "none" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [searching, startSearch] = useTransition();
+  const [resetting, startReset] = useTransition();
+
+  const search = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setNote(null);
+    setResult(null);
+    startSearch(async () => {
+      const r = await lookupMfa(email);
+      if ("error" in r) return setError(r.error);
+      setResult(r.found ? r : "none");
+    });
+  };
+
+  const reset = (userId: string) => {
+    setError(null);
+    setNote(null);
+    startReset(async () => {
+      const r = await resetMfa(userId);
+      if ("error" in r) return setError(r.error);
+      setNote(
+        r.removed > 0
+          ? `Verificação desativada (${r.removed} ${r.removed === 1 ? "método removido" : "métodos removidos"}). A pessoa entra só com a senha e pode configurar de novo.`
+          : "Essa conta já não tinha verificação em duas etapas.",
+      );
+      setResult((cur) => (cur && cur !== "none" ? { ...cur, factors: [] } : cur));
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-4 p-5 sm:p-6">
+      <p className="text-xs text-muted">
+        Use quando a pessoa perdeu o acesso ao aplicativo de códigos (trocou de celular, apagou o app). Remove a verificação em duas etapas da conta dela:
+        ela passa a entrar só com a senha e pode configurar de novo em Conta. A ação fica registrada no histórico.
+      </p>
+
+      <form onSubmit={search} className="flex items-start gap-2" noValidate>
+        <Field label="E-mail da pessoa" className="flex-1">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@exemplo.com" required />
+        </Field>
+        <Button type="submit" disabled={searching || !email} className="mt-6 h-11 shrink-0">
+          {searching ? "Buscando..." : "Buscar"}
+        </Button>
+      </form>
+
+      {error ? <FormMessage>{error}</FormMessage> : null}
+      {note ? <FormMessage tone="success">{note}</FormMessage> : null}
+
+      {result === "none" ? <p className="text-sm text-muted">Nenhuma conta com esse e-mail.</p> : null}
+
+      {result && result !== "none" ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2 p-4">
+          <div>
+            <p className="text-sm font-medium break-all">{result.email}</p>
+            {result.memberships.length ? (
+              <ul className="mt-1 flex flex-col gap-0.5 text-xs text-muted">
+                {result.memberships.map((m, i) => (
+                  <li key={i}>
+                    {m.orgName} · {roleText(m.role)}
+                    {m.active ? "" : " (inativo)"}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-muted">Sem empresa vinculada.</p>
+            )}
+          </div>
+
+          {result.factors.length ? (
+            <>
+              <p className="text-sm">
+                Verificação em duas etapas <span className="font-semibold text-brand-text">ativa</span>
+                {` (${result.factors.length} ${result.factors.length === 1 ? "método" : "métodos"})`}.
+              </p>
+              <ResetButton onConfirm={() => reset(result.userId)} pending={resetting} />
+            </>
+          ) : (
+            <p className="text-sm text-muted">Sem verificação em duas etapas ativa nesta conta.</p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

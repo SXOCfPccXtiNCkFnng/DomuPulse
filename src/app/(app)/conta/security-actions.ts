@@ -6,7 +6,9 @@ import { after } from "next/server";
 import { z } from "zod";
 import { sendPasswordChangedEmail } from "@/lib/email-templates";
 import { publicEnv } from "@/lib/env";
+import { clearRecoveryCodes, generateRecoveryCodes } from "@/lib/mfa-recovery";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fieldErrors, passwordSchema, type FormState } from "@/lib/validation";
 
@@ -57,4 +59,28 @@ export async function signOutEverywhere() {
   const supabase = await createClient();
   await supabase.auth.signOut({ scope: "global" });
   redirect("/entrar");
+}
+
+/**
+ * Gera novos códigos de recuperação do 2FA (invalida os antigos). Devolve o
+ * texto uma única vez: a pessoa guarda para entrar caso perca o celular.
+ */
+export async function createRecoveryCodes(): Promise<{ codes: string[] } | { error: string }> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (!userId) return { error: "Sessão expirada. Entre de novo." };
+  // Só com um fator verificado (a pessoa acabou de ativar, ou já tem o 2FA on).
+  const { data } = await createAdminClient().auth.admin.getUserById(userId);
+  const hasTotp = (data.user?.factors ?? []).some((f) => f.factor_type === "totp" && f.status === "verified");
+  if (!hasTotp) return { error: "Ative a verificação em duas etapas primeiro." };
+  return { codes: await generateRecoveryCodes(userId) };
+}
+
+/** Apaga os códigos de recuperação da pessoa (ao desativar o 2FA). */
+export async function clearMyRecoveryCodes() {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (userId) await clearRecoveryCodes(userId);
 }

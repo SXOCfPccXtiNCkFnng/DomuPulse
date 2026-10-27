@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, Building2, CircleCheck, CircleX, LayoutDashboard, Stethoscope, Tag, TriangleAlert, Users } from "lucide-react";
+import { AlertTriangle, Building2, CircleCheck, CircleX, LayoutDashboard, ShieldCheck, Stethoscope, Tag, TriangleAlert, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
@@ -24,7 +24,7 @@ import { platformAdminSession } from "@/lib/platform-admin";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { formatDate } from "@/lib/time";
 import { extendTrial, grantAccess, resolveAlertsBySource, setAlertResolved, setCouponActive, suspendAccess } from "./actions";
-import { ConfirmButton, CouponForm, PriceForm, SignupAlertEmailsCard } from "./client";
+import { ConfirmButton, CouponForm, MfaResetCard, PriceForm, SignupAlertEmailsCard } from "./client";
 
 // Título neutro: a página não se anuncia para quem não tem acesso.
 export const metadata: Metadata = { title: "Pulse", robots: { index: false, follow: false } };
@@ -35,6 +35,7 @@ const TABS = [
   { id: "empresas", label: "Empresas", Icon: Building2 },
   { id: "comercial", label: "Comercial", Icon: Tag },
   { id: "saude", label: "Saúde do sistema", Icon: Stethoscope },
+  { id: "seguranca", label: "Segurança", Icon: ShieldCheck },
   { id: "erros", label: "Erros", Icon: AlertTriangle },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -100,6 +101,7 @@ async function Gate({ searchParams }: { searchParams: PageProps<"/interno">["sea
         {tab === "empresas" ? <Orgs search={one(sp.q).slice(0, 80)} /> : null}
         {tab === "comercial" ? <Commercial /> : null}
         {tab === "saude" ? <Health checks={health} /> : null}
+        {tab === "seguranca" ? <Security /> : null}
         {tab === "erros" ? <Errors status={one(sp.status) === "resolvidos" ? "resolved" : "open"} level={one(sp.nivel)} /> : null}
       </main>
     </div>
@@ -512,6 +514,20 @@ async function Commercial() {
           <CouponForm />
         </Card>
       </div>
+    </div>
+  );
+}
+
+function Security() {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="min-w-0">
+        <CardHeader
+          title="Verificação em duas etapas"
+          description="Desative a 2FA de quem perdeu o acesso ao aplicativo de códigos. Busque pelo e-mail; a pessoa volta a entrar só com a senha e configura de novo."
+        />
+        <MfaResetCard />
+      </Card>
     </div>
   );
 }

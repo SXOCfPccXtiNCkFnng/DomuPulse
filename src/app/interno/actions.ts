@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getSignupAlertEmails } from "@/lib/interno";
 import { describeError } from "@/lib/logger";
+import { clearRecoveryCodes } from "@/lib/mfa-recovery";
 import { requirePlatformAdmin } from "@/lib/platform-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSignupAlertEmails } from "@/lib/interno";
 import { emailSchema, type FormState } from "@/lib/validation";
 
 // Toda ação confere a lista de administradores de novo: o botão na tela
@@ -191,5 +192,81 @@ export async function removeSignupAlertEmail(emailToRemove: string): Promise<For
   await audit(userId, null, "remove_signup_alert_email", { email: emailClean });
   revalidatePath("/interno");
   return { success: `E-mail ${emailClean} removido dos alertas.` };
+}
+
+// --- Verificação em duas etapas (2FA) das pessoas -------------------------
+// Para quando alguém perde o acesso ao app de códigos (trocou de celular) e
+// pede ajuda. O administrador remove a 2FA; a pessoa entra só com a senha e
+// configura de novo. Fica registrado no audit_log.
+
+export type MfaFactor = { id: string; type: string; friendlyName: string | null; status: string };
+export type MfaLookup =
+  | { error: string }
+  | { found: false }
+  | {
+      found: true;
+      userId: string;
+      email: string;
+      memberships: { orgName: string; role: string; active: boolean }[];
+      factors: MfaFactor[];
+    };
+
+/** Acha a conta pelo e-mail e diz se ela tem 2FA ativa. */
+export async function lookupMfa(emailInput: string): Promise<MfaLookup> {
+  await requirePlatformAdmin();
+  const email = String(emailInput ?? "").trim().toLowerCase();
+  if (!emailSchema.safeParse(email).success) return { error: "Digite um e-mail válido." };
+  const admin = createAdminClient();
+
+  // O Auth não busca por e-mail direto: percorre as páginas até achar.
+  let user: { id: string; email?: string | null } | null = null;
+  for (let page = 1; page <= 25; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) return { error: "Não foi possível consultar as contas. Tente de novo." };
+    user = data.users.find((u) => u.email?.toLowerCase() === email) ?? null;
+    if (user || data.users.length < 200) break;
+  }
+  if (!user) return { found: false };
+
+  const { data: full } = await admin.auth.admin.getUserById(user.id);
+  const factors: MfaFactor[] = (full.user?.factors ?? []).map((f) => ({
+    id: f.id,
+    type: f.factor_type,
+    friendlyName: f.friendly_name ?? null,
+    status: f.status,
+  }));
+
+  const { data: members } = await admin.from("members").select("role, active, organizations (name)").eq("user_id", user.id);
+  const memberships = ((members ?? []) as unknown as { role: string; active: boolean; organizations: { name: string } | null }[]).map((m) => ({
+    orgName: m.organizations?.name ?? "Sem empresa",
+    role: m.role,
+    active: m.active,
+  }));
+
+  return { found: true, userId: user.id, email: user.email ?? email, memberships, factors };
+}
+
+/** Remove todos os fatores de 2FA de uma conta. */
+export async function resetMfa(userId: string): Promise<{ error: string } | { ok: true; removed: number }> {
+  const { userId: actor } = await requirePlatformAdmin();
+  if (!z.uuid().safeParse(userId).success) return { error: "Conta inválida." };
+  const admin = createAdminClient();
+
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data.user) return { error: "Conta não encontrada." };
+  const factors = data.user.factors ?? [];
+
+  let removed = 0;
+  for (const f of factors) {
+    const { error: delErr } = await admin.auth.admin.mfa.deleteFactor({ id: f.id, userId });
+    if (delErr) return { error: "Não foi possível remover a verificação. Tente de novo." };
+    removed += 1;
+  }
+
+  // Os códigos de recuperação não valem mais sem o 2FA.
+  await clearRecoveryCodes(userId);
+  await audit(actor, null, "reset_mfa", { targetUserId: userId, email: data.user.email ?? null, removed });
+  revalidatePath("/interno");
+  return { ok: true, removed };
 }
 

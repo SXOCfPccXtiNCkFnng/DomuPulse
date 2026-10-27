@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
+import { Copy, Download, KeyRound, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useMemo, useState } from "react";
 import { PasswordField } from "@/components/auth-forms";
@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input } from "@/components/ui/field";
 import { getBrowserClient } from "@/lib/supabase/client";
 import type { FormState } from "@/lib/validation";
-import { changePassword, signOutEverywhere } from "./security-actions";
+import { changePassword, clearMyRecoveryCodes, createRecoveryCodes, signOutEverywhere } from "./security-actions";
 
 type MfaState =
   | { kind: "loading" }
   | { kind: "unknown" }
   | { kind: "off" }
   | { kind: "enrolling"; factorId: string; qr: string; secret: string }
+  | { kind: "codes"; codes: string[] }
   | { kind: "on"; factorId: string; since: string };
 
 export function MfaSettings() {
@@ -66,13 +67,16 @@ export function MfaSettings() {
     setBusy(true);
     setError(null);
     const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId: state.factorId, code });
-    setBusy(false);
     if (error) {
+      setBusy(false);
       setCode("");
       return setError("Código incorreto. Confira se o horário do celular está certo e tente de novo.");
     }
-    setState({ kind: "on", factorId: state.factorId, since: new Date().toISOString() });
     setCode("");
+    // 2FA ativo: já entrega os códigos de recuperação para a pessoa guardar.
+    const res = await createRecoveryCodes();
+    setBusy(false);
+    setState("codes" in res ? { kind: "codes", codes: res.codes } : { kind: "on", factorId: state.factorId, since: new Date().toISOString() });
     router.refresh();
   }
 
@@ -80,11 +84,25 @@ export function MfaSettings() {
     if (state.kind !== "on") return;
     setBusy(true);
     const { error } = await supabase.auth.mfa.unenroll({ factorId: state.factorId });
+    if (error) {
+      setBusy(false);
+      setConfirmOff(false);
+      return setError("Não foi possível desativar. Entre de novo com o código e tente outra vez.");
+    }
+    await clearMyRecoveryCodes().catch(() => {});
     setBusy(false);
     setConfirmOff(false);
-    if (error) return setError("Não foi possível desativar. Entre de novo com o código e tente outra vez.");
     setState({ kind: "off" });
     router.refresh();
+  }
+
+  async function regenCodes() {
+    setBusy(true);
+    setError(null);
+    const res = await createRecoveryCodes();
+    setBusy(false);
+    if ("codes" in res) setState({ kind: "codes", codes: res.codes });
+    else setError(res.error);
   }
 
   return (
@@ -150,28 +168,103 @@ export function MfaSettings() {
         </form>
       ) : null}
 
+      {state.kind === "codes" ? (
+        <RecoveryCodes
+          codes={state.codes}
+          onDone={() => {
+            setState({ kind: "loading" });
+            setReload((n) => n + 1);
+          }}
+        />
+      ) : null}
+
       {state.kind === "on" ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-sm">
-            <ShieldCheck className="size-5 text-brand-text" />
-            Ativa desde {new Date(state.since).toLocaleDateString("pt-BR")}.
-          </p>
-          {confirmOff ? (
-            <span className="flex gap-2">
-              <Button size="sm" variant="danger" onClick={disable} disabled={busy}>
-                {busy ? "Desativando..." : "Confirmar desativação"}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm">
+              <ShieldCheck className="size-5 text-brand-text" />
+              Ativa desde {new Date(state.since).toLocaleDateString("pt-BR")}.
+            </p>
+            {confirmOff ? (
+              <span className="flex gap-2">
+                <Button size="sm" variant="danger" onClick={disable} disabled={busy}>
+                  {busy ? "Desativando..." : "Confirmar desativação"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmOff(false)}>
+                  Cancelar
+                </Button>
+              </span>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setConfirmOff(true)}>
+                Desativar
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmOff(false)}>
-                Cancelar
-              </Button>
-            </span>
-          ) : (
-            <Button size="sm" variant="ghost" onClick={() => setConfirmOff(true)}>
-              Desativar
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            <p className="text-sm text-ink-2">Códigos de recuperação: use um para entrar se perder o celular. Gerar novos invalida os antigos.</p>
+            <Button size="sm" variant="secondary" onClick={regenCodes} disabled={busy}>
+              {busy ? "Gerando..." : "Gerar códigos de recuperação"}
             </Button>
-          )}
+          </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const text = codes.join("\n");
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Sem permissão de área de transferência: a pessoa copia na mão.
+    }
+  };
+
+  const download = () => {
+    const content = `Códigos de recuperação do Domu Pulse\n\nGuarde em um lugar seguro. Cada código serve uma única vez para entrar caso você perca o celular.\n\n${text}\n`;
+    const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "domu-pulse-codigos-recuperacao.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-start gap-2 rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-text">
+        <KeyRound className="mt-0.5 size-4 shrink-0" />
+        <p>
+          Guarde estes códigos num lugar seguro (anotados ou no gerenciador de senhas). Se perder o celular, use um deles para
+          entrar. Cada código vale <strong>uma vez</strong> e eles <strong>não aparecem de novo</strong>.
+        </p>
+      </div>
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+        {codes.map((c) => (
+          <li key={c} className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-center font-mono text-sm tracking-wider select-all">
+            {c}
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" onClick={copy}>
+          <Copy className="size-4" />
+          {copied ? "Copiado!" : "Copiar"}
+        </Button>
+        <Button size="sm" variant="secondary" onClick={download}>
+          <Download className="size-4" />
+          Baixar
+        </Button>
+        <Button size="sm" onClick={onDone}>
+          Já guardei
+        </Button>
+      </div>
     </div>
   );
 }
