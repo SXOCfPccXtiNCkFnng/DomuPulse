@@ -445,25 +445,38 @@ function ReviewDialog({ adjustment: a, contract: c, orgName, onClose }: { adjust
 function SendRow({ adjustment: a, contract: c, orgName }: { adjustment: Adjustment; contract: Contract; orgName: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [info, setInfo] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [emailed, setEmailed] = useState(false);
   const letter = a.letter ?? "";
 
   const run = (fn: () => Promise<{ error: string } | { ok: boolean }>) =>
     start(async () => {
       const r = await fn();
-      if ("error" in r) setInfo(r.error);
+      if ("error" in r) setMsg({ text: r.error, ok: false });
       else router.refresh();
+    });
+  // Envia por e-mail e mostra o resultado (sucesso ou erro) sem tirar a linha,
+  // para a pessoa ter certeza do que aconteceu e poder reenviar se falhar.
+  const emailLetter = () =>
+    start(async () => {
+      setMsg(null);
+      const r = await sendLetterEmail(a.id);
+      if ("error" in r) setMsg({ text: `Não foi enviado: ${r.error} Tente de novo.`, ok: false });
+      else {
+        setEmailed(true);
+        setMsg({ text: `E-mail enviado com sucesso para ${c.partyEmail}.`, ok: true });
+      }
     });
   const copy = async () => {
     await navigator.clipboard.writeText(letter).catch(() => null);
-    setInfo("Carta copiada.");
+    setMsg({ text: "Carta copiada.", ok: true });
   };
   // Abre a carta formatada numa janela e chama a impressão: a pessoa salva como PDF.
   const printLetter = () => {
     const esc = (s: string) => s.replace(/[&<>]/g, (ch) => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));
     const win = window.open("", "_blank", "width=820,height=920");
     if (!win) {
-      setInfo("Libere os pop-ups do navegador para gerar o PDF.");
+      setMsg({ text: "Libere os pop-ups do navegador para gerar o PDF.", ok: false });
       return;
     }
     win.document.write(
@@ -514,16 +527,16 @@ function SendRow({ adjustment: a, contract: c, orgName }: { adjustment: Adjustme
               WhatsApp
             </a>
           ) : null}
-          <Button size="sm" variant="secondary" onClick={() => run(() => sendLetterEmail(a.id))} disabled={pending || !c.partyEmail} title={c.partyEmail ? undefined : "Contrato sem e-mail do cliente"}>
-            <Mail className="size-3.5" />
-            E-mail
+          <Button size="sm" variant="secondary" onClick={emailLetter} disabled={pending || !c.partyEmail} title={c.partyEmail ? undefined : "Contrato sem e-mail do cliente"}>
+            {emailed ? <Check className="size-3.5" /> : <Mail className="size-3.5" />}
+            {emailed ? "Reenviar" : "E-mail"}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => run(() => markLetterSent(a.id))} disabled={pending}>
             Já enviei
           </Button>
         </div>
       </div>
-      {info ? <p className="text-xs text-muted">{info}</p> : null}
+      {msg ? <p className={`text-xs ${msg.ok ? "text-brand-text" : "text-danger"}`}>{msg.text}</p> : null}
     </li>
   );
 }

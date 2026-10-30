@@ -441,7 +441,9 @@ export function sendAdjustmentLetterEmail(input: { to: string; subject: string; 
   </td></tr></table>
 </body></html>`;
   const text = input.letter + (input.senderEmail ? `\n\nDúvidas? Responda este e-mail ou escreva para ${input.senderEmail}.` : "");
-  return sendEmail({ to: input.to, subject: input.subject, html, text, replyTo: input.senderEmail, fromName: input.orgName });
+  // Cópia oculta para quem enviou, para a empresa ter o comprovante (o cliente não vê).
+  const bcc = input.senderEmail && input.senderEmail.toLowerCase() !== input.to.toLowerCase() ? input.senderEmail : undefined;
+  return sendEmail({ to: input.to, subject: input.subject, html, text, replyTo: input.senderEmail, fromName: input.orgName, bcc });
 }
 
 // Alerta para a equipe DomuTech. Silencioso: se o próprio e-mail falhar, não

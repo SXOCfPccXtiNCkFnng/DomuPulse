@@ -4,7 +4,7 @@ import { emailEnv } from "@/lib/env.server";
 import { CONTACT_EMAIL, contactWhatsappUrl } from "@/lib/legal";
 import { logger } from "@/lib/logger";
 
-export type EmailMessage = { to: string; subject: string; html: string; text: string; replyTo?: string; fromName?: string };
+export type EmailMessage = { to: string; subject: string; html: string; text: string; replyTo?: string; fromName?: string; bcc?: string };
 export type SendResult = { ok: boolean; mode: "resend" | "dev"; error?: string };
 
 /**
@@ -44,6 +44,7 @@ export async function sendEmail(message: EmailMessage, options: { silent?: boole
         html: message.html,
         text: message.text,
         ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(message.bcc ? { bcc: [message.bcc] } : {}),
       }),
     });
     if (!res.ok) {
