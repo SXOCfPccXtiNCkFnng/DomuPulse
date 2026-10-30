@@ -205,7 +205,7 @@ export function ContractsBoard({
           <CardHeader title="Cartas para enviar" description="Reajustes aprovados que ainda não foram comunicados ao cliente." />
           <ul className="mt-3 divide-y divide-line border-t border-line">
             {toSend.map((a) => (
-              <SendRow key={a.id} adjustment={a} contract={byId.get(a.contractId)!} />
+              <SendRow key={a.id} adjustment={a} contract={byId.get(a.contractId)!} orgName={orgName} />
             ))}
           </ul>
         </Card>
@@ -442,7 +442,7 @@ function ReviewDialog({ adjustment: a, contract: c, orgName, onClose }: { adjust
   );
 }
 
-function SendRow({ adjustment: a, contract: c }: { adjustment: Adjustment; contract: Contract }) {
+function SendRow({ adjustment: a, contract: c, orgName }: { adjustment: Adjustment; contract: Contract; orgName: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [info, setInfo] = useState<string | null>(null);
@@ -458,6 +458,31 @@ function SendRow({ adjustment: a, contract: c }: { adjustment: Adjustment; contr
     await navigator.clipboard.writeText(letter).catch(() => null);
     setInfo("Carta copiada.");
   };
+  // Abre a carta formatada numa janela e chama a impressão: a pessoa salva como PDF.
+  const printLetter = () => {
+    const esc = (s: string) => s.replace(/[&<>]/g, (ch) => (ch === "&" ? "&amp;" : ch === "<" ? "&lt;" : "&gt;"));
+    const win = window.open("", "_blank", "width=820,height=920");
+    if (!win) {
+      setInfo("Libere os pop-ups do navegador para gerar o PDF.");
+      return;
+    }
+    win.document.write(
+      `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Carta de reajuste - ${esc(c.reference)}</title>` +
+        `<style>@page{margin:2.5cm}body{font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.7;margin:0}` +
+        `.org{font-size:18px;font-weight:700;color:#0a1428;border-bottom:1px solid #e2e7f0;padding-bottom:12px;margin-bottom:24px}` +
+        `.body{white-space:pre-wrap}</style></head>` +
+        `<body><div class="org">${esc(orgName)}</div><div class="body">${esc(letter)}</div></body></html>`,
+    );
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.print();
+      } catch {
+        // Se o navegador bloquear, a pessoa usa Ctrl+P e "Salvar como PDF".
+      }
+    }, 350);
+  };
 
   return (
     <li className="flex flex-col gap-2 px-5 py-3.5 sm:px-6">
@@ -472,6 +497,10 @@ function SendRow({ adjustment: a, contract: c }: { adjustment: Adjustment; contr
           <Button size="sm" variant="secondary" onClick={copy}>
             <Copy className="size-3.5" />
             Copiar
+          </Button>
+          <Button size="sm" variant="secondary" onClick={printLetter}>
+            <FileText className="size-3.5" />
+            PDF
           </Button>
           {c.partyPhone ? (
             <a
