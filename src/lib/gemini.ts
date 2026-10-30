@@ -19,7 +19,7 @@ const TIMEOUT_MS = 25_000;
 
 async function generate(
   input: Part[] | Content[],
-  opts: { schema?: object; system?: string; temperature?: number; fast?: boolean } = {},
+  opts: { schema?: object; system?: string; temperature?: number; fast?: boolean; timeoutMs?: number } = {},
 ) {
   const { apiKey, model } = geminiEnv();
   const contents = (input as (Part | Content)[]).every((c) => "role" in c) ? (input as Content[]) : [{ role: "user", parts: input as Part[] }];
@@ -34,7 +34,7 @@ async function generate(
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
       body: JSON.stringify({
         contents,
         ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
@@ -109,6 +109,95 @@ export async function scoreResume(input: {
     summary: clean(raw.summary),
     score: Math.max(0, Math.min(100, Math.round(Number(raw.score ?? 0)))),
     reason: (clean(raw.reason) ?? "Avaliação indisponível.").slice(0, 2000),
+  };
+}
+
+export type ContractData = {
+  kind: "locacao" | "venda" | null;
+  reference: string | null;
+  partyName: string | null;
+  partyEmail: string | null;
+  partyPhone: string | null;
+  indexCode: "ipca" | "igpm" | "incc_m" | "incc_di" | null;
+  /** Índice escrito no contrato quando não é um dos quatro (ex.: "IGP-DI"). */
+  indexOther: string | null;
+  baseDate: string | null;
+  periodMonths: number | null;
+  lagMonths: number | null;
+  allowDecrease: boolean | null;
+  valueCents: number | null;
+  clause: string | null;
+  notes: string | null;
+};
+
+const CONTRACT_SCHEMA = {
+  type: "object",
+  properties: {
+    kind: { type: "string", enum: ["locacao", "venda"] },
+    reference: { type: "string" },
+    partyName: { type: "string" },
+    partyEmail: { type: "string" },
+    partyPhone: { type: "string" },
+    indexCode: { type: "string", enum: ["ipca", "igpm", "incc_m", "incc_di", "outro", "nao_informado"] },
+    indexOther: { type: "string" },
+    baseDate: { type: "string" },
+    periodMonths: { type: "integer" },
+    lagMonths: { type: "integer" },
+    allowDecrease: { type: "string", enum: ["sim", "nao", "nao_informado"] },
+    value: { type: "number" },
+    clause: { type: "string" },
+    notes: { type: "string" },
+  },
+  required: ["kind", "indexCode", "allowDecrease", "baseDate", "value"],
+};
+
+/** Lê um contrato de locação ou venda e tira o que o reajuste precisa. A pessoa confere antes de salvar. */
+export async function extractContract(input: { base64: string; mimeType: string }): Promise<ContractData> {
+  const system =
+    "Você é um analista de contratos imobiliários no Brasil. Leia o contrato e extraia só o que está escrito; " +
+    "não invente nem deduza. Campo que não estiver no contrato fica vazio (ou 0 nos números).\n" +
+    "- kind: 'locacao' (aluguel) ou 'venda' (compra e venda, promessa, financiamento direto).\n" +
+    "- reference: como identificar o contrato em poucas palavras (imóvel/unidade e endereço curto ou número do contrato).\n" +
+    "- partyName: o locatário (na locação) ou o comprador/promitente comprador (na venda). Com mais de um, junte com ' e '.\n" +
+    "- partyEmail e partyPhone: dessa mesma parte, se houver.\n" +
+    "- indexCode: índice de reajuste. IPCA → 'ipca'; IGP-M → 'igpm'; INCC-M ou só 'INCC' → 'incc_m'; INCC-DI → 'incc_di'; " +
+    "outro índice → 'outro' e escreva o nome em indexOther; sem índice no contrato → 'nao_informado'.\n" +
+    "- baseDate: data-base do reajuste no formato AAAA-MM-DD. Se o contrato disser só que reajusta 'a cada 12 meses' ou 'anualmente', " +
+    "use a data de início da vigência (ou da assinatura, se não houver início).\n" +
+    "- periodMonths: de quantos em quantos meses reajusta (12 se for anual).\n" +
+    "- lagMonths: meses de defasagem do índice, só se o contrato disser (ex.: 'índice do segundo mês anterior' = 2). Senão, 0.\n" +
+    "- allowDecrease: 'nao' se o contrato disser que variação negativa não reduz o valor; 'sim' se disser que reduz; 'nao_informado' se não disser.\n" +
+    "- value: o valor que é reajustado, em reais (aluguel mensal na locação; parcela mensal ou saldo reajustável na venda).\n" +
+    "- clause: copie o trecho exato da cláusula de reajuste (até 600 caracteres).\n" +
+    "- notes: qualquer coisa que a pessoa precise conferir (ex.: valor diferente em aditivo, índice substituto, carência), em uma ou duas frases.";
+  const text = await generate(
+    [{ text: "Extraia os dados do contrato em anexo." }, { inlineData: { mimeType: input.mimeType, data: input.base64 } }],
+    { system, schema: CONTRACT_SCHEMA, timeoutMs: 50_000 },
+  );
+  const raw = JSON.parse(text) as Record<string, unknown>;
+  const str = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "null" ? v.trim().slice(0, max) : null);
+  const int = (v: unknown, min: number, max: number) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) && n >= min && n <= max ? n : null;
+  };
+  const date = str(raw.baseDate, 10);
+  const index = str(raw.indexCode, 10);
+  const value = Number(raw.value);
+  return {
+    kind: raw.kind === "locacao" || raw.kind === "venda" ? raw.kind : null,
+    reference: str(raw.reference, 160),
+    partyName: str(raw.partyName, 160),
+    partyEmail: str(raw.partyEmail, 254),
+    partyPhone: str(raw.partyPhone, 20),
+    indexCode: index === "ipca" || index === "igpm" || index === "incc_m" || index === "incc_di" ? index : null,
+    indexOther: index === "outro" ? str(raw.indexOther, 40) : null,
+    baseDate: date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) ? date : null,
+    periodMonths: int(raw.periodMonths, 1, 36),
+    lagMonths: int(raw.lagMonths, 0, 3),
+    allowDecrease: raw.allowDecrease === "sim" ? true : raw.allowDecrease === "nao" ? false : null,
+    valueCents: Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null,
+    clause: str(raw.clause, 600),
+    notes: str(raw.notes, 500),
   };
 }
 

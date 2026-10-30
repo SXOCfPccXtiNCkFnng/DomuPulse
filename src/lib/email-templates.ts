@@ -356,6 +356,73 @@ export function sendPaymentOverdueEmail(input: { to: string; fullName: string; o
   });
 }
 
+export type ContractReportRow = { reference: string; party: string; due: string; index: string; from: number; to: number; estimated: boolean };
+
+/** Relatório do mês para a liderança: reajustes que vencem, os atrasados e os da conferência. */
+export function sendContractsReportEmail(input: {
+  to: string;
+  fullName: string;
+  orgName: string;
+  monthLabel: string;
+  thisMonth: ContractReportRow[];
+  overdue: ContractReportRow[];
+  nextMonth: number;
+  toReview: number;
+}) {
+  const name = firstName(input.fullName);
+  const url = siteUrl("/contratos");
+  const table = (rows: ContractReportRow[]) =>
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 18px">${rows
+      .map(
+        (r) => `<tr><td style="padding:10px 0;border-bottom:1px solid #e2e7f0">
+          <strong>${escapeHtml(r.reference)}</strong><br>
+          <span style="color:#5b6b88;font-size:13px">${escapeHtml(r.party)} · ${escapeHtml(r.index)} · ${escapeHtml(r.due)}</span>
+        </td><td align="right" style="padding:10px 0;border-bottom:1px solid #e2e7f0;white-space:nowrap">
+          ${escapeHtml(formatMoney(r.from))} &rarr; <strong>${escapeHtml(formatMoney(r.to))}</strong>${r.estimated ? '<br><span style="color:#b45309;font-size:12px">estimado</span>' : ""}
+        </td></tr>`,
+      )
+      .join("")}</table>`;
+  const line = (r: ContractReportRow) => `- ${r.reference} (${r.party}), ${r.due}: ${formatMoney(r.from)} -> ${formatMoney(r.to)}${r.estimated ? " (estimado)" : ""}`;
+  const total = input.thisMonth.length + input.overdue.length;
+  const heading = total === 0 ? `Nenhum reajuste em ${input.monthLabel}, ${name}.` : `${total} ${total === 1 ? "contrato reajusta" : "contratos reajustam"} em ${input.monthLabel}.`;
+
+  const bodyHtml =
+    (input.overdue.length
+      ? p(`<strong style="color:#b42318">Atrasados (${input.overdue.length})</strong>: a data do reajuste já passou e ninguém aprovou.`) + table(input.overdue)
+      : "") +
+    (input.thisMonth.length ? p(`<strong>Reajustam este mês (${input.thisMonth.length})</strong>`) + table(input.thisMonth) : "") +
+    (input.nextMonth ? p(`No próximo mês vencem mais ${input.nextMonth}.`) : "") +
+    (input.toReview ? p(`${input.toReview} ${input.toReview === 1 ? "contrato lido pela IA ainda espera" : "contratos lidos pela IA ainda esperam"} a conferência dos dados.`) : "") +
+    p("Nenhum valor muda sozinho: confira cada reajuste, ajuste se precisar e aprove. A carta para o cliente já está pronta.");
+
+  return sendEmail({
+    to: input.to,
+    subject: total ? `Reajustes de ${input.monthLabel}: ${total} ${total === 1 ? "contrato" : "contratos"}` : `Reajustes de ${input.monthLabel}`,
+    html: brandedEmail({
+      eyebrow: "Contratos",
+      heading,
+      intro: `Relatório de reajustes da ${input.orgName}.`,
+      preheader: total ? `${total} para conferir e aprovar.` : "Nada vence este mês.",
+      bodyHtml,
+      cta: { label: "Conferir reajustes", url },
+    }),
+    text:
+      `${heading}\n\nRelatório de reajustes da ${input.orgName}.\n\n` +
+      (input.overdue.length ? `Atrasados:\n${input.overdue.map(line).join("\n")}\n\n` : "") +
+      (input.thisMonth.length ? `Reajustam este mês:\n${input.thisMonth.map(line).join("\n")}\n\n` : "") +
+      (input.nextMonth ? `No próximo mês vencem mais ${input.nextMonth}.\n\n` : "") +
+      `Confira e aprove: ${url}${contactFooterText()}`,
+  });
+}
+
+/** Carta de reajuste para o cliente. Sai sem a marca do Pulse: quem fala é a imobiliária. */
+export function sendAdjustmentLetterEmail(input: { to: string; subject: string; letter: string; replyTo?: string }) {
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"></head><body style="margin:0;padding:24px;background:#ffffff">
+  <div style="max-width:640px;margin:0 auto;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1f2937;white-space:pre-wrap">${escapeHtml(input.letter)}</div>
+</body></html>`;
+  return sendEmail({ to: input.to, subject: input.subject, html, text: input.letter, replyTo: input.replyTo });
+}
+
 // Alerta para a equipe DomuTech. Silencioso: se o próprio e-mail falhar, não
 // gera outro alerta.
 export function sendOpsAlertEmail(input: { to: string; source: string; message: string; orgId?: string | null }) {

@@ -4,7 +4,7 @@ import { emailEnv } from "@/lib/env.server";
 import { CONTACT_EMAIL, contactWhatsappUrl } from "@/lib/legal";
 import { logger } from "@/lib/logger";
 
-export type EmailMessage = { to: string; subject: string; html: string; text: string };
+export type EmailMessage = { to: string; subject: string; html: string; text: string; replyTo?: string };
 export type SendResult = { ok: boolean; mode: "resend" | "dev"; error?: string };
 
 /**
@@ -32,7 +32,14 @@ export async function sendEmail(message: EmailMessage, options: { silent?: boole
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${config.resendApiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: config.from, to: [message.to], subject: message.subject, html: message.html, text: message.text }),
+      body: JSON.stringify({
+        from: config.from,
+        to: [message.to],
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+      }),
     });
     if (!res.ok) {
       const body = (await res.text().catch(() => "")).slice(0, 300);

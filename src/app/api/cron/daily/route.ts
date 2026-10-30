@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sendPendingRejections } from "@/lib/candidate-notify";
+import { planAdjustments, sendContractReports, syncIndexes } from "@/lib/contracts";
 import { isCronRequest } from "@/lib/cron-auth";
 import { recordHeartbeat } from "@/lib/heartbeat";
 import { describeError, logger } from "@/lib/logger";
@@ -25,11 +26,15 @@ export async function GET(request: NextRequest) {
   try {
     const { data: orgs, error } = await createAdminClient()
       .from("organizations")
-      .select("id, name, timezone, report_slots, status, trial_ends_at")
+      .select("id, name, timezone, report_slots, status, trial_ends_at, segment")
       .in("status", ["trialing", "active", "past_due"]);
     if (error) throw error;
 
+    // Índices do Banco Central para os reajustes de contratos (no máximo a cada 12 h).
+    await syncIndexes().catch((err) => logger.error("cron.indexes", { message: describeError(err) }));
+
     let sent = 0;
+    let adjustments = 0;
     for (const org of orgs ?? []) {
       if (org.status === "trialing" && new Date(org.trial_ends_at) <= new Date()) continue;
       try {
@@ -39,6 +44,13 @@ export async function GET(request: NextRequest) {
       } catch (err) {
         // Uma empresa com problema não impede o resumo das outras.
         logger.error("cron.daily_org", { message: describeError(err), orgId: org.id });
+      }
+      if (org.segment !== "brokers") continue;
+      try {
+        adjustments += await planAdjustments(org);
+        sent += await sendContractReports(org);
+      } catch (err) {
+        logger.error("cron.contracts", { message: describeError(err), orgId: org.id });
       }
     }
 
@@ -55,7 +67,7 @@ export async function GET(request: NextRequest) {
       return 0;
     });
 
-    await recordHeartbeat("cron.daily", { ok: true, result: { sent, invoicesSynced, rejectionsSent } });
+    await recordHeartbeat("cron.daily", { ok: true, result: { sent, adjustments, invoicesSynced, rejectionsSent } });
     // Esta rotina também manda o semanal e o mensal: a tarefa antiga de
     // /api/cron/weekly deixou de ser necessária.
     await recordHeartbeat("cron.weekly", { ok: true, result: { via: "daily" } });

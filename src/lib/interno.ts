@@ -159,6 +159,10 @@ export async function loadHealth(): Promise<HealthCheck[]> {
     ["system_heartbeats", "name", "20261013010000_platform.sql"],
     ["rate_limits", "key", "20261013010000_platform.sql"],
     ["platform_settings", "signup_alert_emails", "20261019000000_signup_alert_emails.sql"],
+    ["wa_conversations", "history", "20261102000000_wa_history.sql"],
+    ["contracts", "next_adjustment_on, needs_review", "20261103000000_contracts.sql"],
+    ["contract_adjustments", "final_value_cents, letter_text", "20261103000000_contracts.sql"],
+    ["index_values", "pct", "20261103000000_contracts.sql"],
   ];
   const results = await Promise.all(marks.map(([t, c]) => admin.from(t).select(c).limit(1)));
   const missing = marks.filter((_, i) => results[i].error);
