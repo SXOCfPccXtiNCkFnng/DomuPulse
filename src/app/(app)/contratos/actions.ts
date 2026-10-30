@@ -358,7 +358,8 @@ export async function sendLetterEmail(id: string) {
     to: adj.contracts.party_email,
     subject: `Reajuste ${adj.contracts.kind === "locacao" ? "do aluguel" : "do contrato"}: ${adj.contracts.reference}`,
     letter: adj.letter_text,
-    replyTo: auth.user?.email ?? undefined,
+    orgName: gate.org.name,
+    senderEmail: auth.user?.email ?? undefined,
   });
   if (!result.ok) return { error: result.error ?? "Falha ao enviar o e-mail." };
   await supabase.from("contract_adjustments").update({ sent_at: new Date().toISOString() }).eq("id", id);

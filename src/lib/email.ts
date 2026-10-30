@@ -4,7 +4,7 @@ import { emailEnv } from "@/lib/env.server";
 import { CONTACT_EMAIL, contactWhatsappUrl } from "@/lib/legal";
 import { logger } from "@/lib/logger";
 
-export type EmailMessage = { to: string; subject: string; html: string; text: string; replyTo?: string };
+export type EmailMessage = { to: string; subject: string; html: string; text: string; replyTo?: string; fromName?: string };
 export type SendResult = { ok: boolean; mode: "resend" | "dev"; error?: string };
 
 /**
@@ -28,12 +28,17 @@ export async function sendEmail(message: EmailMessage, options: { silent?: boole
     return { ok: false, mode: "resend", error: "Envio de e-mail não configurado." };
   }
 
+  // O endereço continua o do domínio verificado; só o nome exibido pode mudar
+  // (ex.: a carta de reajuste sai no nome da empresa, não "Domu Pulse").
+  const fromAddress = config.from.match(/<([^>]+)>/)?.[1] ?? config.from;
+  const from = message.fromName ? `"${message.fromName.replace(/["<>\r\n]/g, " ").trim().slice(0, 78)}" <${fromAddress}>` : config.from;
+
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${config.resendApiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: config.from,
+        from,
         to: [message.to],
         subject: message.subject,
         html: message.html,

@@ -1,5 +1,5 @@
 import "server-only";
-import { brandedEmail, contactFooterText, emailAssetUrl, escapeHtml, sendEmail, siteUrl } from "@/lib/email";
+import { brandedEmail, contactFooterText, emailAssetUrl, EMAIL_FONT, escapeHtml, sendEmail, siteUrl } from "@/lib/email";
 import { SEGMENT_LABEL, type WelcomeSegment, welcomeEmailHtml, welcomeEmailText, welcomeSubject } from "@/lib/email-welcome";
 import { CONTACT_EMAIL, contactWhatsappUrl } from "@/lib/legal";
 import { formatMoney } from "@/lib/metrics";
@@ -415,12 +415,33 @@ export function sendContractsReportEmail(input: {
   });
 }
 
-/** Carta de reajuste para o cliente. Sai sem a marca do Pulse: quem fala é a imobiliária. */
-export function sendAdjustmentLetterEmail(input: { to: string; subject: string; letter: string; replyTo?: string }) {
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"></head><body style="margin:0;padding:24px;background:#ffffff">
-  <div style="max-width:640px;margin:0 auto;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1f2937;white-space:pre-wrap">${escapeHtml(input.letter)}</div>
+/**
+ * Carta de reajuste para o cliente. Sai no nome da EMPRESA (não "Domu Pulse"):
+ * remetente, topo e assinatura são dela, e o contato é o e-mail de quem enviou.
+ * Só um rodapé bem discreto cita o Pulse.
+ */
+export function sendAdjustmentLetterEmail(input: { to: string; subject: string; letter: string; orgName: string; senderEmail?: string }) {
+  const contact = input.senderEmail
+    ? `<tr><td style="padding:0 32px 26px">
+        <div style="border-top:1px solid #eef1f7;padding-top:16px;font-family:${EMAIL_FONT};font-size:13px;line-height:1.6;color:#5b6b88">
+          Dúvidas? Responda este e-mail ou escreva para
+          <a href="mailto:${escapeHtml(input.senderEmail)}" style="color:#0259f3;text-decoration:none">${escapeHtml(input.senderEmail)}</a>.
+        </div>
+      </td></tr>`
+    : "";
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>
+<body style="margin:0;padding:0;background:#f4f6fb">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fb"><tr><td align="center" style="padding:28px 12px">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #e2e7f0;border-radius:14px">
+      <tr><td style="padding:22px 32px;border-bottom:1px solid #eef1f7;font-family:${EMAIL_FONT};font-size:17px;font-weight:700;color:#0a1428">${escapeHtml(input.orgName)}</td></tr>
+      <tr><td style="padding:28px 32px;font-family:${EMAIL_FONT};font-size:15px;line-height:1.7;color:#1f2937;white-space:pre-wrap">${escapeHtml(input.letter)}</td></tr>
+      ${contact}
+    </table>
+    <div style="max-width:600px;margin:14px auto 0;font-family:${EMAIL_FONT};font-size:11px;color:#9aa6be;text-align:center">Enviado por ${escapeHtml(input.orgName)} via Domu Pulse</div>
+  </td></tr></table>
 </body></html>`;
-  return sendEmail({ to: input.to, subject: input.subject, html, text: input.letter, replyTo: input.replyTo });
+  const text = input.letter + (input.senderEmail ? `\n\nDúvidas? Responda este e-mail ou escreva para ${input.senderEmail}.` : "");
+  return sendEmail({ to: input.to, subject: input.subject, html, text, replyTo: input.senderEmail, fromName: input.orgName });
 }
 
 // Alerta para a equipe DomuTech. Silencioso: se o próprio e-mail falhar, não
