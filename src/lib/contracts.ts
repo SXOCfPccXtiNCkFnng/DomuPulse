@@ -194,7 +194,7 @@ export async function planAdjustments(org: { id: string; timezone: string }, con
 
   // Aviso antecipado: um por rodada, só quando aparece reajuste novo.
   if (created > 0 && !contractId) {
-    await notifyRoles(org.id, ["owner", "director"], {
+    await notifyRoles(org.id, ["owner", "director", "manager"], {
       kind: "contracts_due",
       title: created === 1 ? "1 reajuste para conferir" : `${created} reajustes para conferir`,
       body: "Os novos valores já estão calculados. Confira e aprove antes do vencimento.",
@@ -232,7 +232,7 @@ export async function sendContractReports(org: { id: string; name: string; timez
       .order("due_on"),
     admin.from("contracts").select("id", { count: "exact", head: true }).eq("org_id", org.id).eq("status", "active").gte("next_adjustment_on", nextStart).lt("next_adjustment_on", afterNext),
     admin.from("contracts").select("id", { count: "exact", head: true }).eq("org_id", org.id).eq("status", "active").eq("needs_review", true),
-    admin.from("members").select("id, user_id, full_name, digest_email").eq("org_id", org.id).eq("active", true).in("role", ["owner", "director"]),
+    admin.from("members").select("id, user_id, full_name, digest_email").eq("org_id", org.id).eq("active", true).in("role", ["owner", "director", "manager"]),
   ]);
 
   type Pending = {

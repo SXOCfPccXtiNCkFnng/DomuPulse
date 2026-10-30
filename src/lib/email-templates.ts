@@ -392,7 +392,7 @@ export function sendContractsReportEmail(input: {
       : "") +
     (input.thisMonth.length ? p(`<strong>Reajustam este mês (${input.thisMonth.length})</strong>`) + table(input.thisMonth) : "") +
     (input.nextMonth ? p(`No próximo mês vencem mais ${input.nextMonth}.`) : "") +
-    (input.toReview ? p(`${input.toReview} ${input.toReview === 1 ? "contrato lido pela IA ainda espera" : "contratos lidos pela IA ainda esperam"} a conferência dos dados.`) : "") +
+    (input.toReview ? p(`${input.toReview} ${input.toReview === 1 ? "contrato lido automaticamente ainda espera" : "contratos lidos automaticamente ainda esperam"} a conferência dos dados.`) : "") +
     p("Nenhum valor muda sozinho: confira cada reajuste, ajuste se precisar e aprove. A carta para o cliente já está pronta.");
 
   return sendEmail({

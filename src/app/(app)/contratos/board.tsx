@@ -222,7 +222,7 @@ export function ContractsBoard({
             <ScrollText className="size-8 text-muted" />
             <p className="font-medium">Nenhum contrato ainda</p>
             <p className="max-w-sm text-sm text-muted">
-              Envie os PDFs dos contratos de locação e venda. A IA lê a data-base, o índice e o valor; você confere e o Pulse cuida dos reajustes.
+              Envie os PDFs dos contratos de locação e venda. A leitura automática identifica a data-base, o índice e o valor; você confere e o Pulse cuida dos reajustes.
             </p>
           </div>
         ) : (
@@ -355,7 +355,7 @@ function ReviewDialog({ adjustment: a, contract: c, orgName, onClose }: { adjust
       {c.needsReview ? (
         <p className="flex gap-2 rounded-xl bg-warn-soft px-3.5 py-2.5 text-sm text-warn">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Os dados deste contrato foram lidos pela IA e ainda não foram conferidos. Confira data-base, índice e valor antes de aprovar.
+          Os dados deste contrato foram lidos automaticamente e ainda não foram conferidos. Confira data-base, índice e valor antes de aprovar.
         </p>
       ) : null}
       {a.missing.length ? (
@@ -612,7 +612,7 @@ function ContractDialog({ draft, today, onClose }: { draft: Draft; today: string
           <div className="flex flex-col gap-2 rounded-xl bg-brand-soft px-3.5 py-3 text-sm">
             <p className="flex items-center gap-1.5 font-medium text-brand-text">
               <Sparkles className="size-4" />
-              Lido pela IA: confira cada campo antes de salvar
+              Leitura automática: confira cada campo antes de salvar
             </p>
             {extracted.indexOther ? (
               <p className="text-danger">O contrato usa {extracted.indexOther}, que o Pulse ainda não acompanha. Escolha o índice manualmente.</p>
@@ -803,7 +803,7 @@ function UploadDialog({ aiEnabled, onClose, onSingle }: { aiEnabled: boolean; on
             <span className="font-medium">{busy ? "Enviando..." : "Escolha os arquivos dos contratos"}</span>
             <span className="text-sm text-muted">
               PDF, JPG ou PNG, até 10 MB cada.{" "}
-              {aiEnabled ? "Um arquivo abre para você conferir; vários entram de uma vez e ficam marcados para conferência." : "A leitura por IA está desligada: preencha os dados à mão."}
+              {aiEnabled ? "Um arquivo abre para você conferir; vários entram de uma vez e ficam marcados para conferência." : "A leitura automática está desligada: preencha os dados à mão."}
             </span>
             <input type="file" accept="application/pdf,image/jpeg,image/png" multiple={aiEnabled} className="sr-only" onChange={(e) => pick(e.target.files)} disabled={busy} />
           </label>

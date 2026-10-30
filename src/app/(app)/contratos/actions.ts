@@ -47,7 +47,7 @@ export async function prepareContractUpload(file: { name: string; size: number; 
 }
 
 async function readWithAi(path: string): Promise<ContractData | { error: string }> {
-  if (!geminiConfigured()) return { error: "A leitura por IA não está configurada. Preencha os dados à mão." };
+  if (!geminiConfigured()) return { error: "A leitura automática não está configurada. Preencha os dados à mão." };
   const { data: blob, error } = await createAdminClient().storage.from(CONTRACTS_BUCKET).download(path);
   if (error || !blob) return { error: "O arquivo não chegou. Anexe de novo." };
   const ext = path.split(".").pop();
@@ -56,7 +56,7 @@ async function readWithAi(path: string): Promise<ContractData | { error: string 
     return await extractContract({ base64: Buffer.from(await blob.arrayBuffer()).toString("base64"), mimeType });
   } catch (e) {
     logger.error("contracts.extract", { message: describeError(e) });
-    return { error: "A IA não conseguiu ler este arquivo. Preencha os dados à mão." };
+    return { error: "Não consegui ler este arquivo automaticamente. Preencha os dados à mão." };
   }
 }
 
