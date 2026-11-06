@@ -118,20 +118,48 @@ export async function setVisitStatus(id: string, status: VisitStatus): Promise<{
   return { ok: true };
 }
 
-/** Remarca a visita (data e horário). Remarcar reabre a visita como "Agendada". */
-export async function rescheduleVisit(id: string, scheduledAt: string): Promise<{ error: string } | { ok: true }> {
+/**
+ * Edita a visita. Mudar data ou horário remarca e reabre como "Agendada".
+ * O imóvel (ou "" para tirar) vai para o cliente da visita como imóvel de interesse.
+ */
+export async function updateVisit(
+  id: string,
+  input: { scheduledAt?: string; propertyId?: string | null },
+): Promise<{ error: string } | { ok: true }> {
   if (!uuid(id)) return { error: "Visita inválida." };
-  if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return { error: "Data ou horário inválidos." };
+  if (input.scheduledAt !== undefined && Number.isNaN(Date.parse(input.scheduledAt))) return { error: "Data ou horário inválidos." };
+  if (input.propertyId && !uuid(input.propertyId)) return { error: "Imóvel inválido." };
   const supabase = await createClient();
-  const { data: appt, error } = await supabase
-    .from("appointments")
-    .update({ scheduled_at: scheduledAt, status: "scheduled" })
-    .eq("id", id)
-    .select("client_id")
-    .maybeSingle();
-  if (error || !appt) return { error: "Não foi possível remarcar." };
 
-  if (appt.client_id) await syncClientStage(supabase, appt.client_id as string, "scheduled");
+  let clientId: string | null = null;
+  if (input.scheduledAt !== undefined) {
+    const { data: appt, error } = await supabase
+      .from("appointments")
+      .update({ scheduled_at: input.scheduledAt, status: "scheduled" })
+      .eq("id", id)
+      .select("client_id")
+      .maybeSingle();
+    if (error || !appt) return { error: "Não foi possível remarcar." };
+    clientId = (appt.client_id as string | null) ?? null;
+    if (clientId) await syncClientStage(supabase, clientId, "scheduled");
+  } else {
+    const { data: appt } = await supabase.from("appointments").select("client_id").eq("id", id).maybeSingle();
+    if (!appt) return { error: "Visita não encontrada." };
+    clientId = (appt.client_id as string | null) ?? null;
+  }
+
+  if (input.propertyId !== undefined) {
+    if (!clientId) return { error: "Esta visita não está ligada a um cliente, então não dá para vincular o imóvel." };
+    let link: { property_id: string | null; interest?: string } = { property_id: null };
+    if (input.propertyId) {
+      const { data: p } = await supabase.from("properties").select("id, title, code, neighborhood").eq("id", input.propertyId).maybeSingle();
+      if (!p) return { error: "Imóvel não encontrado." };
+      link = { property_id: p.id as string, interest: propertyLabel(p as Pick<Property, "title" | "code" | "neighborhood">) };
+    }
+    const { error } = await supabase.from("clients").update(link).eq("id", clientId);
+    if (error) return { error: "Não foi possível vincular o imóvel." };
+  }
+
   revalidatePath("/agenda");
   revalidatePath("/clientes");
   return { ok: true };

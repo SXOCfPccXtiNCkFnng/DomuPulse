@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import { Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { deleteVisit, rescheduleVisit, scheduleVisit, setVisitStatus } from "@/app/(app)/agenda/actions";
+import { deleteVisit, scheduleVisit, setVisitStatus, updateVisit } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
@@ -18,6 +18,7 @@ type Status = "scheduled" | "done" | "canceled" | "no_show";
 type Appointment = {
   id: string;
   member_id: string;
+  client_id: string | null;
   client_name: string;
   client_phone: string | null;
   scheduled_at: string;
@@ -45,16 +46,18 @@ export function AgendaView({ member }: { member: ClientMember }) {
   const [brokers, setBrokers] = useState<LiveMember[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
+  // Imóvel de interesse de cada cliente (id do cliente -> id do imóvel).
+  const [clientProperty, setClientProperty] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [broker, setBroker] = useState("all");
 
   const load = useCallback(async () => {
     const from = zonedToIso(today, "00:00", tz);
     const to = zonedToIso(addDays(today, DAYS_AHEAD), "00:00", tz);
-    const [{ data: a }, { data: m }, { data: cl }, { data: pr }] = await Promise.all([
+    const [{ data: a }, { data: m }, { data: cl }, { data: pr }, { data: links }] = await Promise.all([
       supabase
         .from("appointments")
-        .select("id, member_id, client_name, client_phone, scheduled_at, status, notes")
+        .select("id, member_id, client_id, client_name, client_phone, scheduled_at, status, notes")
         .gte("scheduled_at", from)
         .lt("scheduled_at", to)
         .order("scheduled_at"),
@@ -62,8 +65,12 @@ export function AgendaView({ member }: { member: ClientMember }) {
       supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
       // Sem a tabela de imóveis (migração ainda não rodada), o campo só não aparece.
       supabase.from("properties").select("id, title, code, neighborhood, status").in("status", ["available", "reserved"]).order("title"),
+      supabase.from("clients").select("id, property_id").not("property_id", "is", null),
     ]);
+    const clientProperty: Record<string, string> = {};
+    for (const l of (links ?? []) as { id: string; property_id: string }[]) clientProperty[l.id] = l.property_id;
     return {
+      clientProperty,
       items: (a ?? []) as Appointment[],
       brokers: (m ?? []) as LiveMember[],
       clients: (cl ?? []) as ClientOption[],
@@ -77,6 +84,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
     setBrokers(data.brokers);
     setClients(data.clients);
     setProperties(data.properties);
+    setClientProperty(data.clientProperty);
     setLoading(false);
   }, [load]);
 
@@ -88,6 +96,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
       setBrokers(data.brokers);
       setClients(data.clients);
       setProperties(data.properties);
+      setClientProperty(data.clientProperty);
       setLoading(false);
     });
     const channel = supabase
@@ -164,6 +173,8 @@ export function AgendaView({ member }: { member: ClientMember }) {
                       timezone={tz}
                       today={today}
                       brokerName={isLeader ? (names.get(a.member_id) ?? "Corretor") : null}
+                      properties={properties}
+                      propertyId={a.client_id ? (clientProperty[a.client_id] ?? "") : ""}
                       onStatus={(status) => setStatus(a.id, status)}
                       onChanged={() => void reload()}
                     />
@@ -201,6 +212,8 @@ function VisitRow({
   timezone,
   today,
   brokerName,
+  properties,
+  propertyId,
   onStatus,
   onChanged,
 }: {
@@ -208,21 +221,41 @@ function VisitRow({
   timezone: string;
   today: string;
   brokerName: string | null;
+  properties: PropertyOption[];
+  propertyId: string;
   onStatus: (status: Status) => void;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [date, setDate] = useState(() => dateIn(a.scheduled_at, timezone));
-  const [time, setTime] = useState(() => formatTimeIn(a.scheduled_at, timezone));
+  const origDate = dateIn(a.scheduled_at, timezone);
+  const origTime = formatTimeIn(a.scheduled_at, timezone);
+  const [date, setDate] = useState(origDate);
+  const [time, setTime] = useState(origTime);
+  const [property, setProperty] = useState(propertyId);
   const [confirmDel, setConfirmDel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const linkedTitle = properties.find((p) => p.id === propertyId);
+
+  function open() {
+    setEditing((v) => !v);
+    setDate(origDate);
+    setTime(origTime);
+    setProperty(propertyId);
+    setError(null);
+  }
 
   async function save() {
     if (!date || !time) return setError("Escolha data e horário.");
+    const moved = date !== origDate || time !== origTime;
+    const relinked = property !== propertyId;
+    if (!moved && !relinked) return setEditing(false);
     setPending(true);
     setError(null);
-    const r = await rescheduleVisit(a.id, zonedToIso(date, time, timezone));
+    const r = await updateVisit(a.id, {
+      ...(moved ? { scheduledAt: zonedToIso(date, time, timezone) } : {}),
+      ...(relinked ? { propertyId: property || null } : {}),
+    });
     setPending(false);
     if ("error" in r) return setError(r.error);
     setEditing(false);
@@ -258,6 +291,7 @@ function VisitRow({
                 {a.client_phone}
               </a>
             ) : null}
+            {linkedTitle ? <span className="truncate">{propertyLabel(linkedTitle)}</span> : null}
           </span>
         </span>
 
@@ -283,7 +317,7 @@ function VisitRow({
               </Button>
             </>
           )}
-          <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)} aria-label="Editar visita" title="Remarcar ou excluir">
+          <Button size="sm" variant="ghost" onClick={open} aria-label="Editar visita" title="Editar, remarcar ou excluir">
             <Pencil className="size-3.5" />
           </Button>
         </span>
@@ -298,8 +332,21 @@ function VisitRow({
             <Field label="Horário">
               <Input type="time" value={time} step={900} onChange={(e) => setTime(e.target.value)} className="h-10 w-auto" />
             </Field>
+            {properties.length ? (
+              <Field label="Imóvel">
+                <Select value={property} onChange={(e) => setProperty(e.target.value)} disabled={!a.client_id} className="h-10 min-w-56">
+                  <option value="">Sem imóvel definido</option>
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {propertyLabel(p)}
+                      {p.status === "reserved" ? " (reservado)" : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
             <Button onClick={save} disabled={pending}>
-              {pending ? "Salvando..." : "Remarcar"}
+              {pending ? "Salvando..." : "Salvar"}
             </Button>
             <Button variant="ghost" onClick={() => setEditing(false)} disabled={pending}>
               Fechar
