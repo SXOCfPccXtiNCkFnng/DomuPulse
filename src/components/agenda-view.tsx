@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import { Phone } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { scheduleVisit, setVisitStatus } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
@@ -23,6 +24,8 @@ type Appointment = {
   notes: string | null;
 };
 
+type ClientOption = { id: string; member_id: string; name: string; phone: string | null; stage: string };
+
 const STATUS: Record<Status, { label: string; tone: "neutral" | "brand" | "danger" | "warn" }> = {
   scheduled: { label: "Agendada", tone: "neutral" },
   done: { label: "Realizada", tone: "brand" },
@@ -38,12 +41,14 @@ export function AgendaView({ member }: { member: ClientMember }) {
   const { today } = useOrgClock(tz);
   const [items, setItems] = useState<Appointment[]>([]);
   const [brokers, setBrokers] = useState<LiveMember[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [broker, setBroker] = useState("all");
 
   const load = useCallback(async () => {
     const from = zonedToIso(today, "00:00", tz);
     const to = zonedToIso(addDays(today, DAYS_AHEAD), "00:00", tz);
-    const [{ data: a }, { data: m }] = await Promise.all([
+    const [{ data: a }, { data: m }, { data: cl }] = await Promise.all([
       supabase
         .from("appointments")
         .select("id, member_id, client_name, client_phone, scheduled_at, status, notes")
@@ -51,14 +56,16 @@ export function AgendaView({ member }: { member: ClientMember }) {
         .lt("scheduled_at", to)
         .order("scheduled_at"),
       supabase.from("members").select("id, full_name, role, team_id, active").eq("role", "broker").eq("active", true).order("full_name"),
+      supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
     ]);
-    return { items: (a ?? []) as Appointment[], brokers: (m ?? []) as LiveMember[] };
+    return { items: (a ?? []) as Appointment[], brokers: (m ?? []) as LiveMember[], clients: (cl ?? []) as ClientOption[] };
   }, [supabase, today, tz]);
 
   const reload = useCallback(async () => {
     const data = await load();
     setItems(data.items);
     setBrokers(data.brokers);
+    setClients(data.clients);
     setLoading(false);
   }, [load]);
 
@@ -68,6 +75,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
       if (cancelled) return;
       setItems(data.items);
       setBrokers(data.brokers);
+      setClients(data.clients);
       setLoading(false);
     });
     const channel = supabase
@@ -81,19 +89,22 @@ export function AgendaView({ member }: { member: ClientMember }) {
   }, [supabase, load, reload, member.org.id]);
 
   const names = new Map(brokers.map((b) => [b.id, b.full_name]));
+  const isLeader = member.role !== "broker";
+  const visible = broker === "all" ? items : items.filter((i) => i.member_id === broker);
   const byDay = new Map<string, Appointment[]>();
-  for (const item of items) {
+  for (const item of visible) {
     const day = dateIn(item.scheduled_at, tz);
     byDay.set(day, [...(byDay.get(day) ?? []), item]);
   }
 
   async function setStatus(id: string, status: Status) {
     setItems((list) => list.map((i) => (i.id === id ? { ...i, status } : i)));
-    const { error } = await supabase.from("appointments").update({ status }).eq("id", id);
-    if (error) void reload();
+    const r = await setVisitStatus(id, status);
+    // "Realizada" também pode mover o cliente no funil: recarrega pra refletir.
+    if ("error" in r || status === "done") void reload();
   }
 
-  const upcoming = items.filter((i) => i.status === "scheduled").length;
+  const upcoming = visible.filter((i) => i.status === "scheduled").length;
 
   return (
     <div className="flex flex-col gap-5">
@@ -108,8 +119,25 @@ export function AgendaView({ member }: { member: ClientMember }) {
             title="Visitas agendadas"
             description={loading ? "Carregando" : `${upcoming} ${upcoming === 1 ? "visita pendente" : "visitas pendentes"}`}
           />
+          {isLeader && brokers.length > 0 ? (
+            <div className="px-5 pt-5 sm:px-6">
+              <select
+                value={broker}
+                onChange={(e) => setBroker(e.target.value)}
+                aria-label="Filtrar por corretor"
+                className="h-10 w-full max-w-xs rounded-xl border border-line bg-surface px-3 text-sm outline-none focus:border-ink"
+              >
+                <option value="all">Todos os corretores</option>
+                {brokers.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-6 p-5 sm:p-6">
-            {!loading && items.length === 0 ? (
+            {!loading && visible.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted">Nenhuma visita nos próximos dias.</p>
             ) : null}
             {[...byDay.entries()].map(([day, list]) => (
@@ -129,8 +157,12 @@ export function AgendaView({ member }: { member: ClientMember }) {
                       <span className="w-14 font-display text-lg font-semibold tabular-nums">{formatTimeIn(a.scheduled_at, tz)}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-medium">{a.client_name}</span>
-                        <span className="flex flex-wrap items-center gap-x-3 text-xs text-muted">
-                          {member.role !== "broker" ? <span>{names.get(a.member_id) ?? "Corretor"}</span> : null}
+                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                          {isLeader ? (
+                            <span className="inline-flex items-center rounded-md bg-brand-soft px-1.5 py-0.5 font-semibold text-brand-text">
+                              {names.get(a.member_id) ?? "Corretor"}
+                            </span>
+                          ) : null}
                           {a.client_phone ? (
                             <a href={`tel:${a.client_phone.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1 hover:text-ink">
                               <Phone className="size-3" />
@@ -166,9 +198,10 @@ export function AgendaView({ member }: { member: ClientMember }) {
           <CardHeader title="Nova visita" />
           <NewAppointment
             today={today}
+            clients={clients}
             onCreate={async (input) => {
-              const { error } = await supabase.from("appointments").insert(input);
-              if (error) return error.code === "23514" ? "Confira o telefone informado." : "Não foi possível salvar. Tente de novo.";
+              const r = await scheduleVisit(input);
+              if ("error" in r) return r.error;
               void reload();
               return null;
             }}
@@ -184,61 +217,78 @@ export function AgendaView({ member }: { member: ClientMember }) {
 
 function NewAppointment({
   today,
+  clients,
   brokers,
   selfId,
   timezone,
   onCreate,
 }: {
   today: string;
+  clients: ClientOption[];
   brokers: LiveMember[] | null;
   selfId: string;
   timezone: string;
   onCreate: (input: {
-    member_id: string;
-    client_name: string;
-    client_phone: string | null;
-    scheduled_at: string;
+    memberId: string;
+    clientId: string | null;
+    clientName: string;
+    clientPhone: string | null;
+    scheduledAt: string;
   }) => Promise<string | null>;
 }) {
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
+  const [memberId, setMemberId] = useState(brokers ? (brokers[0]?.id ?? "") : selfId);
+  const [clientId, setClientId] = useState("new");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [date, setDate] = useState(today);
+  const [time, setTime] = useState("");
+
+  // Só os clientes do corretor escolhido (pra não ligar visita ao cliente de outro).
+  const mineClients = clients.filter((c) => c.member_id === memberId);
+  const isNew = clientId === "new";
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setMessage(null);
+    const finalName = isNew ? name.trim() : (mineClients.find((c) => c.id === clientId)?.name ?? "");
+    if (!memberId || !date || !time || (isNew && !finalName)) {
+      setMessage({ tone: "error", text: "Preencha corretor, cliente, data e horário." });
+      return;
+    }
+    setPending(true);
+    const error = await onCreate({
+      memberId,
+      clientId: isNew ? null : clientId,
+      clientName: finalName.slice(0, 120),
+      clientPhone: isNew ? phone.trim() || null : null,
+      scheduledAt: zonedToIso(date, time, timezone),
+    });
+    setPending(false);
+    if (error) setMessage({ tone: "error", text: error });
+    else {
+      setClientId("new");
+      setName("");
+      setPhone("");
+      setTime("");
+      setMessage({ tone: "success", text: "Visita agendada." });
+    }
+  }
 
   return (
-    <form
-      className="flex flex-col gap-4 p-5 sm:p-6"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        const form = e.currentTarget;
-        const data = new FormData(form);
-        const name = String(data.get("client") ?? "").trim();
-        const phone = String(data.get("phone") ?? "").trim();
-        const date = String(data.get("date") ?? "");
-        const time = String(data.get("time") ?? "");
-        const memberId = brokers ? String(data.get("member") ?? "") : selfId;
-
-        if (!name || !date || !time || !memberId) {
-          setMessage({ tone: "error", text: "Preencha cliente, data e horário." });
-          return;
-        }
-        setPending(true);
-        const error = await onCreate({
-          member_id: memberId,
-          client_name: name.slice(0, 120),
-          client_phone: phone || null,
-          scheduled_at: zonedToIso(date, time, timezone),
-        });
-        setPending(false);
-        if (error) setMessage({ tone: "error", text: error });
-        else {
-          form.reset();
-          setMessage({ tone: "success", text: "Visita agendada." });
-        }
-      }}
-    >
+    <form className="flex flex-col gap-4 p-5 sm:p-6" onSubmit={submit}>
       {message ? <FormMessage tone={message.tone}>{message.text}</FormMessage> : null}
       {brokers ? (
         <Field label="Corretor">
-          <Select name="member" required>
+          <Select
+            value={memberId}
+            onChange={(e) => {
+              setMemberId(e.target.value);
+              setClientId("new");
+            }}
+            required
+          >
             {brokers.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.full_name}
@@ -247,18 +297,32 @@ function NewAppointment({
           </Select>
         </Field>
       ) : null}
-      <Field label="Cliente">
-        <Input name="client" required maxLength={120} autoComplete="off" />
+      <Field label="Cliente" hint="Escolha um cliente ou crie um novo. Ele entra sozinho no funil, sem cadastrar duas vezes.">
+        <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+          <option value="new">+ Novo cliente</option>
+          {mineClients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
       </Field>
-      <Field label="Telefone" hint="Opcional">
-        <Input name="phone" type="tel" inputMode="tel" maxLength={20} placeholder="(11) 99999 0000" autoComplete="off" />
-      </Field>
+      {isNew ? (
+        <>
+          <Field label="Nome do cliente">
+            <Input value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoComplete="off" />
+          </Field>
+          <Field label="Telefone" hint="Opcional">
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" maxLength={20} placeholder="(11) 99999 0000" autoComplete="off" />
+          </Field>
+        </>
+      ) : null}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Data">
-          <Input name="date" type="date" required defaultValue={today} min={today} />
+          <Input value={date} onChange={(e) => setDate(e.target.value)} type="date" required min={today} />
         </Field>
         <Field label="Horário">
-          <Input name="time" type="time" required step={900} />
+          <Input value={time} onChange={(e) => setTime(e.target.value)} type="time" required step={900} />
         </Field>
       </div>
       <Button type="submit" disabled={pending}>
