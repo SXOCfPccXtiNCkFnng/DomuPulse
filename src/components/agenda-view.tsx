@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { useOrgClock, type LiveMember } from "@/lib/live/use-live-day";
+import { propertyLabel, type Property } from "@/lib/properties";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { addDays, dateIn, formatLongDate, formatTimeIn, zonedToIso } from "@/lib/time";
 
@@ -25,6 +26,7 @@ type Appointment = {
 };
 
 type ClientOption = { id: string; member_id: string; name: string; phone: string | null; stage: string };
+type PropertyOption = Pick<Property, "id" | "title" | "code" | "neighborhood" | "status">;
 
 const STATUS: Record<Status, { label: string; tone: "neutral" | "brand" | "danger" | "warn" }> = {
   scheduled: { label: "Agendada", tone: "neutral" },
@@ -42,13 +44,14 @@ export function AgendaView({ member }: { member: ClientMember }) {
   const [items, setItems] = useState<Appointment[]>([]);
   const [brokers, setBrokers] = useState<LiveMember[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
+  const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [broker, setBroker] = useState("all");
 
   const load = useCallback(async () => {
     const from = zonedToIso(today, "00:00", tz);
     const to = zonedToIso(addDays(today, DAYS_AHEAD), "00:00", tz);
-    const [{ data: a }, { data: m }, { data: cl }] = await Promise.all([
+    const [{ data: a }, { data: m }, { data: cl }, { data: pr }] = await Promise.all([
       supabase
         .from("appointments")
         .select("id, member_id, client_name, client_phone, scheduled_at, status, notes")
@@ -57,8 +60,15 @@ export function AgendaView({ member }: { member: ClientMember }) {
         .order("scheduled_at"),
       supabase.from("members").select("id, full_name, role, team_id, active").eq("role", "broker").eq("active", true).order("full_name"),
       supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
+      // Sem a tabela de imóveis (migração ainda não rodada), o campo só não aparece.
+      supabase.from("properties").select("id, title, code, neighborhood, status").in("status", ["available", "reserved"]).order("title"),
     ]);
-    return { items: (a ?? []) as Appointment[], brokers: (m ?? []) as LiveMember[], clients: (cl ?? []) as ClientOption[] };
+    return {
+      items: (a ?? []) as Appointment[],
+      brokers: (m ?? []) as LiveMember[],
+      clients: (cl ?? []) as ClientOption[],
+      properties: (pr ?? []) as PropertyOption[],
+    };
   }, [supabase, today, tz]);
 
   const reload = useCallback(async () => {
@@ -66,6 +76,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
     setItems(data.items);
     setBrokers(data.brokers);
     setClients(data.clients);
+    setProperties(data.properties);
     setLoading(false);
   }, [load]);
 
@@ -76,6 +87,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
       setItems(data.items);
       setBrokers(data.brokers);
       setClients(data.clients);
+      setProperties(data.properties);
       setLoading(false);
     });
     const channel = supabase
@@ -199,6 +211,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
           <NewAppointment
             today={today}
             clients={clients}
+            properties={properties}
             onCreate={async (input) => {
               const r = await scheduleVisit(input);
               if ("error" in r) return r.error;
@@ -218,6 +231,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
 function NewAppointment({
   today,
   clients,
+  properties,
   brokers,
   selfId,
   timezone,
@@ -225,6 +239,7 @@ function NewAppointment({
 }: {
   today: string;
   clients: ClientOption[];
+  properties: PropertyOption[];
   brokers: LiveMember[] | null;
   selfId: string;
   timezone: string;
@@ -233,9 +248,11 @@ function NewAppointment({
     clientId: string | null;
     clientName: string;
     clientPhone: string | null;
+    propertyId: string | null;
     scheduledAt: string;
   }) => Promise<string | null>;
 }) {
+  const [propertyId, setPropertyId] = useState("");
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
   const [memberId, setMemberId] = useState(brokers ? (brokers[0]?.id ?? "") : selfId);
@@ -263,12 +280,14 @@ function NewAppointment({
       clientId: isNew ? null : clientId,
       clientName: finalName.slice(0, 120),
       clientPhone: isNew ? phone.trim() || null : null,
+      propertyId: propertyId || null,
       scheduledAt: zonedToIso(date, time, timezone),
     });
     setPending(false);
     if (error) setMessage({ tone: "error", text: error });
     else {
       setClientId("new");
+      setPropertyId("");
       setName("");
       setPhone("");
       setTime("");
@@ -316,6 +335,19 @@ function NewAppointment({
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" maxLength={20} placeholder="(11) 99999 0000" autoComplete="off" />
           </Field>
         </>
+      ) : null}
+      {properties.length ? (
+        <Field label="Imóvel" hint="Opcional. Fica ligado ao cliente como imóvel de interesse.">
+          <Select value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+            <option value="">Sem imóvel definido</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>
+                {propertyLabel(p)}
+                {p.status === "reserved" ? " (reservado)" : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
       ) : null}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Data">

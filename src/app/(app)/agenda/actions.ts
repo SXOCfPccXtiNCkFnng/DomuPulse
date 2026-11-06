@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { describeError, logger } from "@/lib/logger";
+import { propertyLabel, type Property } from "@/lib/properties";
 import { createClient } from "@/lib/supabase/server";
 
 // A agenda fica ligada ao cliente: agendar escolhe (ou cria) um cliente, e o
@@ -17,15 +18,25 @@ export async function scheduleVisit(input: {
   clientId: string | null;
   clientName: string;
   clientPhone: string | null;
+  propertyId?: string | null;
   scheduledAt: string;
 }): Promise<{ error: string } | { ok: true }> {
   if (!uuid(input.memberId)) return { error: "Corretor inválido." };
   if (!input.scheduledAt || Number.isNaN(Date.parse(input.scheduledAt))) return { error: "Data ou horário inválidos." };
+  if (input.propertyId && !uuid(input.propertyId)) return { error: "Imóvel inválido." };
 
   const supabase = await createClient();
   let clientId = input.clientId;
   let name = input.clientName.trim().slice(0, 120);
   let phone = input.clientPhone?.trim() || null;
+
+  // Imóvel escolhido vira o imóvel de interesse do cliente (o RLS garante que é da mesma empresa).
+  let propertyLink: { property_id: string; interest: string } | null = null;
+  if (input.propertyId) {
+    const { data: p } = await supabase.from("properties").select("id, title, code, neighborhood").eq("id", input.propertyId).maybeSingle();
+    if (!p) return { error: "Imóvel não encontrado." };
+    propertyLink = { property_id: p.id as string, interest: propertyLabel(p as Pick<Property, "title" | "code" | "neighborhood">) };
+  }
 
   if (clientId) {
     if (!uuid(clientId)) return { error: "Cliente inválido." };
@@ -34,15 +45,16 @@ export async function scheduleVisit(input: {
     name = c.name as string;
     phone = (c.phone as string | null) ?? null;
     // Só avança: lead/conversa entram para "Visita agendada"; adiante disso fica como está.
-    if (c.stage === "lead" || c.stage === "talking") {
-      await supabase.from("clients").update({ stage: "scheduled" }).eq("id", clientId);
+    const advance = c.stage === "lead" || c.stage === "talking" ? { stage: "scheduled" as const } : {};
+    if (propertyLink || "stage" in advance) {
+      await supabase.from("clients").update({ ...advance, ...propertyLink }).eq("id", clientId);
     }
   } else {
     if (!name) return { error: "Informe o nome do cliente." };
     // Cliente novo já nasce em "Visita agendada" e some a duplicidade.
     const { data: created, error } = await supabase
       .from("clients")
-      .insert({ member_id: input.memberId, name, phone, stage: "scheduled" })
+      .insert({ member_id: input.memberId, name, phone, stage: "scheduled", ...propertyLink })
       .select("id")
       .single();
     if (error || !created) {
