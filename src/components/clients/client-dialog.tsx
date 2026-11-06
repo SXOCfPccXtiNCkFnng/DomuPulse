@@ -57,6 +57,8 @@ export function ClientDialog({
   // null: imóveis indisponíveis (sem a migração 20261106000000_properties.sql); o interesse fica só em texto.
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [propertyId, setPropertyId] = useState("");
+  // "Outro (digitar)": interesse livre em vez de um imóvel cadastrado.
+  const [typing, setTyping] = useState(Boolean(client?.interest));
 
   useEffect(() => {
     let cancelled = false;
@@ -78,10 +80,12 @@ export function ClientDialog({
   // Vendido ou inativo some da lista, a não ser que já seja o imóvel deste cliente.
   const propertyOptions = (properties ?? []).filter((p) => p.status === "available" || p.status === "reserved" || p.id === propertyId);
 
-  function chooseProperty(id: string) {
-    setPropertyId(id);
-    const p = properties?.find((x) => x.id === id);
-    if (!p) return set("interest", "");
+  function chooseProperty(value: string) {
+    const other = value === "__other";
+    setTyping(other);
+    setPropertyId(other ? "" : value);
+    const p = properties?.find((x) => x.id === value);
+    if (!p) return set("interest", other ? form.interest : "");
     setForm((f) => ({
       ...f,
       interest: propertyLabel(p),
@@ -233,22 +237,23 @@ export function ClientDialog({
               hint={
                 selectedProperty
                   ? [selectedProperty.kind, DEAL_LABEL[selectedProperty.deal], selectedProperty.neighborhood, selectedProperty.city].filter(Boolean).join(" · ")
-                  : "Escolha um imóvel cadastrado ou digite o interesse"
+                  : `${propertyOptions.length} ${propertyOptions.length === 1 ? "imóvel cadastrado" : "imóveis cadastrados"}. Se não for nenhum deles, escolha "Outro (digitar)".`
               }
               className="sm:col-span-2"
             >
-              <Select value={propertyId} onChange={(e) => chooseProperty(e.target.value)}>
-                <option value="">Outro (digitar)</option>
+              <Select value={propertyId || (typing ? "__other" : "")} onChange={(e) => chooseProperty(e.target.value)}>
+                <option value="">Selecione um imóvel</option>
                 {propertyOptions.map((p) => (
                   <option key={p.id} value={p.id}>
                     {propertyLabel(p)}
                     {p.status === "reserved" ? " (reservado)" : ""}
                   </option>
                 ))}
+                <option value="__other">Outro (digitar)</option>
               </Select>
             </Field>
           ) : null}
-          {!selectedProperty ? (
+          {!selectedProperty && (typing || !propertyOptions.length) ? (
             <Field label={propertyOptions.length ? "Qual o interesse?" : "Interesse"} hint="Imóvel, bairro, tipo" className="sm:col-span-2">
               <Input value={form.interest} onChange={(e) => set("interest", e.target.value)} maxLength={200} placeholder="Apartamento 2 quartos no Centro" />
             </Field>
