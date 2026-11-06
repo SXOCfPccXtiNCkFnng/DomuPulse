@@ -8,6 +8,7 @@ import { CLIENT_COLUMNS, SOURCES, STAGES, whatsappLink, type Client, type Stage 
 import type { LiveMember } from "@/lib/live/use-live-day";
 import { centsToInput, maskMoneyInput, parseMoney } from "@/lib/money";
 import { formatPhoneBR } from "@/lib/phone";
+import { DEAL_LABEL, PROPERTY_COLUMNS, propertyLabel, type Property } from "@/lib/properties";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { todayIn, zonedToIso } from "@/lib/time";
 
@@ -53,6 +54,40 @@ export function ClientDialog({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [visit, setVisit] = useState({ date: todayIn(timezone), time: "", message: "" });
+  // null: imóveis indisponíveis (sem a migração 20261106000000_properties.sql); o interesse fica só em texto.
+  const [properties, setProperties] = useState<Property[] | null>(null);
+  const [propertyId, setPropertyId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase.from("properties").select(PROPERTY_COLUMNS).order("title");
+      if (cancelled || error) return;
+      setProperties((data ?? []) as Property[]);
+      if (client) {
+        const { data: link } = await supabase.from("clients").select("property_id").eq("id", client.id).maybeSingle<{ property_id: string | null }>();
+        if (!cancelled && link?.property_id) setPropertyId(link.property_id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, client]);
+
+  const selectedProperty = properties?.find((p) => p.id === propertyId) ?? null;
+  // Vendido ou inativo some da lista, a não ser que já seja o imóvel deste cliente.
+  const propertyOptions = (properties ?? []).filter((p) => p.status === "available" || p.status === "reserved" || p.id === propertyId);
+
+  function chooseProperty(id: string) {
+    setPropertyId(id);
+    const p = properties?.find((x) => x.id === id);
+    if (!p) return set("interest", "");
+    setForm((f) => ({
+      ...f,
+      interest: propertyLabel(p),
+      value: f.value || centsToInput(p.price_cents),
+    }));
+  }
 
   // <dialog> nativo: foco preso dentro, Esc fecha, leitores de tela entendem.
   // Sem close() na limpeza: o React (modo estrito) desmonta e remonta o efeito,
@@ -85,6 +120,7 @@ export function ClientDialog({
       notes: form.notes.trim().slice(0, 2000) || null,
       stage: form.stage,
       lost_reason: form.stage === "lost" ? form.lostReason.trim().slice(0, 200) || null : null,
+      ...(properties ? { property_id: propertyId || null } : {}),
     };
 
     const query = client
@@ -191,9 +227,32 @@ export function ClientDialog({
               ))}
             </Select>
           </Field>
-          <Field label="Interesse" hint="Imóvel, bairro, tipo" className="sm:col-span-2">
-            <Input value={form.interest} onChange={(e) => set("interest", e.target.value)} maxLength={200} placeholder="Apartamento 2 quartos no Centro" />
-          </Field>
+          {propertyOptions.length ? (
+            <Field
+              label="Imóvel de interesse"
+              hint={
+                selectedProperty
+                  ? [selectedProperty.kind, DEAL_LABEL[selectedProperty.deal], selectedProperty.neighborhood, selectedProperty.city].filter(Boolean).join(" · ")
+                  : "Escolha um imóvel cadastrado ou digite o interesse"
+              }
+              className="sm:col-span-2"
+            >
+              <Select value={propertyId} onChange={(e) => chooseProperty(e.target.value)}>
+                <option value="">Outro (digitar)</option>
+                {propertyOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {propertyLabel(p)}
+                    {p.status === "reserved" ? " (reservado)" : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          {!selectedProperty ? (
+            <Field label={propertyOptions.length ? "Qual o interesse?" : "Interesse"} hint="Imóvel, bairro, tipo" className="sm:col-span-2">
+              <Input value={form.interest} onChange={(e) => set("interest", e.target.value)} maxLength={200} placeholder="Apartamento 2 quartos no Centro" />
+            </Field>
+          ) : null}
           <Field label="Valor do negócio">
             <span className="relative block">
               <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[15px] text-muted">R$</span>

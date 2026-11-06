@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, BarChart3, Briefcase, CalendarDays, CircleUser, Contact, Ellipsis, FileText, LayoutDashboard, ScrollText, Target, UserSearch, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, Briefcase, Building2, CalendarDays, CircleUser, Contact, Ellipsis, FileText, LayoutDashboard, ScrollText, Target, UserSearch, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +12,7 @@ const BROKER_ITEMS = [
   { href: "/clientes", label: "Clientes", Icon: Contact, leadersOnly: false },
   { href: "/agenda", label: "Agenda", Icon: CalendarDays, leadersOnly: false },
   { href: "/relatorios", label: "Relatórios", Icon: BarChart3, leadersOnly: false },
+  { href: "/imoveis", label: "Imóveis", Icon: Building2, leadersOnly: false },
   { href: "/metas", label: "Metas", Icon: Target, leadersOnly: false },
   { href: "/notas", label: "Notas fiscais", Icon: FileText, leadersOnly: false },
   { href: "/contratos", label: "Contratos", Icon: ScrollText, leadersOnly: true },
