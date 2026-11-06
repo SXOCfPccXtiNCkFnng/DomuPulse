@@ -261,10 +261,11 @@ export function ClientBoard({ member }: { member: ClientMember }) {
                           dragging === c.id && "opacity-40",
                         )}
                       >
+                        {leader ? <span className="block truncate text-xs font-semibold text-brand-text">{brokerName.get(c.member_id) ?? "Corretor"}</span> : null}
                         <span className="block truncate text-sm font-medium">{c.name}</span>
                         {c.interest ? <span className="mt-0.5 block truncate text-xs text-ink-2">{c.interest}</span> : null}
                         <span className="mt-2 flex items-center justify-between gap-2 text-xs text-muted">
-                          <span className="truncate">{leader ? (brokerName.get(c.member_id) ?? "Corretor") : (c.source ?? "")}</span>
+                          <span className="truncate">{leader ? "" : (c.source ?? "")}</span>
                           <span className="flex shrink-0 items-center gap-2">
                             {c.phone ? <Phone className="size-3" aria-label="tem telefone" /> : null}
                             {daysSince(c.stage_changed_at)}
