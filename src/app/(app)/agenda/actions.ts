@@ -75,20 +75,77 @@ export async function scheduleVisit(input: {
   return { ok: true };
 }
 
-/** Muda a situação da visita. Ao marcar "Realizada", o cliente avança para "Visitou" (só para frente). */
-export async function setVisitStatus(id: string, status: "scheduled" | "done" | "no_show" | "canceled"): Promise<{ error: string } | { ok: true }> {
+type VisitStatus = "scheduled" | "done" | "no_show" | "canceled";
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Leva a situação da visita para o funil do cliente:
+ * - Realizada: lead, conversa ou visita agendada vão para "Visitou".
+ * - Agendada (de novo): lead ou conversa vão para "Visita agendada".
+ * - Cancelada/faltou: se era "Visita agendada" e não sobrou outra visita marcada, volta para "Em conversa".
+ * Etapas mais adiantadas (proposta, pré-venda, venda) nunca são rebaixadas.
+ */
+async function syncClientStage(supabase: Supabase, clientId: string, status: VisitStatus) {
+  const { data: c } = await supabase.from("clients").select("stage").eq("id", clientId).maybeSingle();
+  const stage = c?.stage as Stage | undefined;
+  if (!stage) return;
+
+  let next: Stage | null = null;
+  if (status === "done" && (stage === "lead" || stage === "talking" || stage === "scheduled")) next = "visited";
+  else if (status === "scheduled" && (stage === "lead" || stage === "talking")) next = "scheduled";
+  else if ((status === "canceled" || status === "no_show") && stage === "scheduled") {
+    const { count } = await supabase
+      .from("appointments")
+      .select("id", { count: "exact", head: true })
+      .eq("client_id", clientId)
+      .eq("status", "scheduled");
+    if (!count) next = "talking";
+  }
+  if (next) await supabase.from("clients").update({ stage: next }).eq("id", clientId);
+}
+
+/** Muda a situação da visita (inclusive reabrir) e reflete no funil do cliente. */
+export async function setVisitStatus(id: string, status: VisitStatus): Promise<{ error: string } | { ok: true }> {
   if (!uuid(id)) return { error: "Visita inválida." };
+  if (!["scheduled", "done", "no_show", "canceled"].includes(status)) return { error: "Situação inválida." };
   const supabase = await createClient();
   const { data: appt, error } = await supabase.from("appointments").update({ status }).eq("id", id).select("client_id").maybeSingle();
-  if (error) return { error: "Não foi possível atualizar." };
+  if (error || !appt) return { error: "Não foi possível atualizar. Só o corretor da visita ou a liderança podem alterar." };
 
-  if (status === "done" && appt?.client_id) {
-    const { data: c } = await supabase.from("clients").select("stage").eq("id", appt.client_id).maybeSingle();
-    const stage = c?.stage as Stage | undefined;
-    if (stage === "lead" || stage === "talking" || stage === "scheduled") {
-      await supabase.from("clients").update({ stage: "visited" }).eq("id", appt.client_id);
-    }
-  }
+  if (appt.client_id) await syncClientStage(supabase, appt.client_id as string, status);
   revalidatePath("/agenda");
+  revalidatePath("/clientes");
+  return { ok: true };
+}
+
+/** Remarca a visita (data e horário). Remarcar reabre a visita como "Agendada". */
+export async function rescheduleVisit(id: string, scheduledAt: string): Promise<{ error: string } | { ok: true }> {
+  if (!uuid(id)) return { error: "Visita inválida." };
+  if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt))) return { error: "Data ou horário inválidos." };
+  const supabase = await createClient();
+  const { data: appt, error } = await supabase
+    .from("appointments")
+    .update({ scheduled_at: scheduledAt, status: "scheduled" })
+    .eq("id", id)
+    .select("client_id")
+    .maybeSingle();
+  if (error || !appt) return { error: "Não foi possível remarcar." };
+
+  if (appt.client_id) await syncClientStage(supabase, appt.client_id as string, "scheduled");
+  revalidatePath("/agenda");
+  revalidatePath("/clientes");
+  return { ok: true };
+}
+
+/** Exclui a visita. O cliente continua na carteira; se ficou sem visita marcada, volta para "Em conversa". */
+export async function deleteVisit(id: string): Promise<{ error: string } | { ok: true }> {
+  if (!uuid(id)) return { error: "Visita inválida." };
+  const supabase = await createClient();
+  const { data: appt, error } = await supabase.from("appointments").delete().eq("id", id).select("client_id").maybeSingle();
+  if (error || !appt) return { error: "Não foi possível excluir." };
+
+  if (appt.client_id) await syncClientStage(supabase, appt.client_id as string, "canceled");
+  revalidatePath("/agenda");
+  revalidatePath("/clientes");
   return { ok: true };
 }

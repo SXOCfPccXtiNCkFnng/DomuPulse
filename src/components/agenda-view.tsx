@@ -1,9 +1,9 @@
 "use client";
 
 import clsx from "clsx";
-import { Phone } from "lucide-react";
+import { Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { scheduleVisit, setVisitStatus } from "@/app/(app)/agenda/actions";
+import { deleteVisit, rescheduleVisit, scheduleVisit, setVisitStatus } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
@@ -112,8 +112,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
   async function setStatus(id: string, status: Status) {
     setItems((list) => list.map((i) => (i.id === id ? { ...i, status } : i)));
     const r = await setVisitStatus(id, status);
-    // "Realizada" também pode mover o cliente no funil: recarrega pra refletir.
-    if ("error" in r || status === "done") void reload();
+    if ("error" in r) void reload();
   }
 
   const upcoming = visible.filter((i) => i.status === "scheduled").length;
@@ -159,46 +158,15 @@ export function AgendaView({ member }: { member: ClientMember }) {
                 </h3>
                 <ul className="flex flex-col gap-2">
                   {list.map((a) => (
-                    <li
+                    <VisitRow
                       key={a.id}
-                      className={clsx(
-                        "flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-line p-3.5",
-                        a.status !== "scheduled" && "opacity-70",
-                      )}
-                    >
-                      <span className="w-14 font-display text-lg font-semibold tabular-nums">{formatTimeIn(a.scheduled_at, tz)}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">{a.client_name}</span>
-                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                          {isLeader ? (
-                            <span className="inline-flex items-center rounded-md bg-brand-soft px-1.5 py-0.5 font-semibold text-brand-text">
-                              {names.get(a.member_id) ?? "Corretor"}
-                            </span>
-                          ) : null}
-                          {a.client_phone ? (
-                            <a href={`tel:${a.client_phone.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1 hover:text-ink">
-                              <Phone className="size-3" />
-                              {a.client_phone}
-                            </a>
-                          ) : null}
-                        </span>
-                      </span>
-                      {a.status === "scheduled" ? (
-                        <span className="flex w-full gap-1 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
-                          <Button size="sm" variant="secondary" onClick={() => setStatus(a.id, "done")}>
-                            Realizada
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setStatus(a.id, "no_show")}>
-                            Faltou
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setStatus(a.id, "canceled")}>
-                            Cancelar
-                          </Button>
-                        </span>
-                      ) : (
-                        <Badge tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Badge>
-                      )}
-                    </li>
+                      visit={a}
+                      timezone={tz}
+                      today={today}
+                      brokerName={isLeader ? (names.get(a.member_id) ?? "Corretor") : null}
+                      onStatus={(status) => setStatus(a.id, status)}
+                      onChanged={() => void reload()}
+                    />
                   ))}
                 </ul>
               </section>
@@ -225,6 +193,140 @@ export function AgendaView({ member }: { member: ClientMember }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+function VisitRow({
+  visit: a,
+  timezone,
+  today,
+  brokerName,
+  onStatus,
+  onChanged,
+}: {
+  visit: Appointment;
+  timezone: string;
+  today: string;
+  brokerName: string | null;
+  onStatus: (status: Status) => void;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [date, setDate] = useState(() => dateIn(a.scheduled_at, timezone));
+  const [time, setTime] = useState(() => formatTimeIn(a.scheduled_at, timezone));
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function save() {
+    if (!date || !time) return setError("Escolha data e horário.");
+    setPending(true);
+    setError(null);
+    const r = await rescheduleVisit(a.id, zonedToIso(date, time, timezone));
+    setPending(false);
+    if ("error" in r) return setError(r.error);
+    setEditing(false);
+    onChanged();
+  }
+
+  async function remove() {
+    setPending(true);
+    const r = await deleteVisit(a.id);
+    setPending(false);
+    if ("error" in r) {
+      setConfirmDel(false);
+      return setError(r.error);
+    }
+    onChanged();
+  }
+
+  return (
+    <li className="rounded-2xl border border-line p-3.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className={clsx("w-14 font-display text-lg font-semibold tabular-nums", a.status !== "scheduled" && "text-muted")}>
+          {formatTimeIn(a.scheduled_at, timezone)}
+        </span>
+        <span className={clsx("min-w-0 flex-1", a.status !== "scheduled" && "opacity-70")}>
+          <span className="block truncate font-medium">{a.client_name}</span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+            {brokerName ? (
+              <span className="inline-flex items-center rounded-md bg-brand-soft px-1.5 py-0.5 font-semibold text-brand-text">{brokerName}</span>
+            ) : null}
+            {a.client_phone ? (
+              <a href={`tel:${a.client_phone.replace(/[^\d+]/g, "")}`} className="inline-flex items-center gap-1 hover:text-ink">
+                <Phone className="size-3" />
+                {a.client_phone}
+              </a>
+            ) : null}
+          </span>
+        </span>
+
+        <span className="flex w-full flex-wrap items-center gap-1 sm:w-auto">
+          {a.status === "scheduled" ? (
+            <span className="flex flex-1 gap-1 sm:flex-none [&>button]:flex-1 sm:[&>button]:flex-none">
+              <Button size="sm" variant="secondary" onClick={() => onStatus("done")}>
+                Realizada
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onStatus("no_show")}>
+                Faltou
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onStatus("canceled")}>
+                Cancelar
+              </Button>
+            </span>
+          ) : (
+            <>
+              <Badge tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Badge>
+              <Button size="sm" variant="ghost" onClick={() => onStatus("scheduled")} title="Voltar para agendada">
+                <RotateCcw className="size-3.5" />
+                Reabrir
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)} aria-label="Editar visita" title="Remarcar ou excluir">
+            <Pencil className="size-3.5" />
+          </Button>
+        </span>
+      </div>
+
+      {editing ? (
+        <div className="mt-3 flex flex-col gap-3 border-t border-line pt-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Data">
+              <Input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)} className="h-10 w-auto" />
+            </Field>
+            <Field label="Horário">
+              <Input type="time" value={time} step={900} onChange={(e) => setTime(e.target.value)} className="h-10 w-auto" />
+            </Field>
+            <Button onClick={save} disabled={pending}>
+              {pending ? "Salvando..." : "Remarcar"}
+            </Button>
+            <Button variant="ghost" onClick={() => setEditing(false)} disabled={pending}>
+              Fechar
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {confirmDel ? (
+              <>
+                <span className="text-sm text-ink-2">Excluir esta visita?</span>
+                <Button size="sm" variant="danger" onClick={remove} disabled={pending}>
+                  Confirmar exclusão
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDel(false)}>
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDel(true)} disabled={pending}>
+                <Trash2 className="size-3.5" />
+                Excluir visita
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : null}
+      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+    </li>
   );
 }
 
