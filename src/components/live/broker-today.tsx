@@ -3,14 +3,16 @@
 import clsx from "clsx";
 import { BellRing, Minus, Plus } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { announceReport } from "@/app/(app)/painel/actions";
+import { type QuickEntry, QuickReport } from "@/components/live/quick-report";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { FormMessage } from "@/components/ui/field";
 import { Funnel, SlotChip, type SlotStatus } from "@/components/live/viz";
 import { REPORT_SELECT, useLiveDay } from "@/lib/live/use-live-day";
 import { emptyTotals, METRICS, sumReports, type MetricKey, type Report, type Totals } from "@/lib/metrics";
+import type { getBrowserClient } from "@/lib/supabase/client";
 import { formatLongDate, slotLabel, slotState } from "@/lib/time";
 import type { ClientMember } from "@/components/live/types";
 
@@ -125,6 +127,9 @@ export function BrokerToday({ member }: { member: ClientMember }) {
           <ReportForm
             key={slot}
             slot={slot}
+            memberId={member.id}
+            today={clock.today}
+            supabase={supabase}
             existing={live.reportFor(member.id, slot)}
             onSave={async (values, notes) => {
               const isNew = !live.reportFor(member.id, slot);
@@ -170,12 +175,20 @@ function greeting(minutes: number) {
   return "Boa noite";
 }
 
+const clampMetric = (n: number) => Math.max(0, Math.min(100000, Number.isFinite(n) ? Math.round(n) : 0));
+
 function ReportForm({
   slot,
+  memberId,
+  today,
+  supabase,
   existing,
   onSave,
 }: {
   slot: string;
+  memberId: string;
+  today: string;
+  supabase: ReturnType<typeof getBrowserClient>;
   existing?: Report;
   onSave: (values: Totals, notes: string) => Promise<string | null>;
 }) {
@@ -184,18 +197,97 @@ function ReportForm({
     return Object.fromEntries(METRICS.map((m) => [m.key, existing[m.key]])) as Totals;
   });
   const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [entries, setEntries] = useState<QuickEntry[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
+  const [draftState, setDraftState] = useState<"none" | "restored" | "saving" | "saved" | "error">("none");
+  const [loaded, setLoaded] = useState(false);
+  // Só salva rascunho depois que a pessoa mexe em algo.
+  const dirty = useRef(false);
+  const draftKey = useMemo(() => ({ member_id: memberId, report_date: today, report_slot: slot }), [memberId, today, slot]);
 
-  const set = (key: MetricKey, value: number) =>
-    setValues((v) => ({ ...v, [key]: Math.max(0, Math.min(100000, Number.isFinite(value) ? value : 0)) }));
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("report_drafts")
+      .select("totals, notes, entries")
+      .match(draftKey)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive) return;
+        if (data && !dirty.current) {
+          const totals = (data.totals ?? {}) as Record<string, unknown>;
+          setValues(Object.fromEntries(METRICS.map((m) => [m.key, clampMetric(Number(totals[m.key]))])) as Totals);
+          setNotes((data.notes as string | null) ?? "");
+          setEntries(Array.isArray(data.entries) ? (data.entries as QuickEntry[]) : []);
+          setDraftState("restored");
+        }
+        setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [supabase, draftKey]);
+
+  useEffect(() => {
+    if (!loaded || !dirty.current) return;
+    const t = setTimeout(async () => {
+      // Enviado enquanto o timer corria: não recria o rascunho.
+      if (!dirty.current) return;
+      setDraftState("saving");
+      const { error } = await supabase
+        .from("report_drafts")
+        .upsert({ ...draftKey, totals: values, notes: notes.trim() || null, entries: entries.slice(-100) }, { onConflict: "member_id,report_date,report_slot" });
+      setDraftState(error ? "error" : "saved");
+    }, 800);
+    return () => clearTimeout(t);
+  }, [supabase, draftKey, values, notes, entries, loaded]);
+
+  const touch = () => {
+    dirty.current = true;
+    setMessage(null);
+  };
+  const set = (key: MetricKey, value: number) => {
+    touch();
+    setValues((v) => ({ ...v, [key]: clampMetric(value) }));
+  };
+  const apply = (deltas: QuickEntry["deltas"], sign: 1 | -1) =>
+    setValues((v) => {
+      const next = { ...v };
+      for (const [k, n] of Object.entries(deltas)) next[k as MetricKey] = clampMetric(next[k as MetricKey] + sign * (n ?? 0));
+      return next;
+    });
 
   return (
     <Card>
       <CardHeader
         title={`Relatório das ${slotLabel(slot)}`}
         description={existing ? "Já entregue. Você pode corrigir os números e reenviar." : "O que você fez desde o último relatório"}
+        action={
+          draftState === "none" ? undefined : (
+            <span className={clsx("text-[13px] whitespace-nowrap", draftState === "error" ? "text-danger" : "text-muted")}>
+              {draftState === "restored" ? "Rascunho recuperado" : draftState === "saving" ? "Salvando..." : draftState === "saved" ? "Rascunho salvo" : "Rascunho não salvo"}
+            </span>
+          )
+        }
       />
+      <div className="pt-4">
+        <QuickReport
+          current={values}
+          entries={entries}
+          onEntry={(entry) => {
+            touch();
+            apply(entry.deltas, 1);
+            if (entry.note) setNotes((n) => (n.trim() ? `${n.trim()} · ${entry.note}` : entry.note!).slice(0, NOTES_MAX));
+            setEntries((list) => [...list, entry].slice(-100));
+          }}
+          onUndo={(entry) => {
+            touch();
+            apply(entry.deltas, -1);
+            setEntries((list) => list.filter((e) => e.id !== entry.id));
+          }}
+        />
+      </div>
       <form
         className="flex flex-col gap-5 p-5 sm:p-6"
         onSubmit={async (e) => {
@@ -203,6 +295,13 @@ function ReportForm({
           setPending(true);
           setMessage(null);
           const error = await onSave(values, notes);
+          if (!error) {
+            // Enviado: o rascunho cumpriu o papel.
+            dirty.current = false;
+            await supabase.from("report_drafts").delete().match(draftKey);
+            setEntries([]);
+            setDraftState("none");
+          }
           setPending(false);
           setMessage(error ? { tone: "error", text: error } : { tone: "success", text: "Relatório enviado. Sua liderança já está vendo." });
         }}
@@ -249,7 +348,10 @@ function ReportForm({
           </span>
           <textarea
             value={notes}
-            onChange={(e) => setNotes(e.target.value.slice(0, NOTES_MAX))}
+            onChange={(e) => {
+              touch();
+              setNotes(e.target.value.slice(0, NOTES_MAX));
+            }}
             rows={2}
             placeholder="Algo que a liderança precise saber sobre este horário"
             className="min-h-16 w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] placeholder:text-muted/70 hover:border-line-strong focus:border-ink focus:outline-none"

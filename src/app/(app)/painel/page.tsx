@@ -7,6 +7,8 @@ import { requireActivatedMember, isLeader, type CurrentMember } from "@/lib/auth
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Painel" };
+// Relatório rápido: a IA leva alguns segundos para ouvir um áudio.
+export const maxDuration = 30;
 
 export default async function PainelPage() {
   const member = await requireActivatedMember();
