@@ -18,19 +18,25 @@ function deltaLabel(key: MetricKey, n: number) {
 
 /**
  * Relatório rápido: o corretor digita ou fala o que fez e a IA soma nos
- * campos do relatório. Cada mensagem vira uma linha que dá para desfazer.
+ * campos do relatório. O último relato aparece num aviso que dá para fechar ou desfazer.
  */
 export function QuickReport({
   current,
   entries,
   onEntry,
   onUndo,
+  onDismiss,
 }: {
   current: Totals;
   entries: QuickEntry[];
   onEntry: (entry: QuickEntry) => void;
+  /** Tira os números (e a observação) que esse relato somou. */
   onUndo: (entry: QuickEntry) => void;
+  /** Só fecha o aviso; os números ficam. */
+  onDismiss: (entry: QuickEntry) => void;
 }) {
+  // Um aviso por vez: o do último relato.
+  const last = entries.at(-1);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,27 +134,26 @@ export function QuickReport({
         <span className="font-normal text-muted">fale ou digite o que fez, a IA preenche</span>
       </div>
 
-      {entries.length ? (
-        <ul className="flex flex-col gap-1.5">
-          {entries.map((e) => (
-            <li key={e.id} className="flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm">
-              <div className="min-w-0 flex-1">
-                <p className="text-ink-2">“{e.text}”</p>
-                <p className="mt-1 flex flex-wrap gap-1">
-                  {Object.entries(e.deltas).map(([k, n]) => (
-                    <span key={k} className={clsx("rounded-md px-1.5 py-0.5 text-xs font-medium", (n ?? 0) > 0 ? "bg-brand-soft text-brand-text" : "bg-warn-soft text-warn")}>
-                      {deltaLabel(k as MetricKey, n ?? 0)}
-                    </span>
-                  ))}
-                  {e.note ? <span className="rounded-md bg-surface px-1.5 py-0.5 text-xs text-muted">Obs. adicionada</span> : null}
-                </p>
-              </div>
-              <button type="button" onClick={() => onUndo(e)} aria-label="Desfazer" title="Desfazer" className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface hover:text-ink">
-                <X className="size-3.5" />
+      {last ? (
+        <div role="status" className="flex items-start gap-2 rounded-xl bg-surface-2 px-3 py-2 text-sm">
+          <div className="min-w-0 flex-1">
+            <p className="text-ink-2">“{last.text}”</p>
+            <p className="mt-1 flex flex-wrap items-center gap-1">
+              {Object.entries(last.deltas).map(([k, n]) => (
+                <span key={k} className={clsx("rounded-md px-1.5 py-0.5 text-xs font-medium", (n ?? 0) > 0 ? "bg-brand-soft text-brand-text" : "bg-warn-soft text-warn")}>
+                  {deltaLabel(k as MetricKey, n ?? 0)}
+                </span>
+              ))}
+              {last.note ? <span className="rounded-md bg-surface px-1.5 py-0.5 text-xs text-muted">Foi para a observação</span> : null}
+              <button type="button" onClick={() => onUndo(last)} className="ml-1 text-xs text-muted underline-offset-2 hover:text-ink hover:underline">
+                Desfazer
               </button>
-            </li>
-          ))}
-        </ul>
+            </p>
+          </div>
+          <button type="button" onClick={() => onDismiss(last)} aria-label="Fechar aviso" title="Fechar" className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface hover:text-ink">
+            <X className="size-3.5" />
+          </button>
+        </div>
       ) : null}
 
       {recording ? (

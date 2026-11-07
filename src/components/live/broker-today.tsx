@@ -280,12 +280,17 @@ function ReportForm({
             touch();
             apply(entry.deltas, 1);
             if (entry.note) setNotes((n) => (n.trim() ? `${n.trim()} · ${entry.note}` : entry.note!).slice(0, NOTES_MAX));
-            setEntries((list) => [...list, entry].slice(-100));
+            setEntries([entry]);
           }}
           onUndo={(entry) => {
             touch();
             apply(entry.deltas, -1);
-            setEntries((list) => list.filter((e) => e.id !== entry.id));
+            if (entry.note) setNotes((n) => n.replace(` · ${entry.note}`, "").replace(entry.note!, "").trim());
+            setEntries([]);
+          }}
+          onDismiss={() => {
+            touch();
+            setEntries([]);
           }}
         />
       </div>
