@@ -103,7 +103,8 @@ export function BrokerToday({ member }: { member: ClientMember }) {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-5">
-          <section aria-label="Horários de hoje" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* No celular o relatório (com o relatório rápido) vem primeiro; os horários descem. */}
+          <section aria-label="Horários de hoje" className="grid grid-cols-2 gap-3 max-sm:order-last sm:grid-cols-4">
             {slots.map((s) => {
               const st = statusOf(s);
               const selected = s === slot;
