@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteVisit, scheduleVisit, setVisitStatus, updateVisit } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
@@ -36,14 +36,22 @@ const STATUS: Record<Status, { label: string; tone: "neutral" | "brand" | "dange
   canceled: { label: "Cancelada", tone: "danger" },
 };
 
-const DAYS_AHEAD = 14;
+const UPCOMING_LIMIT = 1000;
+
+type Counts = Record<Status, number>;
+const emptyCounts = (): Counts => ({ scheduled: 0, done: 0, no_show: 0, canceled: 0 });
 
 export function AgendaView({ member }: { member: ClientMember }) {
   const supabase = useMemo(() => getBrowserClient(), []);
   const tz = member.org.timezone;
   const { today } = useOrgClock(tz);
   const [items, setItems] = useState<Appointment[]>([]);
-  const [brokers, setBrokers] = useState<LiveMember[]>([]);
+  // Inclui inativos para dar nome às visitas antigas; o agendamento usa só os ativos.
+  const [allBrokers, setAllBrokers] = useState<LiveMember[]>([]);
+  const brokers = useMemo(() => allBrokers.filter((b) => b.active), [allBrokers]);
+  const [view, setView] = useState<"upcoming" | "day">("upcoming");
+  const [day, setDay] = useState("");
+  const selectedDay = day || today;
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   // Imóvel de interesse de cada cliente (id do cliente -> id do imóvel).
@@ -52,16 +60,17 @@ export function AgendaView({ member }: { member: ClientMember }) {
   const [broker, setBroker] = useState("all");
 
   const load = useCallback(async () => {
-    const from = zonedToIso(today, "00:00", tz);
-    const to = zonedToIso(addDays(today, DAYS_AHEAD), "00:00", tz);
+    const appointments = supabase
+      .from("appointments")
+      .select("id, member_id, client_id, client_name, client_phone, scheduled_at, status, notes")
+      .order("scheduled_at");
+    const range =
+      view === "day"
+        ? appointments.gte("scheduled_at", zonedToIso(selectedDay, "00:00", tz)).lt("scheduled_at", zonedToIso(addDays(selectedDay, 1), "00:00", tz))
+        : appointments.gte("scheduled_at", zonedToIso(today, "00:00", tz)).limit(UPCOMING_LIMIT);
     const [{ data: a }, { data: m }, { data: cl }, { data: pr }, { data: links }] = await Promise.all([
-      supabase
-        .from("appointments")
-        .select("id, member_id, client_id, client_name, client_phone, scheduled_at, status, notes")
-        .gte("scheduled_at", from)
-        .lt("scheduled_at", to)
-        .order("scheduled_at"),
-      supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("role", "broker").eq("active", true).order("display_name"),
+      range,
+      supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("role", "broker").order("display_name"),
       supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
       // Sem a tabela de imóveis (migração ainda não rodada), o campo só não aparece.
       supabase.from("properties").select("id, title, code, neighborhood, status").in("status", ["available", "reserved"]).order("title"),
@@ -76,12 +85,12 @@ export function AgendaView({ member }: { member: ClientMember }) {
       clients: (cl ?? []) as ClientOption[],
       properties: (pr ?? []) as PropertyOption[],
     };
-  }, [supabase, today, tz]);
+  }, [supabase, today, tz, view, selectedDay]);
 
   const reload = useCallback(async () => {
     const data = await load();
     setItems(data.items);
-    setBrokers(data.brokers);
+    setAllBrokers(data.brokers);
     setClients(data.clients);
     setProperties(data.properties);
     setClientProperty(data.clientProperty);
@@ -93,7 +102,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
     void load().then((data) => {
       if (cancelled) return;
       setItems(data.items);
-      setBrokers(data.brokers);
+      setAllBrokers(data.brokers);
       setClients(data.clients);
       setProperties(data.properties);
       setClientProperty(data.clientProperty);
@@ -109,7 +118,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
     };
   }, [supabase, load, reload, member.org.id]);
 
-  const names = new Map(brokers.map((b) => [b.id, b.full_name]));
+  const names = new Map(allBrokers.map((b) => [b.id, b.full_name]));
   const isLeader = member.role !== "broker";
   const visible = broker === "all" ? items : items.filter((i) => i.member_id === broker);
   const byDay = new Map<string, Appointment[]>();
@@ -126,21 +135,81 @@ export function AgendaView({ member }: { member: ClientMember }) {
 
   const upcoming = visible.filter((i) => i.status === "scheduled").length;
 
+  const totals = emptyCounts();
+  const perBroker = new Map<string, Counts>();
+  for (const item of visible) {
+    totals[item.status] += 1;
+    const c = perBroker.get(item.member_id) ?? emptyCounts();
+    c[item.status] += 1;
+    perBroker.set(item.member_id, c);
+  }
+  const brokerRows = [...perBroker.entries()]
+    .map(([id, c]) => ({ id, name: names.get(id) ?? "Corretor", c }))
+    .sort((x, y) => x.name.localeCompare(y.name, "pt-BR"));
+
+  const dayLabel = selectedDay === today ? "Hoje" : selectedDay === addDays(today, 1) ? "Amanhã" : formatLongDate(selectedDay);
+  const description = loading
+    ? "Carregando"
+    : view === "day"
+      ? `${visible.length} ${visible.length === 1 ? "visita" : "visitas"} no dia`
+      : `${upcoming} ${upcoming === 1 ? "visita pendente" : "visitas pendentes"}`;
+
   return (
     <div className="flex flex-col gap-5">
       <header className="animate-rise">
-        <p className="text-sm text-muted">Próximos {DAYS_AHEAD} dias</p>
+        <p className="text-sm text-muted">{view === "day" ? dayLabel : "Todas as próximas visitas"}</p>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Agenda</h1>
       </header>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card className="min-w-0">
-          <CardHeader
-            title="Visitas agendadas"
-            description={loading ? "Carregando" : `${upcoming} ${upcoming === 1 ? "visita pendente" : "visitas pendentes"}`}
-          />
-          {isLeader && brokers.length > 0 ? (
-            <div className="px-5 pt-5 sm:px-6">
+          <CardHeader title={view === "day" ? "Visitas do dia" : "Visitas agendadas"} description={description} />
+          <div className="flex flex-wrap items-center gap-2 px-5 pt-5 sm:px-6">
+            <div className="flex gap-1 rounded-xl bg-surface-2 p-1" role="tablist" aria-label="Período">
+              {(
+                [
+                  ["upcoming", "Próximas"],
+                  ["day", "Dia específico"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === key}
+                  onClick={() => setView(key)}
+                  className={clsx(
+                    "h-8 rounded-lg px-3 text-[13px] font-medium transition-colors",
+                    view === key ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {view === "day" ? (
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => setDay(addDays(selectedDay, -1))} aria-label="Dia anterior">
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <Input
+                  type="date"
+                  value={selectedDay}
+                  onChange={(e) => setDay(e.target.value)}
+                  aria-label="Escolher dia"
+                  className="h-10 w-auto"
+                />
+                <Button size="sm" variant="ghost" onClick={() => setDay(addDays(selectedDay, 1))} aria-label="Próximo dia">
+                  <ChevronRight className="size-4" />
+                </Button>
+                {selectedDay !== today ? (
+                  <Button size="sm" variant="ghost" onClick={() => setDay(today)}>
+                    Hoje
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            {isLeader && allBrokers.length > 0 ? (
               <select
                 value={broker}
                 onChange={(e) => setBroker(e.target.value)}
@@ -148,17 +217,59 @@ export function AgendaView({ member }: { member: ClientMember }) {
                 className="h-10 w-full max-w-xs rounded-xl border border-line bg-surface px-3 text-sm outline-none focus:border-ink"
               >
                 <option value="all">Todos os corretores</option>
-                {brokers.map((b) => (
+                {(view === "day" ? allBrokers : brokers).map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.full_name}
                   </option>
                 ))}
               </select>
+            ) : null}
+          </div>
+          {view === "day" && !loading && visible.length > 0 ? (
+            <div className="px-5 pt-5 sm:px-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(["scheduled", "done", "no_show", "canceled"] as const).map((s) => (
+                  <div key={s} className="rounded-xl border border-line px-3 py-2">
+                    <p className="text-xs text-muted">{STATUS[s].label}</p>
+                    <p className="font-display text-xl font-semibold tabular-nums">{totals[s]}</p>
+                  </div>
+                ))}
+              </div>
+              {isLeader && brokerRows.length > 1 ? (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-xs text-muted">
+                      <tr className="text-left">
+                        <th className="py-1.5 pr-3 font-medium">Corretor</th>
+                        {(["scheduled", "done", "no_show", "canceled"] as const).map((s) => (
+                          <th key={s} className="px-2 py-1.5 text-right font-medium">
+                            {STATUS[s].label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {brokerRows.map((r) => (
+                        <tr key={r.id} className="border-t border-line">
+                          <td className="py-1.5 pr-3 font-medium">{r.name}</td>
+                          {(["scheduled", "done", "no_show", "canceled"] as const).map((s) => (
+                            <td key={s} className="px-2 py-1.5 text-right tabular-nums">
+                              {r.c[s]}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div className="flex flex-col gap-6 p-5 sm:p-6">
             {!loading && visible.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted">Nenhuma visita nos próximos dias.</p>
+              <p className="py-8 text-center text-sm text-muted">
+                {view === "day" ? "Nenhuma visita neste dia." : "Nenhuma visita marcada daqui para frente."}
+              </p>
             ) : null}
             {[...byDay.entries()].map(([day, list]) => (
               <section key={day}>
