@@ -5,11 +5,11 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Card, CardHeader } from "@/components/ui/card";
 import { requireActivatedMember, isLeader } from "@/lib/auth";
-import { GOAL_METRICS, projection, type GoalMetric } from "@/lib/goals";
+import { GOAL_METRICS, projection, type GoalMetric, type GoalPeriod } from "@/lib/goals";
 import { formatMoney, formatNumber, METRICS } from "@/lib/metrics";
 import { endOfMonth } from "@/lib/period";
 import { createClient } from "@/lib/supabase/server";
-import { addDays, formatDate, startOfMonth, todayIn } from "@/lib/time";
+import { addDays, formatDate, startOfMonth, startOfWeek, todayIn } from "@/lib/time";
 import { deleteCommission } from "./actions";
 import { BulkGoalsForm, CommissionForm, GoalRowForm } from "./forms";
 
@@ -33,10 +33,14 @@ export default async function MetasPage(props: PageProps<"/metas">) {
   const leader = isLeader(me.role);
 
   const supabase = await createClient();
-  const [{ data: brokers }, { data: goals }, { data: totals }, { data: commissions }] = await Promise.all([
+  const isCurrent = month === startOfMonth(today);
+  const weekStart = startOfWeek(today);
+  const [{ data: brokers }, { data: goals }, { data: totals }, { data: todayTotals }, { data: weekTotals }, { data: commissions }] = await Promise.all([
     supabase.from("members").select("id, full_name:display_name, team_id").eq("role", "broker").eq("active", true).order("display_name"),
-    supabase.from("goals").select("member_id, metric, target").eq("month", month),
+    supabase.from("goals").select("member_id, metric, target, period").eq("month", month),
     supabase.rpc("report_totals_by_member", { p_from: month, p_to: to }),
+    isCurrent ? supabase.rpc("report_totals_by_member", { p_from: today, p_to: today }) : Promise.resolve({ data: [] }),
+    isCurrent ? supabase.rpc("report_totals_by_member", { p_from: weekStart, p_to: today }) : Promise.resolve({ data: [] }),
     supabase
       .from("commissions")
       .select("id, member_id, received_on, amount_cents, description")
@@ -45,16 +49,23 @@ export default async function MetasPage(props: PageProps<"/metas">) {
       .order("received_on", { ascending: false }),
   ]);
 
-  const goalOf = (memberId: string, metric: GoalMetric) =>
-    (goals ?? []).find((g) => g.member_id === memberId && g.metric === metric)?.target as number | undefined;
+  const goalOf = (memberId: string, metric: GoalMetric, period: GoalPeriod = "month") =>
+    (goals ?? []).find((g) => g.member_id === memberId && g.metric === metric && (g.period ?? "month") === period)?.target as number | undefined;
   const actualOf = (memberId: string, metric: GoalMetric) =>
     Number(((totals ?? []) as Record<string, unknown>[]).find((t) => t.member_id === memberId)?.[metric] ?? 0);
+  const periodActual = (period: "week" | "day", memberId: string, metric: GoalMetric) =>
+    Number((((period === "day" ? todayTotals : weekTotals) ?? []) as Record<string, unknown>[]).find((t) => t.member_id === memberId)?.[metric] ?? 0);
+  const PERIOD_TITLE = {
+    week: isCurrent ? `Meta da semana · ${formatDate(weekStart)} a ${formatDate(addDays(weekStart, 6))}` : "Meta por semana",
+    day: isCurrent ? "Meta do dia · hoje" : "Meta por dia",
+  };
+  const goalValues = (memberId: string, period: GoalPeriod) =>
+    Object.fromEntries(GOAL_METRICS.map((m) => [m, goalOf(memberId, m, period) ?? 0])) as Record<GoalMetric, number>;
   const nameOf = new Map((brokers ?? []).map((b) => [b.id, b.full_name]));
   const people = leader ? (brokers ?? []) : (brokers ?? []).filter((b) => b.id === me.id);
   const commissionTotal = (commissions ?? []).reduce((s, c) => s + Number(c.amount_cents), 0);
   const prev = addDays(month, -1).slice(0, 7);
   const next = addDays(monthEnd, 1).slice(0, 7);
-  const isCurrent = month === startOfMonth(today);
 
   return (
     <div className="flex flex-col gap-5">
@@ -80,7 +91,10 @@ export default async function MetasPage(props: PageProps<"/metas">) {
 
       {leader && people.length > 1 ? (
         <Card>
-          <CardHeader title="Mesma meta para todos" description={`Aplica a ${people.length} corretores ativos. Zero apaga a meta.`} />
+          <CardHeader
+            title="Mesma meta para todos"
+            description={`Aplica a ${people.length} corretores ativos. Zero apaga a meta. As metas por semana (segunda a domingo) e por dia valem para todo o mês.`}
+          />
           <BulkGoalsForm month={month} memberIds={people.map((p) => p.id)} />
         </Card>
       ) : null}
@@ -95,35 +109,64 @@ export default async function MetasPage(props: PageProps<"/metas">) {
           {people.map((p) => {
             // Só as tarefas com meta viram barra; as 8 ficam no "Editar metas".
             const withGoals = GOAL_METRICS.filter((m) => goalOf(p.id, m) !== undefined);
+            const withPeriod = {
+              week: GOAL_METRICS.filter((m) => goalOf(p.id, m, "week") !== undefined),
+              day: GOAL_METRICS.filter((m) => goalOf(p.id, m, "day") !== undefined),
+            };
             return (
               <li key={p.id} className="flex flex-col gap-4 px-5 py-4 sm:px-6 lg:flex-row lg:flex-wrap lg:items-center">
                 <span className="flex w-56 shrink-0 items-center gap-2.5">
                   <Avatar name={p.full_name} />
                   <span className="truncate font-medium">{p.full_name}</span>
                 </span>
-                {withGoals.length === 0 ? (
-                  <p className="flex-1 text-sm text-muted">Sem metas neste mês.{leader ? " Defina em “Editar metas”." : ""}</p>
-                ) : (
-                  <div className="grid flex-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {withGoals.map((metric) => (
-                      <Progress
-                        key={metric}
-                        label={LABEL[metric]}
-                        actual={actualOf(p.id, metric)}
-                        goal={goalOf(p.id, metric)}
-                        projected={projection(actualOf(p.id, metric), month, today)}
-                        showProjection={isCurrent}
-                      />
-                    ))}
-                  </div>
-                )}
-                {leader ? (
-                  <GoalRowForm
-                    month={month}
-                    memberId={p.id}
-                    values={Object.fromEntries(GOAL_METRICS.map((m) => [m, goalOf(p.id, m) ?? 0])) as Record<GoalMetric, number>}
-                  />
-                ) : null}
+                <div className="flex min-w-0 flex-1 flex-col gap-4">
+                  {withGoals.length === 0 && withPeriod.week.length === 0 && withPeriod.day.length === 0 ? (
+                    <p className="text-sm text-muted">Sem metas neste mês.{leader ? " Defina em “Editar metas”." : ""}</p>
+                  ) : null}
+                  {withGoals.length > 0 ? (
+                    <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {withGoals.map((metric) => (
+                        <Progress
+                          key={metric}
+                          label={LABEL[metric]}
+                          actual={actualOf(p.id, metric)}
+                          goal={goalOf(p.id, metric)}
+                          projected={projection(actualOf(p.id, metric), month, today)}
+                          showProjection={isCurrent}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  {(["week", "day"] as const).map((period) =>
+                    withPeriod[period].length > 0 ? (
+                      <div key={period}>
+                        <p className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">{PERIOD_TITLE[period]}</p>
+                        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {withPeriod[period].map((metric) =>
+                            isCurrent ? (
+                              <Progress
+                                key={metric}
+                                label={LABEL[metric]}
+                                actual={periodActual(period, p.id, metric)}
+                                goal={goalOf(p.id, metric, period)}
+                                projected={0}
+                                showProjection={false}
+                              />
+                            ) : (
+                              <p key={metric} className="flex justify-between gap-2 text-sm">
+                                <span className="text-ink-2">{LABEL[metric]}</span>
+                                <span className="tabular-nums">
+                                  {formatNumber(goalOf(p.id, metric, period) ?? 0)} {period === "week" ? "por semana" : "por dia"}
+                                </span>
+                              </p>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    ) : null,
+                  )}
+                </div>
+                {leader ? <GoalRowForm month={month} memberId={p.id} values={{ month: goalValues(p.id, "month"), week: goalValues(p.id, "week"), day: goalValues(p.id, "day") }} /> : null}
               </li>
             );
           })}

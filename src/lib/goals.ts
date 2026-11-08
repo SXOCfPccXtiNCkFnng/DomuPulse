@@ -14,6 +14,13 @@ export const GOAL_METRICS = [
 ] as const satisfies readonly MetricKey[];
 export type GoalMetric = (typeof GOAL_METRICS)[number];
 
+/** Meta do mês inteiro, por semana (segunda a domingo) ou por dia; as duas últimas valem para todo o mês. */
+export type GoalPeriod = "month" | "week" | "day";
+export const GOAL_PERIODS = ["month", "week", "day"] as const satisfies readonly GoalPeriod[];
+
+/** Nome do campo no formulário de metas. */
+export const goalField = (period: GoalPeriod, metric: GoalMetric) => (period === "month" ? metric : `${period}_${metric}`);
+
 export function daysInMonth(month: string) {
   const [y, m] = month.split("-").map(Number);
   return new Date(Date.UTC(y, m, 0)).getUTCDate();

@@ -28,6 +28,36 @@ function ago(iso: string) {
   return d === 1 ? "ontem" : `há ${d} dias`;
 }
 
+// O sininho existe duas vezes na tela (barra lateral e topo do celular): o som toca uma vez por aviso.
+let lastChimed = "";
+let audio: AudioContext | null = null;
+
+/** Som curto de aviso. O navegador só libera áudio depois que a pessoa interagiu com a página. */
+function chime(id: string) {
+  if (id === lastChimed || document.visibilityState !== "visible") return;
+  lastChimed = id;
+  try {
+    audio ??= new AudioContext();
+    if (audio.state === "suspended") void audio.resume();
+    const ctx = audio;
+    [880, 1320].forEach((freq, i) => {
+      const start = ctx.currentTime + i * 0.12;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.18, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.26);
+    });
+  } catch {
+    // Sem áudio disponível: o aviso continua aparecendo no sininho.
+  }
+}
+
 /** Sininho com os avisos da pessoa. Novos chegam ao vivo pelo Realtime. */
 export function NotificationBell({ userId, align = "left" }: { userId: string; align?: "left" | "right" }) {
   const supabase = useMemo(() => getBrowserClient(), []);
@@ -53,6 +83,7 @@ export function NotificationBell({ userId, align = "left" }: { userId: string; a
       .channel(`notices-${userId}-${instance}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload) => {
         setItems((list) => [payload.new as Notice, ...list].slice(0, 20));
+        chime((payload.new as Notice).id);
         // Todo aviso vem de algo que mudou (alguém entrou, pagamento confirmou):
         // atualiza a página aberta para mostrar sem precisar recarregar.
         router.refresh();

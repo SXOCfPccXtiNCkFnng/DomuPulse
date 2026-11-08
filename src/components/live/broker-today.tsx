@@ -4,7 +4,7 @@ import clsx from "clsx";
 import { BellRing, Minus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { announceReport } from "@/app/(app)/painel/actions";
+import { announceReport, pushGoalNotices } from "@/app/(app)/painel/actions";
 import { type QuickEntry, QuickReport } from "@/components/live/quick-report";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import { Funnel, SlotChip, type SlotStatus } from "@/components/live/viz";
 import { REPORT_SELECT, useLiveDay } from "@/lib/live/use-live-day";
 import { emptyTotals, METRICS, sumReports, type MetricKey, type Report, type Totals } from "@/lib/metrics";
 import type { getBrowserClient } from "@/lib/supabase/client";
-import { formatLongDate, slotLabel, slotState } from "@/lib/time";
+import { addDays, formatDate, formatLongDate, slotLabel, slotState, startOfMonth, startOfWeek } from "@/lib/time";
 import type { ClientMember } from "@/components/live/types";
 
 const NOTES_MAX = 500;
@@ -148,6 +148,7 @@ export function BrokerToday({ member }: { member: ClientMember }) {
               // Avisa a liderança só na primeira entrega do horário. Não espera:
               // o relatório já está salvo, o aviso é extra.
               if (isNew) void announceReport(data.id).catch(() => {});
+              void pushGoalNotices().catch(() => {});
               return null;
             }}
           />
@@ -163,10 +164,130 @@ export function BrokerToday({ member }: { member: ClientMember }) {
               <Funnel totals={totals} />
             </div>
           </Card>
+          <DailyGoals memberId={member.id} today={clock.today} totals={totals} supabase={supabase} />
           <NotificationNudge />
         </div>
       </div>
     </div>
+  );
+}
+
+type PeriodGoal = { metric: MetricKey; target: number; period: "week" | "day" };
+
+/**
+ * Metas por semana e por dia definidas pela liderança. O dia usa os relatórios
+ * de hoje (ao vivo); a semana soma os dias anteriores desde segunda com hoje.
+ */
+function DailyGoals({
+  memberId,
+  today,
+  totals,
+  supabase,
+}: {
+  memberId: string;
+  today: string;
+  totals: Totals;
+  supabase: ReturnType<typeof getBrowserClient>;
+}) {
+  const [goals, setGoals] = useState<PeriodGoal[]>([]);
+  // Guardado com a semana a que pertence: na virada para segunda, o da semana passada some.
+  const [earlier, setEarlier] = useState<{ week: string; totals: Totals } | null>(null);
+  const month = startOfMonth(today);
+  const weekStart = startOfWeek(today);
+  const earlierInWeek = earlier?.week === weekStart ? earlier.totals : emptyTotals();
+
+  useEffect(() => {
+    let alive = true;
+    void supabase
+      .from("goals")
+      .select("metric, target, period")
+      .eq("member_id", memberId)
+      .eq("month", month)
+      .in("period", ["week", "day"])
+      .then(({ data }) => {
+        if (alive) setGoals((data ?? []) as PeriodGoal[]);
+      });
+    if (weekStart < today) {
+      void supabase.rpc("report_totals_by_member", { p_from: weekStart, p_to: addDays(today, -1) }).then(({ data }) => {
+        const row = ((data ?? []) as Record<string, unknown>[]).find((r) => r.member_id === memberId);
+        if (alive) setEarlier({ week: weekStart, totals: Object.fromEntries(METRICS.map((m) => [m.key, Number(row?.[m.key] ?? 0)])) as Totals });
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [supabase, memberId, month, weekStart, today]);
+
+  if (goals.length === 0) return null;
+  return (
+    <>
+      {(["week", "day"] as const).map((period) => {
+        const list = goals.filter((g) => g.period === period);
+        if (list.length === 0) return null;
+        const actualOf = (key: MetricKey) => totals[key] + (period === "week" ? earlierInWeek[key] : 0);
+        return (
+          <GoalCard
+            key={period}
+            title={period === "week" ? "Meta da semana" : "Meta do dia"}
+            subtitle={period === "week" ? `${formatDate(weekStart)} a ${formatDate(addDays(weekStart, 6))}` : null}
+            goals={list}
+            actualOf={actualOf}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+function GoalCard({
+  title,
+  subtitle,
+  goals,
+  actualOf,
+}: {
+  title: string;
+  subtitle: string | null;
+  goals: PeriodGoal[];
+  actualOf: (key: MetricKey) => number;
+}) {
+  const ordered = METRICS.filter((m) => goals.some((g) => g.metric === m.key));
+  const hit = ordered.filter((m) => actualOf(m.key) >= (goals.find((g) => g.metric === m.key)?.target ?? Infinity)).length;
+
+  return (
+    <Card>
+      <CardHeader
+        title={title}
+        description={`${subtitle ? `${subtitle} · ` : ""}${hit} de ${ordered.length} ${ordered.length === 1 ? "meta batida" : "metas batidas"}`}
+      />
+      <ul className="flex flex-col gap-3 p-5 sm:p-6">
+        {ordered.map((m) => {
+          const target = goals.find((g) => g.metric === m.key)!.target;
+          const actual = actualOf(m.key);
+          const pct = Math.min(100, (actual / target) * 100);
+          return (
+            <li key={m.key}>
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="text-ink-2">{m.label}</span>
+                <span className="tabular-nums">
+                  <span className="font-semibold">{actual}</span>
+                  <span className="text-muted"> de {target}</span>
+                </span>
+              </div>
+              <div
+                className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2"
+                role="meter"
+                aria-label={`${m.label}: ${actual} de ${target}`}
+                aria-valuemin={0}
+                aria-valuemax={target}
+                aria-valuenow={actual}
+              >
+                <div className={clsx("h-full rounded-full", pct >= 100 ? "bg-brand" : "bg-brand-text")} style={{ width: `${pct}%` }} />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 

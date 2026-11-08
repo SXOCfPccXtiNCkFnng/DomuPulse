@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getCurrentMember } from "@/lib/auth";
-import { GOAL_METRICS, type GoalMetric } from "@/lib/goals";
+import { GOAL_METRICS, GOAL_PERIODS, goalField, type GoalMetric, type GoalPeriod } from "@/lib/goals";
 import { describeError, logger } from "@/lib/logger";
 import { parseMoney } from "@/lib/money";
 import { createClient } from "@/lib/supabase/server";
@@ -22,9 +22,10 @@ function friendly(error: { code?: string; message: string }) {
 }
 
 /**
- * Define as metas do mês para um ou vários corretores. Meta zero ou vazia
- * apaga a meta daquela métrica. O banco só aceita se quem chama lidera
- * cada corretor (RLS).
+ * Define as metas do mês, por semana e/ou por dia para um ou vários corretores.
+ * Meta zero ou vazia apaga a meta daquela métrica. O banco só aceita se quem
+ * chama lidera cada corretor (RLS). Campos: `leads`, `week_leads`, `day_leads`.
+ * Com `period` no formulário, só aquele tipo é gravado.
  */
 export async function saveGoals(_: FormState, formData: FormData): Promise<FormState> {
   const me = await getCurrentMember();
@@ -33,29 +34,37 @@ export async function saveGoals(_: FormState, formData: FormData): Promise<FormS
   const month = monthSchema.safeParse(formData.get("month"));
   const memberIds = z.array(z.uuid()).min(1).max(500).safeParse(formData.getAll("memberId"));
   if (!month.success || !memberIds.success) return { error: "Dados inválidos." };
+  const only = formData.get("period");
+  const periods: GoalPeriod[] = GOAL_PERIODS.includes(only as GoalPeriod) ? [only as GoalPeriod] : [...GOAL_PERIODS];
 
-  const targets: Partial<Record<GoalMetric, number>> = {};
-  for (const metric of GOAL_METRICS) {
-    const parsed = targetSchema.safeParse(formData.get(metric));
-    if (!parsed.success) return { fieldErrors: { [metric]: parsed.error.issues[0].message } };
-    targets[metric] = parsed.data;
+  const targets: Record<GoalPeriod, Partial<Record<GoalMetric, number>>> = { month: {}, week: {}, day: {} };
+  for (const period of periods) {
+    for (const metric of GOAL_METRICS) {
+      const field = goalField(period, metric);
+      const parsed = targetSchema.safeParse(formData.get(field));
+      if (!parsed.success) return { fieldErrors: { [field]: parsed.error.issues[0].message } };
+      targets[period][metric] = parsed.data;
+    }
   }
 
   const supabase = await createClient();
-  const upserts = memberIds.data.flatMap((memberId) =>
-    GOAL_METRICS.filter((m) => targets[m]! > 0).map((metric) => ({ member_id: memberId, month: month.data, metric, target: targets[metric]! })),
-  );
-  const cleared = GOAL_METRICS.filter((m) => targets[m] === 0);
+  for (const period of periods) {
+    const t = targets[period];
+    const upserts = memberIds.data.flatMap((memberId) =>
+      GOAL_METRICS.filter((m) => t[m]! > 0).map((metric) => ({ member_id: memberId, month: month.data, metric, period, target: t[metric]! })),
+    );
+    const cleared = GOAL_METRICS.filter((m) => t[m] === 0);
 
-  if (upserts.length) {
-    const { error } = await supabase.from("goals").upsert(upserts, { onConflict: "member_id,month,metric" });
-    if (error) {
-      if (error.code !== "42501") logger.error("goals.save", { message: describeError(error), orgId: me.org.id });
-      return { error: friendly(error) };
+    if (upserts.length) {
+      const { error } = await supabase.from("goals").upsert(upserts, { onConflict: "member_id,month,metric,period" });
+      if (error) {
+        if (error.code !== "42501") logger.error("goals.save", { message: describeError(error), orgId: me.org.id });
+        return { error: friendly(error) };
+      }
     }
-  }
-  if (cleared.length) {
-    await supabase.from("goals").delete().in("member_id", memberIds.data).eq("month", month.data).in("metric", cleared);
+    if (cleared.length) {
+      await supabase.from("goals").delete().in("member_id", memberIds.data).eq("month", month.data).eq("period", period).in("metric", cleared);
+    }
   }
 
   revalidatePath("/metas");

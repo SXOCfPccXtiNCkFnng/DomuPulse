@@ -6,7 +6,9 @@ import { getCurrentMember, orgCanWrite } from "@/lib/auth";
 import { geminiConfigured, interpretReport, REPORT_FIELDS, type ReportDeltas, type ReportField } from "@/lib/gemini";
 import { describeError, logger } from "@/lib/logger";
 import { notifyLeadersOf } from "@/lib/notify";
+import { pushConfigured, sendToUsers } from "@/lib/push";
 import { rateLimit } from "@/lib/rate-limit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { slotLabel } from "@/lib/time";
 
@@ -60,6 +62,41 @@ export async function interpretQuickEntry(formData: FormData): Promise<QuickEntr
  * liderança saber na hora (sininho e push). Um aviso por relatório: corrigir
  * os números depois não avisa de novo.
  */
+/**
+ * Os avisos de meta batida nascem num gatilho do banco, que não manda push.
+ * Depois de salvar o relatório, o app chama isto: os avisos recém-criados para
+ * o corretor e os gerentes da equipe dele vão também para o celular, uma vez.
+ */
+export async function pushGoalNotices() {
+  const me = await getCurrentMember();
+  if (me.role !== "broker" || !pushConfigured()) return;
+  const limit = await rateLimit(`goal-push:${me.id}`, 30, 3600);
+  if (!limit.ok) return;
+
+  const admin = createAdminClient();
+  const { data: managers } = me.teamId
+    ? await admin.from("members").select("user_id").eq("team_id", me.teamId).eq("role", "manager").eq("active", true)
+    : { data: [] };
+  const userIds = [me.userId, ...(managers ?? []).map((m) => m.user_id as string)];
+  const { data: notices } = await admin
+    .from("notifications")
+    .select("id, user_id, title, body, url")
+    .eq("kind", "goal_reached")
+    .eq("org_id", me.org.id)
+    .in("user_id", userIds)
+    .gte("created_at", new Date(Date.now() - 2 * 60_000).toISOString());
+
+  after(async () => {
+    for (const n of notices ?? []) {
+      const first = await rateLimit(`goal-push:n:${n.id}`, 1, 86_400);
+      if (!first.ok) continue;
+      await sendToUsers([n.user_id as string], { title: n.title as string, body: (n.body as string | null) ?? "", url: (n.url as string | null) ?? "/metas" }).catch(
+        (error) => logger.warn("goal.push", { message: describeError(error), orgId: me.org.id }),
+      );
+    }
+  });
+}
+
 export async function announceReport(reportId: string) {
   if (!z.uuid().safeParse(reportId).success) return;
   const me = await getCurrentMember();
