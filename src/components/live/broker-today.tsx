@@ -101,6 +101,8 @@ export function BrokerToday({ member }: { member: ClientMember }) {
         </div>
       </header>
 
+      <NotificationNudge />
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-5">
           {/* No celular o relatório (com o relatório rápido) vem primeiro; os horários descem. */}
@@ -165,7 +167,6 @@ export function BrokerToday({ member }: { member: ClientMember }) {
             </div>
           </Card>
           <DailyGoals memberId={member.id} today={clock.today} totals={totals} supabase={supabase} />
-          <NotificationNudge />
         </div>
       </div>
     </div>
@@ -498,26 +499,57 @@ function ReportForm({
   );
 }
 
+type NudgeState = "install" | "denied" | "off";
+
+const NUDGE: Record<NudgeState, { title: string; text: string }> = {
+  install: {
+    title: "Instale o Pulse no iPhone para receber os lembretes",
+    text: "No Safari, toque em Compartilhar e em “Adicionar à Tela de Início”. Depois abra por lá e ative as notificações.",
+  },
+  denied: {
+    title: "As notificações estão bloqueadas neste aparelho",
+    text: "Libere nas configurações do navegador para receber o aviso antes de cada relatório.",
+  },
+  off: {
+    title: "Ative os lembretes neste aparelho",
+    text: "Receba um aviso 10 minutos antes de cada horário de relatório, mesmo com o Pulse fechado.",
+  },
+};
+
+/** Mostra o que falta para este aparelho receber os lembretes de relatório. */
 function NotificationNudge() {
-  const [show, setShow] = useState(false);
+  const [state, setState] = useState<NudgeState | null>(null);
   useEffect(() => {
-    // Leitura de API do navegador: só existe depois de montar.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShow("Notification" in window && Notification.permission !== "granted");
+    let alive = true;
+    (async (): Promise<NudgeState | null> => {
+      const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // No iPhone, o push só existe com o app instalado na tela de início.
+      if (ios && !window.matchMedia("(display-mode: standalone)").matches) return "install";
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return null;
+      if (Notification.permission === "denied") return "denied";
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      const sub = await reg?.pushManager.getSubscription();
+      return sub ? null : "off";
+    })()
+      .then((s) => alive && setState(s))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
-  if (!show) return null;
+  if (!state) return null;
 
   return (
     <Link
       href="/conta?aba=notificacoes"
-      className="flex items-center gap-4 rounded-2xl border border-dashed border-line-strong p-4 text-sm transition-colors hover:bg-surface"
+      className="flex items-center gap-4 rounded-2xl border border-dashed border-line-strong p-4 text-sm transition-colors animate-rise hover:bg-surface"
     >
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-brand-ink">
         <BellRing className="size-5" />
       </span>
       <span>
-        <span className="block font-medium">Ative os lembretes no celular</span>
-        <span className="text-muted">Receba um aviso antes de cada horário de relatório.</span>
+        <span className="block font-medium">{NUDGE[state].title}</span>
+        <span className="text-muted">{NUDGE[state].text}</span>
       </span>
     </Link>
   );

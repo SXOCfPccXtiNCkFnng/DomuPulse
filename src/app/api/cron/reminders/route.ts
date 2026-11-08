@@ -3,7 +3,7 @@ import { isCronRequest } from "@/lib/cron-auth";
 import { recordHeartbeat } from "@/lib/heartbeat";
 import { sendInterviewReminders } from "@/lib/interview-notify";
 import { describeError, logger } from "@/lib/logger";
-import { sendToUsers } from "@/lib/push";
+import { pushConfigured, sendToUsers } from "@/lib/push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { minutesNowIn, normalizeSlot, SLOT_LATE_AFTER, SLOT_OPENS_BEFORE, slotLabel, slotMinutes, todayIn } from "@/lib/time";
 
@@ -85,7 +85,7 @@ async function run() {
 
       if (kind === "checkin") {
         const targets = brokers.filter((b) => !online.has(b.id));
-        sent += await notifyOnce(admin, targets, kind, today, slot, {
+        sent += await notifyOnce(admin, org.id, targets, kind, today, slot, {
           title: "Bom dia",
           body: "Marque sua presença de hoje para entrar nos lembretes de relatório.",
           url: "/painel",
@@ -97,7 +97,7 @@ async function run() {
       const pending = brokers.filter((b) => online.get(b.id) === true && !delivered.has(`${b.id}|${slot}`));
 
       if (kind === "reminder") {
-        sent += await notifyOnce(admin, pending, kind, today, slot, {
+        sent += await notifyOnce(admin, org.id, pending, kind, today, slot, {
           title: `Relatório das ${label}`,
           body: "Faltam 10 minutos. Envie seus números pelo Pulse.",
           url: "/painel",
@@ -107,7 +107,7 @@ async function run() {
       }
 
       // Atrasado: avisa o corretor e manda um resumo para o gerente da equipe.
-      sent += await notifyOnce(admin, pending, kind, today, slot, {
+      sent += await notifyOnce(admin, org.id, pending, kind, today, slot, {
         title: `Relatório das ${label} pendente`,
         body: "Sua liderança está aguardando. Leva menos de um minuto.",
         url: "/painel",
@@ -121,7 +121,7 @@ async function run() {
         const managers = all.filter((m) => m.role === "manager" && m.team_id === teamId);
         const names = list.slice(0, 3).map((b) => b.full_name).join(", ");
         const more = list.length > 3 ? ` e mais ${list.length - 3}` : "";
-        sent += await notifyOnce(admin, managers, "team_overdue", today, slot, {
+        sent += await notifyOnce(admin, org.id, managers, "team_overdue", today, slot, {
           title: `${list.length} ${list.length === 1 ? "pendente" : "pendentes"} no relatório das ${label}`,
           body: `${names}${more}.`,
           url: "/painel",
@@ -136,6 +136,7 @@ async function run() {
 
 async function notifyOnce(
   admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
   targets: Member[],
   kind: Kind,
   date: string,
@@ -156,6 +157,16 @@ async function notifyOnce(
 
   const ids = new Set((fresh ?? []).map((f) => f.member_id));
   const userIds = targets.filter((t) => ids.has(t.id)).map((t) => t.user_id);
+  if (userIds.length === 0) return 0;
+
+  // Também no sininho: quem não ativou o push (ou está no iPhone sem o app
+  // instalado) vê o lembrete ao abrir o Pulse.
+  const { error } = await admin
+    .from("notifications")
+    .insert(userIds.map((user_id) => ({ user_id, org_id: orgId, kind: `report_${kind}`, title: payload.title, body: payload.body, url: payload.url })));
+  if (error) logger.error("cron.reminders_notice", { message: describeError(error), orgId });
+
+  if (!pushConfigured()) return 0;
   const { sent } = await sendToUsers(userIds, payload);
   return sent;
 }
