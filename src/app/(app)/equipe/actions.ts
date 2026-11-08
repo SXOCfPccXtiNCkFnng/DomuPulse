@@ -11,7 +11,7 @@ import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { IMPORT_MAX_ROWS, normalize, roleFromText } from "@/lib/team-import";
-import { emailSchema, fieldErrors, nameSchema, type FormState } from "@/lib/validation";
+import { brokerNameSchema, emailSchema, fieldErrors, nameSchema, type FormState } from "@/lib/validation";
 
 function orgWritable(org: CurrentMember["org"]) {
   if (org.status === "active" || org.status === "past_due") return true;
@@ -20,12 +20,21 @@ function orgWritable(org: CurrentMember["org"]) {
 
 const READ_ONLY = { error: "Sua assinatura está inativa. Regularize para alterar a equipe." };
 
-const inviteSchema = z.object({
-  fullName: nameSchema,
-  email: emailSchema,
-  role: z.enum(["director", "manager", "broker"]),
-  scopeId: z.uuid("Escolha onde a pessoa vai atuar."),
-});
+const optionalText = <T extends z.ZodType>(schema: T) => z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), schema.optional());
+
+// Corretor: o nome de corretor basta; o nome completo é opcional.
+const inviteSchema = z
+  .object({
+    fullName: optionalText(nameSchema),
+    brokerName: optionalText(brokerNameSchema),
+    email: emailSchema,
+    role: z.enum(["director", "manager", "broker"]),
+    scopeId: z.uuid("Escolha onde a pessoa vai atuar."),
+  })
+  .superRefine((v, ctx) => {
+    if (v.role === "broker" && !v.fullName && !v.brokerName) ctx.addIssue({ code: "custom", path: ["brokerName"], message: "Informe o nome de corretor." });
+    if (v.role !== "broker" && !v.fullName) ctx.addIssue({ code: "custom", path: ["fullName"], message: "Informe o nome." });
+  });
 
 export async function inviteMember(_: FormState, formData: FormData): Promise<FormState> {
   const me = await getCurrentMember();
@@ -34,7 +43,9 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
 
   const parsed = inviteSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
-  const { fullName, email, role, scopeId } = parsed.data;
+  const { email, role, scopeId } = parsed.data;
+  const brokerName = role === "broker" ? (parsed.data.brokerName ?? null) : null;
+  const fullName = parsed.data.fullName ?? brokerName!;
 
   if (RANK[role] <= RANK[me.role]) return { error: "Você só pode convidar cargos abaixo do seu." };
 
@@ -60,7 +71,7 @@ export async function inviteMember(_: FormState, formData: FormData): Promise<Fo
     teamId = data.id;
   }
 
-  const result = await createInvite(me, { fullName, email, role, teamId, divisionId });
+  const result = await createInvite(me, { fullName, brokerName, email, role, teamId, divisionId });
   if (!result.ok) return result.field ? { fieldErrors: { [result.field]: result.error } } : { error: result.error };
 
   revalidatePath("/equipe");
@@ -76,7 +87,7 @@ type InviteResult = { ok: true } | { ok: false; error: string; field?: "email" }
  */
 async function createInvite(
   me: CurrentMember,
-  input: { fullName: string; email: string; role: Role; teamId: string | null; divisionId: string | null },
+  input: { fullName: string; brokerName?: string | null; email: string; role: Role; teamId: string | null; divisionId: string | null },
 ): Promise<InviteResult> {
   const admin = createAdminClient();
   const { data: invited, error: inviteError } = await admin.auth.admin.generateLink({
@@ -103,6 +114,7 @@ async function createInvite(
     org_id: me.org.id,
     user_id: invited.user.id,
     full_name: input.fullName,
+    broker_name: input.brokerName ?? null,
     role: input.role,
     team_id: input.teamId,
     division_id: input.divisionId,
@@ -118,7 +130,7 @@ async function createInvite(
     fullName: input.fullName,
     orgName: me.org.name,
     roleLabel: ROLE_LABEL[input.role],
-    invitedBy: me.fullName,
+    invitedBy: me.displayName,
     link: siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=invite`),
   });
   if (!sent.ok) {
@@ -237,7 +249,7 @@ async function ledTarget(me: CurrentMember, memberId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("members")
-    .select("id, user_id, role, team_id, division_id, full_name, active, terms_accepted_at")
+    .select("id, user_id, role, team_id, division_id, full_name, broker_name, active, terms_accepted_at")
     .eq("id", memberId)
     .maybeSingle();
   if (!data || RANK[data.role as Role] <= RANK[me.role]) return null;
@@ -256,10 +268,11 @@ async function auditMember(actor: string, orgId: string, memberId: string, actio
   });
 }
 
-// Só cargo e lugar: o nome é o que a própria pessoa cadastrou.
+// Cargo, lugar e nome de corretor. O nome completo é o que a própria pessoa cadastrou.
 const memberSchema = z.object({
   role: z.enum(["director", "manager", "broker"]),
   scopeId: z.uuid("Escolha onde a pessoa vai atuar."),
+  brokerName: optionalText(brokerNameSchema),
 });
 
 export async function updateMember(memberId: string, _: FormState, formData: FormData): Promise<FormState> {
@@ -271,8 +284,8 @@ export async function updateMember(memberId: string, _: FormState, formData: For
   if (!target) return { error: "Sem permissão para alterar este membro." };
 
   const parsed = memberSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
-  const { role, scopeId } = parsed.data;
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values: { brokerName: String(formData.get("brokerName") ?? "") } };
+  const { role, scopeId, brokerName } = parsed.data;
   if (RANK[role] <= RANK[me.role]) return { fieldErrors: { role: "Você só pode atribuir cargos abaixo do seu." } };
 
   // O novo lugar precisa estar dentro do escopo de quem altera.
@@ -290,6 +303,8 @@ export async function updateMember(memberId: string, _: FormState, formData: For
     if (me.role === "manager" && data.id !== me.teamId) return { fieldErrors: { scopeId: "Você só pode manter a pessoa na sua equipe." } };
     update = { role, team_id: data.id, division_id: data.division_id };
   }
+  // O campo só aparece para corretor de imobiliária; sem ele no formulário, não mexe.
+  if (me.org.segment !== "hr" && role === "broker" && formData.has("brokerName")) update.broker_name = brokerName ?? null;
 
   const { error } = await createAdminClient().from("members").update(update).eq("id", memberId).eq("org_id", me.org.id);
   if (error) {
@@ -335,7 +350,7 @@ export async function resendInvite(memberId: string): Promise<FormState> {
     fullName: target.full_name,
     orgName: me.org.name,
     roleLabel: ROLE_LABEL[target.role as Role],
-    invitedBy: me.fullName,
+    invitedBy: me.displayName,
     link: siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=${type}&next=/definir-senha`),
   });
   if (!sent.ok) return { error: "Não foi possível enviar o e-mail. Tente novamente em instantes." };
@@ -397,6 +412,7 @@ const importRowSchema = z.object({
   email: z.string(),
   role: z.string(),
   team: z.string(),
+  brokerName: z.string().optional(),
 });
 
 /**
@@ -424,12 +440,18 @@ export async function importMembers(rawRows: unknown): Promise<{ error?: string;
   const byName = new Map(scoped.map((t) => [normalize(t.name), t]));
 
   const results: ImportResult[] = [];
-  const valid: { line: number; fullName: string; email: string; role: Role; teamId: string; divisionId: string }[] = [];
+  const valid: { line: number; fullName: string; brokerName: string | null; email: string; role: Role; teamId: string; divisionId: string }[] = [];
   const seen = new Set<string>();
 
   for (const row of parsed.data) {
     const fail = (error: string) => results.push({ line: row.line, email: row.email, ok: false, error });
-    const name = nameSchema.safeParse(row.fullName);
+    const broker = row.brokerName?.trim() ? brokerNameSchema.safeParse(row.brokerName) : null;
+    if (broker && !broker.success) {
+      fail("Nome de corretor inválido.");
+      continue;
+    }
+    const brokerName = broker?.success && roleFromText(row.role) === "broker" ? broker.data : null;
+    const name = nameSchema.safeParse(row.fullName.trim() || brokerName || "");
     const email = emailSchema.safeParse(row.email);
     const role = roleFromText(row.role);
     const team = row.team ? byName.get(normalize(row.team)) : scoped.length === 1 ? scoped[0] : undefined;
@@ -441,13 +463,13 @@ export async function importMembers(rawRows: unknown): Promise<{ error?: string;
     else if (!team) fail(row.team ? `Equipe "${row.team}" não encontrada.` : "Informe a equipe.");
     else {
       seen.add(email.data);
-      valid.push({ line: row.line, fullName: name.data, email: email.data, role, teamId: team.id, divisionId: team.division_id });
+      valid.push({ line: row.line, fullName: name.data, brokerName, email: email.data, role, teamId: team.id, divisionId: team.division_id });
     }
   }
 
   // Um por vez: o provedor de e-mail limita envios em rajada.
   for (const v of valid) {
-    const r = await createInvite(me, { fullName: v.fullName, email: v.email, role: v.role, teamId: v.teamId, divisionId: v.divisionId });
+    const r = await createInvite(me, { fullName: v.fullName, brokerName: v.brokerName, email: v.email, role: v.role, teamId: v.teamId, divisionId: v.divisionId });
     results.push(r.ok ? { line: v.line, email: v.email, ok: true } : { line: v.line, email: v.email, ok: false, error: r.error });
   }
 

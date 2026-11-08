@@ -164,9 +164,21 @@ export function JoinForm({ code, teams, hideTeam = false }: { code: string; team
         aria-hidden="true"
         className="absolute -left-[9999px] h-0 w-0 opacity-0"
       />
-      <Field label="Nome e sobrenome" error={state.fieldErrors?.fullName}>
-        <Input name="fullName" autoComplete="name" required autoFocus defaultValue={v.fullName} key={`n${k}`} />
-      </Field>
+      {hideTeam ? (
+        <Field label="Nome e sobrenome" error={state.fieldErrors?.fullName}>
+          <Input name="fullName" autoComplete="name" required autoFocus defaultValue={v.fullName} key={`n${k}`} />
+        </Field>
+      ) : (
+        <>
+          {/* Imobiliária: a equipe localiza o corretor pelo nome de corretor. */}
+          <Field label="Nome de corretor" hint="Como a sua equipe te conhece" error={state.fieldErrors?.brokerName}>
+            <Input name="brokerName" maxLength={80} required autoFocus defaultValue={v.brokerName} key={`b${k}`} />
+          </Field>
+          <Field label="Nome completo" hint="Opcional" error={state.fieldErrors?.fullName}>
+            <Input name="fullName" autoComplete="name" defaultValue={v.fullName} key={`n${k}`} />
+          </Field>
+        </>
+      )}
       <Field label="E-mail" error={state.fieldErrors?.email}>
         <Input name="email" type="email" autoComplete="email" inputMode="email" required defaultValue={v.email} key={`e${k}`} />
       </Field>

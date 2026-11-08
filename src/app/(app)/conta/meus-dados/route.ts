@@ -21,7 +21,7 @@ export async function GET() {
   const byMember = (table: string) => supabase.from(table).select("*").eq("member_id", me.id);
 
   const [member, reports, presence, appointments, clients, goals, commissions, notifications, devices, org] = await Promise.all([
-    supabase.from("members").select("full_name, role, active, created_at, terms_accepted_at, terms_version, weekly_digest, digest_email").eq("id", me.id).single(),
+    supabase.from("members").select("full_name, broker_name, role, active, created_at, terms_accepted_at, terms_version, weekly_digest, digest_email").eq("id", me.id).single(),
     byMember("reports").order("report_date"),
     byMember("daily_status").order("status_date"),
     byMember("appointments").order("scheduled_at"),
@@ -41,6 +41,7 @@ export async function GET() {
     conta: {
       email: auth?.claims?.email ?? null,
       nome: me.fullName,
+      nome_de_corretor: me.brokerName,
       cargo: me.role,
       imobiliaria: me.org.name,
       ...member.data,

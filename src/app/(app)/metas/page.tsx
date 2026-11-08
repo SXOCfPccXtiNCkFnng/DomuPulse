@@ -34,7 +34,7 @@ export default async function MetasPage(props: PageProps<"/metas">) {
 
   const supabase = await createClient();
   const [{ data: brokers }, { data: goals }, { data: totals }, { data: commissions }] = await Promise.all([
-    supabase.from("members").select("id, full_name, team_id").eq("role", "broker").eq("active", true).order("full_name"),
+    supabase.from("members").select("id, full_name:display_name, team_id").eq("role", "broker").eq("active", true).order("display_name"),
     supabase.from("goals").select("member_id, metric, target").eq("month", month),
     supabase.rpc("report_totals_by_member", { p_from: month, p_to: to }),
     supabase

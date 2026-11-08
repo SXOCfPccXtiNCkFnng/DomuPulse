@@ -58,7 +58,7 @@ export default async function ContaPage(props: PageProps<"/conta">) {
         <p className="text-sm text-muted">
           {roleLabel(me.role, me.org.segment)} em {me.org.name}
         </p>
-        <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{me.fullName}</h1>
+        <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">{me.displayName}</h1>
       </header>
 
       {/* Fica preso no topo ao rolar: dá para trocar de aba de qualquer ponto da página. */}
@@ -86,7 +86,7 @@ export default async function ContaPage(props: PageProps<"/conta">) {
         </ul>
       </nav>
 
-      {tab === "perfil" ? <Profile name={me.fullName} /> : null}
+      {tab === "perfil" ? <Profile name={me.fullName} brokerName={me.brokerName} showBrokerName={me.org.segment !== "hr"} isBroker={me.role === "broker"} /> : null}
 
       {tab === "imobiliaria" ? (
         <div className="grid items-start gap-5 xl:grid-cols-2">
@@ -255,13 +255,19 @@ async function Subscription({ orgStatus, trialEndsAt, canWrite }: { orgStatus: O
   );
 }
 
-async function Profile({ name }: { name: string }) {
+async function Profile({ name, brokerName, showBrokerName, isBroker }: { name: string; brokerName: string | null; showBrokerName: boolean; isBroker: boolean }) {
   const { data: claims } = await (await createClient()).auth.getClaims();
   return (
     <div className="max-w-3xl">
       <Card>
         <CardHeader title="Seu perfil" description="Seu nome no Pulse" />
-        <ProfileForm name={name} email={String(claims?.claims?.email ?? "")} />
+        <ProfileForm
+          name={name}
+          brokerName={brokerName ?? ""}
+          showBrokerName={showBrokerName}
+          nameOptional={showBrokerName && isBroker}
+          email={String(claims?.claims?.email ?? "")}
+        />
       </Card>
     </div>
   );

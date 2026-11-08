@@ -88,7 +88,7 @@ async function MemberCard() {
   const member = await getCurrentMember();
   return (
     <div className="rounded-2xl border border-line bg-surface p-3">
-      <p className="truncate text-sm font-semibold">{member.fullName}</p>
+      <p className="truncate text-sm font-semibold">{member.displayName}</p>
       <p className="truncate text-xs text-muted">
         {ROLE_LABEL[member.role]} em {member.org.name}
       </p>

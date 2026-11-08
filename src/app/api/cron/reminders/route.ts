@@ -70,7 +70,7 @@ async function run() {
     if (due.length === 0) continue;
 
     const [{ data: members }, { data: statuses }, { data: reports }] = await Promise.all([
-      admin.from("members").select("id, user_id, full_name, role, team_id").eq("org_id", org.id).eq("active", true),
+      admin.from("members").select("id, user_id, full_name:display_name, role, team_id").eq("org_id", org.id).eq("active", true),
       admin.from("daily_status").select("member_id, online").eq("org_id", org.id).eq("status_date", today),
       admin.from("reports").select("member_id, report_slot").eq("org_id", org.id).eq("report_date", today),
     ]);
@@ -119,7 +119,7 @@ async function run() {
 
       for (const [teamId, list] of byTeam) {
         const managers = all.filter((m) => m.role === "manager" && m.team_id === teamId);
-        const names = list.slice(0, 3).map((b) => b.full_name.split(" ")[0]).join(", ");
+        const names = list.slice(0, 3).map((b) => b.full_name).join(", ");
         const more = list.length > 3 ? ` e mais ${list.length - 3}` : "";
         sent += await notifyOnce(admin, managers, "team_overdue", today, slot, {
           title: `${list.length} ${list.length === 1 ? "pendente" : "pendentes"} no relatório das ${label}`,

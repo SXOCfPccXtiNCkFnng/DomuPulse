@@ -77,7 +77,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
   const fetchAll = useCallback(async () => {
     const [{ data: c }, { data: m }] = await Promise.all([
       supabase.from("clients").select(CLIENT_COLUMNS).order("stage_changed_at", { ascending: false }).limit(1000),
-      supabase.from("members").select("id, full_name, role, team_id, active").eq("role", "broker").eq("active", true).order("full_name"),
+      supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("role", "broker").eq("active", true).order("display_name"),
     ]);
     return { clients: (c ?? []) as Client[], brokers: (m ?? []) as LiveMember[] };
   }, [supabase]);

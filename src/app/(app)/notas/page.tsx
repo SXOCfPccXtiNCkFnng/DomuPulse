@@ -19,7 +19,7 @@ export default async function NotasPage(props: PageProps<"/notas">) {
   // O RLS decide o que entra: o corretor vê as dele, a liderança as da equipe.
   const [{ data: invoices }, { data: members }, { data: org }, { data: commissions }] = await Promise.all([
     supabase.from("invoices").select(INVOICE_COLUMNS).order("created_at", { ascending: false }).limit(500),
-    supabase.from("members").select("id, full_name, role").order("full_name"),
+    supabase.from("members").select("id, full_name:display_name, role").order("display_name"),
     supabase.from("organizations").select("contact_phone").single(),
     isBroker
       ? supabase.from("commissions").select("id, amount_cents, received_on, description").eq("member_id", me.id).order("received_on", { ascending: false }).limit(50)

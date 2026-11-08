@@ -47,7 +47,7 @@ export async function sendDailyDigests(org: { id: string; name: string; timezone
 
   const { data: memberRows } = await admin
     .from("members")
-    .select("id, user_id, full_name, role, team_id, division_id, daily_digest, daily_digest_hour, digest_email")
+    .select("id, user_id, full_name:display_name, role, team_id, division_id, daily_digest, daily_digest_hour, digest_email")
     .eq("org_id", org.id)
     .eq("active", true);
   const members = (memberRows ?? []) as Member[];

@@ -12,7 +12,7 @@ const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 // Prévia: o mesmo que o servidor vai conferir, para a pessoa corrigir antes.
 function problemOf(row: ImportRow, teams: Map<string, string>, singleTeam: boolean, seen: Set<string>, canInviteManagers: boolean) {
-  if (row.fullName.trim().length < 2) return "Nome faltando";
+  if (row.fullName.trim().length < 2 && row.brokerName.trim().length < 2) return "Nome faltando";
   if (!EMAIL.test(row.email)) return "E-mail inválido";
   if (seen.has(row.email)) return "E-mail repetido";
   const role = roleFromText(row.role);
@@ -67,7 +67,7 @@ export function ImportMembers({ teams, canInviteManagers }: { teams: string[]; c
   return (
     <div className="flex flex-col gap-4 p-5 sm:p-6">
       <p className="text-sm text-ink-2">
-        Uma pessoa por linha, com nome, e-mail, cargo (corretor ou gerente) e equipe. Cada uma recebe o convite por e-mail.
+        Uma pessoa por linha, com nome, e-mail, cargo (corretor ou gerente), equipe e, se quiser, o nome de corretor. Cada uma recebe o convite por e-mail.
       </p>
       <div className="flex flex-wrap gap-2">
         <a href={template} download="modelo-equipe-pulse.csv" className="inline-flex h-9 items-center gap-2 rounded-xl border border-line bg-surface px-3 text-sm font-medium hover:bg-surface-2">
@@ -95,7 +95,10 @@ export function ImportMembers({ teams, canInviteManagers }: { teams: string[]; c
                   {problem ? <X className="size-3" /> : <Check className="size-3" />}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">{row.fullName || "Sem nome"}</span>
+                  <span className="block truncate font-medium">
+                    {row.brokerName || row.fullName || "Sem nome"}
+                    {row.brokerName && row.fullName ? <span className="font-normal text-muted"> · {row.fullName}</span> : null}
+                  </span>
                   <span className="block truncate text-xs text-muted">
                     {row.email || "sem e-mail"}
                     {row.team ? `, ${row.team}` : ""}

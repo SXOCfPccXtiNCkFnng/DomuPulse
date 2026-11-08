@@ -1,10 +1,11 @@
-// Planilha de equipe: colunas nome, e-mail, cargo e equipe. Aceita CSV
-// separado por ponto e vírgula (Excel em português) ou vírgula.
+// Planilha de equipe: colunas nome, e-mail, cargo, equipe e nome de corretor
+// (opcional). Aceita CSV separado por ponto e vírgula (Excel em português) ou vírgula.
 
 export const IMPORT_MAX_ROWS = 200;
-export const IMPORT_TEMPLATE = "nome;email;cargo;equipe\nMaria Souza;maria@empresa.com.br;corretor;Equipe Norte\nCarlos Lima;carlos@empresa.com.br;gerente;Equipe Norte\n";
+export const IMPORT_TEMPLATE =
+  "nome;email;cargo;equipe;nome de corretor\nMaria Souza;maria@empresa.com.br;corretor;Equipe Norte;Maria Imóveis\nCarlos Lima;carlos@empresa.com.br;gerente;Equipe Norte;\n";
 
-export type ImportRow = { line: number; fullName: string; email: string; role: string; team: string };
+export type ImportRow = { line: number; fullName: string; email: string; role: string; team: string; brokerName: string };
 
 /** Sem acento, minúsculo e sem espaços extras: "Equipe  Norte" = "equipe norte". */
 export function normalize(value: string) {
@@ -46,7 +47,7 @@ export function parseTeamCsv(text: string): ImportRow[] {
   if (lines.length === 0) return [];
   const sep = (lines[0].match(/;/g)?.length ?? 0) >= (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
 
-  let cols = { name: 0, email: 1, role: 2, team: 3 };
+  let cols = { name: 0, email: 1, role: 2, team: 3, broker: 4 };
   let first = 0;
   const header = splitLine(lines[0], sep).map(normalize);
   if (header.some((h) => h === "nome" || h.startsWith("e-mail") || h === "email")) {
@@ -56,6 +57,7 @@ export function parseTeamCsv(text: string): ImportRow[] {
       email: find("email", "e-mail", "e mail"),
       role: find("cargo", "funcao", "função", "role"),
       team: find("equipe", "time", "team"),
+      broker: find("nome de corretor", "nome do corretor", "nome corretor", "apelido"),
     };
     first = 1;
   }
@@ -63,6 +65,13 @@ export function parseTeamCsv(text: string): ImportRow[] {
   return lines.slice(first).map((line, i) => {
     const cells = splitLine(line, sep);
     const at = (idx: number) => (idx >= 0 ? (cells[idx] ?? "") : "");
-    return { line: i + first + 1, fullName: at(cols.name), email: at(cols.email).toLowerCase(), role: at(cols.role), team: at(cols.team) };
+    return {
+      line: i + first + 1,
+      fullName: at(cols.name),
+      email: at(cols.email).toLowerCase(),
+      role: at(cols.role),
+      team: at(cols.team),
+      brokerName: at(cols.broker),
+    };
   });
 }

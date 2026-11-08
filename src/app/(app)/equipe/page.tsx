@@ -16,6 +16,8 @@ export const metadata: Metadata = { title: "Equipe" };
 type MemberRow = {
   id: string;
   full_name: string;
+  broker_name: string | null;
+  display_name: string;
   role: Role;
   team_id: string | null;
   division_id: string | null;
@@ -33,7 +35,11 @@ export default async function EquipePage() {
   const canEditTeams = me.role === "owner" || me.role === "director";
   const [{ data: members }, { data: teams }, { data: divisions }, inviteCode] = await Promise.all([
     // Quem já foi removido da lista (hidden_at) não aparece; o histórico fica.
-    supabase.from("members").select("id, full_name, role, team_id, division_id, active, terms_accepted_at, account_deleted_at").is("hidden_at", null).order("full_name"),
+    supabase
+      .from("members")
+      .select("id, full_name, broker_name, display_name, role, team_id, division_id, active, terms_accepted_at, account_deleted_at")
+      .is("hidden_at", null)
+      .order("display_name"),
     supabase.from("teams").select("id, name, division_id").order("name"),
     supabase.from("divisions").select("id, name").order("name"),
     // O link deixa a pessoa escolher qualquer equipe: só a liderança de cima vê.
@@ -199,12 +205,15 @@ function MemberLine({
   return (
     <li className="px-5 py-3 sm:px-6">
       <div className="flex items-center gap-3">
-        <Avatar name={person.full_name} />
+        <Avatar name={person.display_name} />
         <div className="min-w-0 flex-1">
-          <p className={person.active ? "truncate text-sm font-medium" : "truncate text-sm font-medium text-muted line-through"}>
-            {person.full_name}
+          <p className={person.active ? "truncate text-[15px] font-semibold" : "truncate text-[15px] font-semibold text-muted line-through"}>
+            {person.display_name}
           </p>
-          <p className="text-xs text-muted">{roleLabel(person.role, segment)}</p>
+          <p className="truncate text-xs text-muted">
+            {roleLabel(person.role, segment)}
+            {person.display_name !== person.full_name ? ` · ${person.full_name}` : ""}
+          </p>
         </div>
         {!person.active ? <Badge>Inativo</Badge> : null}
         {pending ? <Badge tone="warn">Convite pendente</Badge> : null}
@@ -222,7 +231,8 @@ function MemberLine({
         <MemberActions
           member={{
             id: person.id,
-            name: person.full_name,
+            name: person.display_name,
+            brokerName: person.broker_name ?? "",
             role: person.role,
             scopeId: (person.role === "director" ? person.division_id : person.team_id) ?? "",
             active: person.active,
@@ -230,6 +240,7 @@ function MemberLine({
             accountDeleted: Boolean(person.account_deleted_at),
           }}
           myRole={myRole}
+          segment={segment}
           teams={teams}
           divisions={divisions}
         />

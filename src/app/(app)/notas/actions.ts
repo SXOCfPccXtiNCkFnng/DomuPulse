@@ -115,7 +115,7 @@ export async function createInvoice(_: FormState, formData: FormData): Promise<F
       {
         kind: "invoice_sent",
         title: "Nova nota fiscal",
-        body: `${me.fullName} enviou a nota nº ${v.number} de ${formatMoney(v.amount)}: ${v.description}.`,
+        body: `${me.displayName} enviou a nota nº ${v.number} de ${formatMoney(v.amount)}: ${v.description}.`,
         url: "/notas",
       },
     ),
@@ -162,7 +162,7 @@ export async function setInvoiceStatus(invoiceId: string, status: InvoiceStatus,
       notifyUsers(me.org.id, [owner.user_id as string], {
         kind: "invoice_status",
         title: `Nota nº ${invoice.number} ${label}`,
-        body: status === "rejected" ? `Motivo: ${note}. Corrija e envie de novo.` : `${me.fullName} marcou a sua nota como ${label}.`,
+        body: status === "rejected" ? `Motivo: ${note}. Corrija e envie de novo.` : `${me.displayName} marcou a sua nota como ${label}.`,
         url: "/notas",
       }),
     );

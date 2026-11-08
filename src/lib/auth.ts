@@ -16,6 +16,10 @@ export type CurrentMember = {
   id: string;
   userId: string;
   fullName: string;
+  /** Nome de corretor, se a pessoa (ou a liderança) cadastrou. */
+  brokerName: string | null;
+  /** Nome principal na tela: o de corretor, ou o completo se não houver. */
+  displayName: string;
   role: Role;
   teamId: string | null;
   divisionId: string | null;
@@ -39,6 +43,8 @@ type MemberRow = {
   id: string;
   user_id: string;
   full_name: string;
+  broker_name: string | null;
+  display_name: string | null;
   role: Role;
   team_id: string | null;
   division_id: string | null;
@@ -72,7 +78,7 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
   const { data } = await supabase
     .from("members")
     .select(
-      "id, user_id, full_name, role, team_id, division_id, terms_version, organizations (id, name, timezone, report_slots, status, trial_ends_at, cancel_at, segment)",
+      "id, user_id, full_name, broker_name, display_name, role, team_id, division_id, terms_version, organizations (id, name, timezone, report_slots, status, trial_ends_at, cancel_at, segment)",
     )
     .eq("user_id", userId)
     .eq("active", true)
@@ -97,6 +103,8 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
     id: data.id,
     userId: data.user_id,
     fullName: data.full_name,
+    brokerName: data.broker_name,
+    displayName: data.display_name || data.full_name,
     role: data.role,
     teamId: data.team_id,
     divisionId: data.division_id,

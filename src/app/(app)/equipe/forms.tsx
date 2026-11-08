@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
+import type { Segment } from "@/lib/auth";
 import { ROLE_LABEL, type Role } from "@/lib/roles";
 import type { FormState } from "@/lib/validation";
 import { createTeam, deleteTeam, inviteMember, removeMember, renameDivision, renameTeam, resendInvite, setMemberActive, updateMember } from "./actions";
@@ -33,9 +34,20 @@ export function InviteForm({ myRole, teams, divisions, simple = false }: { myRol
     <form action={action} className="flex flex-col gap-4 p-5 sm:p-6" noValidate>
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
       {state.success ? <FormMessage tone="success">{state.success}</FormMessage> : null}
-      <Field label="Nome completo" error={state.fieldErrors?.fullName}>
-        <Input name="fullName" required autoComplete="off" />
-      </Field>
+      {!simple && role === "broker" ? (
+        <>
+          <Field label="Nome de corretor" hint="Como a equipe localiza esta pessoa" error={state.fieldErrors?.brokerName}>
+            <Input name="brokerName" maxLength={80} required autoComplete="off" />
+          </Field>
+          <Field label="Nome completo" hint="Opcional" error={state.fieldErrors?.fullName}>
+            <Input name="fullName" autoComplete="off" />
+          </Field>
+        </>
+      ) : (
+        <Field label="Nome completo" error={state.fieldErrors?.fullName}>
+          <Input name="fullName" required autoComplete="off" />
+        </Field>
+      )}
       <Field label="E-mail" error={state.fieldErrors?.email}>
         <Input name="email" type="email" inputMode="email" required autoComplete="off" />
       </Field>
@@ -150,7 +162,7 @@ export function MemberToggle({ memberId, active, name }: { memberId: string; act
   );
 }
 
-type MemberInfo = { id: string; name: string; role: Role; scopeId: string; active: boolean; pending: boolean; accountDeleted: boolean };
+type MemberInfo = { id: string; name: string; brokerName: string; role: Role; scopeId: string; active: boolean; pending: boolean; accountDeleted: boolean };
 
 /** Conta excluída pela própria pessoa: não reativa, só tira da lista (histórico fica). */
 function RemoveMemberButton({ memberId, name }: { memberId: string; name: string }) {
@@ -189,11 +201,13 @@ function RemoveMemberButton({ memberId, name }: { memberId: string; name: string
 export function MemberActions({
   member,
   myRole,
+  segment,
   teams,
   divisions,
 }: {
   member: MemberInfo;
   myRole: Role;
+  segment: Segment;
   teams: Option[];
   divisions: Option[];
 }) {
@@ -227,7 +241,7 @@ export function MemberActions({
       </div>
       {notice?.error ? <p className="mt-1 text-xs text-danger">{notice.error}</p> : null}
       {notice?.success ? <p className="mt-1 text-xs text-brand-text">{notice.success}</p> : null}
-      {editing ? <MemberEditForm member={member} myRole={myRole} teams={teams} divisions={divisions} onDone={() => setEditing(false)} /> : null}
+      {editing ? <MemberEditForm member={member} myRole={myRole} segment={segment} teams={teams} divisions={divisions} onDone={() => setEditing(false)} /> : null}
     </div>
   );
 }
@@ -235,12 +249,14 @@ export function MemberActions({
 function MemberEditForm({
   member,
   myRole,
+  segment,
   teams,
   divisions,
   onDone,
 }: {
   member: MemberInfo;
   myRole: Role;
+  segment: Segment;
   teams: Option[];
   divisions: Option[];
   onDone: () => void;
@@ -258,6 +274,11 @@ function MemberEditForm({
   return (
     <form action={action} className="mt-3 flex flex-col gap-3 rounded-xl bg-surface-2 p-4" noValidate>
       {state.error ? <FormMessage>{state.error}</FormMessage> : null}
+      {segment !== "hr" && role === "broker" ? (
+        <Field label="Nome de corretor" hint="Aparece no lugar do nome em listas, filtros e relatórios" error={state.fieldErrors?.brokerName}>
+          <Input name="brokerName" defaultValue={state.values?.brokerName ?? member.brokerName} maxLength={80} />
+        </Field>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Cargo" error={state.fieldErrors?.role}>
           <Select

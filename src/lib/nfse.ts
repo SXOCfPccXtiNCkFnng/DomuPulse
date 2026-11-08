@@ -211,7 +211,7 @@ async function finishIssued(invoice: InvoiceRow, result: NfseEmitResult, notifyB
     logger.error("nfse.danfse", { message: describeError(err), orgId: invoice.org_id });
   }
 
-  const { data: member } = await admin.from("members").select("user_id, full_name, team_id, division_id").eq("id", invoice.member_id).single();
+  const { data: member } = await admin.from("members").select("user_id, full_name:display_name, team_id, division_id").eq("id", invoice.member_id).single();
   if (!member) return;
   await notifyLeadersOf(
     { orgId: invoice.org_id, teamId: member.team_id, divisionId: member.division_id },

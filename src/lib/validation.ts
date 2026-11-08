@@ -27,6 +27,13 @@ export const nameSchema = z
   .min(2, "Nome muito curto.")
   .max(120, "Nome muito longo.");
 
+// Nome de corretor: livre (pode ter número, como "João 2"), curto.
+export const brokerNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Nome de corretor muito curto.")
+  .max(80, "Nome de corretor muito longo.");
+
 // Nome e sobrenome, sem números nem símbolos.
 export const fullNameSchema = nameSchema
   .refine((v) => v.split(/\s+/).filter((p) => p.length >= 2).length >= 2, "Informe nome e sobrenome.")

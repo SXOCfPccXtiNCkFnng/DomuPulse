@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   for (let page = 0; page < 200; page++) {
     let query = supabase
       .from("reports")
-      .select(`report_date, report_slot, ${METRICS.map((m) => m.key).join(", ")}, notes, members!inner (full_name, team_id)`)
+      .select(`report_date, report_slot, ${METRICS.map((m) => m.key).join(", ")}, notes, members!inner (full_name:display_name, team_id)`)
       .gte("report_date", period.from)
       .lte("report_date", period.to)
       .order("report_date")

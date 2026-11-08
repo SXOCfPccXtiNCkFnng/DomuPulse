@@ -67,7 +67,7 @@ export function useLiveDay({ orgId, timezone }: { orgId: string; timezone: strin
 
   const fetchMembers = useCallback(async () => {
     const [{ data: m }, { data: t }] = await Promise.all([
-      supabase.from("members").select("id, full_name, role, team_id, active").eq("active", true).order("full_name"),
+      supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("active", true).order("display_name"),
       supabase.from("teams").select("id, name").order("name"),
     ]);
     return { members: (m ?? []) as LiveMember[], teams: (t ?? []) as LiveTeam[] };

@@ -61,7 +61,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
         .gte("scheduled_at", from)
         .lt("scheduled_at", to)
         .order("scheduled_at"),
-      supabase.from("members").select("id, full_name, role, team_id, active").eq("role", "broker").eq("active", true).order("full_name"),
+      supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("role", "broker").eq("active", true).order("display_name"),
       supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
       // Sem a tabela de imóveis (migração ainda não rodada), o campo só não aparece.
       supabase.from("properties").select("id, title, code, neighborhood, status").in("status", ["available", "reserved"]).order("title"),

@@ -87,7 +87,7 @@ export async function announceReport(reportId: string) {
       {
         kind: "report_sent",
         title: `Relatório das ${slotLabel(report.report_slot)}`,
-        body: `${me.fullName} enviou: ${numbers}.${note}`,
+        body: `${me.displayName} enviou: ${numbers}.${note}`,
         url: "/painel",
       },
     ),

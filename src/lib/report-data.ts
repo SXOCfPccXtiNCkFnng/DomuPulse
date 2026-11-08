@@ -61,7 +61,7 @@ export async function loadReportData(period: Period, teamId: string | null, brok
     brokerId
       ? brokerDays(supabase, period, brokerId)
       : supabase.rpc("report_totals_by_day", { p_from: period.from, p_to: period.to, p_team: teamId }),
-    supabase.from("members").select("id, full_name, role, team_id, active").order("full_name"),
+    supabase.from("members").select("id, full_name:display_name, role, team_id, active").order("display_name"),
     supabase.from("teams").select("id, name").order("name"),
   ]);
 

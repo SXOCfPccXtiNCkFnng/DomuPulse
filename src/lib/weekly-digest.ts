@@ -79,7 +79,7 @@ export async function sendPeriodDigests(
   const admin = createAdminClient();
   const { data: memberRows } = await admin
     .from("members")
-    .select("id, user_id, full_name, role, team_id, division_id, weekly_digest, weekly_digest_weekday, monthly_digest, digest_email")
+    .select("id, user_id, full_name:display_name, role, team_id, division_id, weekly_digest, weekly_digest_weekday, monthly_digest, digest_email")
     .eq("org_id", org.id)
     .eq("active", true);
   const members = (memberRows ?? []) as Member[];

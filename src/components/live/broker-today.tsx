@@ -58,7 +58,7 @@ export function BrokerToday({ member }: { member: ClientMember }) {
     else live.upsertLocalStatus(data);
   }
 
-  const firstName = member.fullName.split(" ")[0];
+  const firstName = member.displayName.split(" ")[0];
   const delivered = slots.filter((s) => statusOf(s) === "delivered").length;
 
   return (

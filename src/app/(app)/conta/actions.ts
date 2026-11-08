@@ -9,7 +9,7 @@ import { isPushEndpoint, sendToUsers } from "@/lib/push";
 import { rateLimit, tooManyAttempts } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { emailSchema, fullNameSchema, type FormState } from "@/lib/validation";
+import { brokerNameSchema, emailSchema, fullNameSchema, nameSchema, type FormState } from "@/lib/validation";
 
 const subscriptionSchema = z.object({
   // Só endpoints dos serviços de push dos navegadores (evita SSRF).
@@ -124,21 +124,46 @@ export async function setDigestEmail(_: FormState, formData: FormData): Promise<
   return { success: digestEmail ? `O resumo vai chegar em ${digestEmail}.` : "O resumo vai chegar no seu e-mail de login.", values: { digestEmail: digestEmail ?? "" } };
 }
 
-/** A própria pessoa corrige o nome dela. Ninguém mais altera o nome de outro membro. */
+/**
+ * A própria pessoa corrige o nome completo e o nome de corretor. O nome
+ * completo só a pessoa altera; o de corretor a liderança também pode mudar.
+ * Corretor de imobiliária: o nome completo é opcional se houver nome de corretor.
+ */
 export async function updateMyName(_: FormState, formData: FormData): Promise<FormState> {
   const me = await getCurrentMember();
-  const raw = String(formData.get("fullName") ?? "");
-  const parsed = fullNameSchema.safeParse(raw);
-  if (!parsed.success) return { fieldErrors: { fullName: parsed.error.issues[0].message }, values: { fullName: raw } };
+  const rawName = String(formData.get("fullName") ?? "").trim();
+  const rawBroker = String(formData.get("brokerName") ?? "").trim();
+  const values = { fullName: rawName, brokerName: rawBroker };
+  const usesBrokerName = me.org.segment !== "hr";
+  const nameOptional = usesBrokerName && me.role === "broker";
+
+  let brokerName: string | null = null;
+  if (usesBrokerName && rawBroker) {
+    const parsed = brokerNameSchema.safeParse(rawBroker);
+    if (!parsed.success) return { fieldErrors: { brokerName: parsed.error.issues[0].message }, values };
+    brokerName = parsed.data;
+  }
+  if (nameOptional && !brokerName) return { fieldErrors: { brokerName: "Informe o seu nome de corretor." }, values };
+
+  let fullName: string;
+  if (nameOptional && !rawName) fullName = brokerName!;
+  else {
+    const parsed = (nameOptional ? nameSchema : fullNameSchema).safeParse(rawName);
+    if (!parsed.success) return { fieldErrors: { fullName: parsed.error.issues[0].message }, values };
+    fullName = parsed.data;
+  }
 
   const limit = await rateLimit(`my-name:${me.id}`, 10, 60 * 60);
-  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec), values: { fullName: raw } };
+  if (!limit.ok) return { error: tooManyAttempts(limit.retryAfterSec), values };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("members").update({ full_name: parsed.data }).eq("id", me.id);
-  if (error) return { error: "Não foi possível salvar. Tente de novo.", values: { fullName: raw } };
-  await admin.auth.admin.updateUserById(me.userId, { user_metadata: { full_name: parsed.data } });
+  const { error } = await admin
+    .from("members")
+    .update({ full_name: fullName, ...(usesBrokerName ? { broker_name: brokerName } : {}) })
+    .eq("id", me.id);
+  if (error) return { error: "Não foi possível salvar. Tente de novo.", values };
+  await admin.auth.admin.updateUserById(me.userId, { user_metadata: { full_name: fullName } });
 
   revalidatePath("/", "layout");
-  return { success: "Nome atualizado.", values: { fullName: parsed.data } };
+  return { success: "Dados atualizados.", values: { fullName: nameOptional && fullName === brokerName ? "" : fullName, brokerName: brokerName ?? "" } };
 }

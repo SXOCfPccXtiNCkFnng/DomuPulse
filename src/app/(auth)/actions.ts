@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   acceptTermsSchema,
+  brokerNameSchema,
   emailSchema,
   fieldErrors,
   fullNameSchema,
@@ -197,7 +198,9 @@ export async function signUp(_: FormState, formData: FormData): Promise<FormStat
 const joinSchema = z
   .object({
     code: z.string(),
-    fullName: fullNameSchema,
+    // A obrigatoriedade depende do tipo de conta (conferida abaixo).
+    fullName: z.string().trim().max(120).optional(),
+    brokerName: z.string().trim().max(80).optional(),
     email: emailSchema,
     teamId: z.uuid("Escolha sua equipe."),
     password: passwordSchema,
@@ -212,7 +215,7 @@ const joinSchema = z
  */
 export async function joinWithInvite(_: FormState, formData: FormData): Promise<FormState> {
   if (formData.get("website")) return GENERIC_SIGNUP_ERROR;
-  const values = keep(formData, ["fullName", "email", "teamId"]);
+  const values = keep(formData, ["fullName", "brokerName", "email", "teamId"]);
 
   const ip = await clientIp();
   const limit = await rateLimit(`join:ip:${ip}`, 8, 60 * 60);
@@ -220,11 +223,27 @@ export async function joinWithInvite(_: FormState, formData: FormData): Promise<
 
   const parsed = joinSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error), values };
-  if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
-  const { code, fullName, email, teamId, password } = parsed.data;
+  const { code, email, teamId, password } = parsed.data;
   const org = await findOrgByInviteCode(code);
   if (!org) return { error: "Este link de convite não vale mais. Peça um novo ao seu gestor." };
+
+  // Imobiliária: nome de corretor obrigatório, nome completo opcional. RH: nome e sobrenome.
+  let fullName: string;
+  let brokerName: string | null = null;
+  if (org.segment === "hr") {
+    const name = fullNameSchema.safeParse(parsed.data.fullName ?? "");
+    if (!name.success) return { fieldErrors: { fullName: name.error.issues[0].message }, values };
+    fullName = name.data;
+  } else {
+    const broker = brokerNameSchema.safeParse(parsed.data.brokerName ?? "");
+    if (!broker.success) return { fieldErrors: { brokerName: parsed.data.brokerName ? broker.error.issues[0].message : "Informe o seu nome de corretor." }, values };
+    brokerName = broker.data;
+    const name = parsed.data.fullName ? nameSchema.safeParse(parsed.data.fullName) : null;
+    if (name && !name.success) return { fieldErrors: { fullName: name.error.issues[0].message }, values };
+    fullName = name?.data ?? brokerName;
+  }
+  if (!(await verifyCaptcha(formData, ip))) return { error: CAPTCHA_ERROR, values };
 
   const admin = createAdminClient();
   const { data: team } = await admin.from("teams").select("id, division_id").eq("id", teamId).eq("org_id", org.id).maybeSingle();
@@ -251,6 +270,7 @@ export async function joinWithInvite(_: FormState, formData: FormData): Promise<
     org_id: org.id,
     user_id: data.user.id,
     full_name: fullName,
+    broker_name: brokerName,
     role: "broker",
     team_id: team.id,
     division_id: team.division_id,
@@ -267,7 +287,7 @@ export async function joinWithInvite(_: FormState, formData: FormData): Promise<
   after(() =>
     notifyLeadersOf(
       { orgId: org.id, teamId: team.id, divisionId: team.division_id },
-      { kind: "member_joined", title: "Novo membro na equipe", body: `${fullName} entrou pelo link de convite.`, url: "/equipe" },
+      { kind: "member_joined", title: "Novo membro na equipe", body: `${brokerName ?? fullName} entrou pelo link de convite.`, url: "/equipe" },
     ),
   );
   await recordAccess(data.user.id, "join", ip);
@@ -362,7 +382,7 @@ export async function updatePassword(_: FormState, formData: FormData): Promise<
       })
       .eq("user_id", userId)
       .is("terms_accepted_at", null)
-      .select("org_id, team_id, division_id, full_name")
+      .select("org_id, team_id, division_id, full_name:display_name")
       .maybeSingle();
 
     // Convite aceito: a liderança fica sabendo que a pessoa entrou.
