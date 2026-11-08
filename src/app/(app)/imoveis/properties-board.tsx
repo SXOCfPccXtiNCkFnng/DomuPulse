@@ -9,7 +9,18 @@ import { Badge, Card } from "@/components/ui/card";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { formatMoney } from "@/lib/metrics";
 import { centsToInput, maskMoneyInput } from "@/lib/money";
-import { DEAL_LABEL, PROPERTY_KINDS, PROPERTY_STATUS, type Property, type PropertyStatus } from "@/lib/properties";
+import {
+  areaLabel,
+  bedroomsLabel,
+  DEAL_LABEL,
+  formatPct,
+  PROPERTY_KINDS,
+  PROPERTY_STATUS,
+  propertyLayouts,
+  type Property,
+  type PropertyLayout,
+  type PropertyStatus,
+} from "@/lib/properties";
 import type { FormState } from "@/lib/validation";
 import { createProperty, deleteProperty, updateProperty } from "./actions";
 
@@ -22,11 +33,13 @@ export function PropertiesBoard({
   clientCounts,
   canManage,
   missingTable,
+  missingDetails = false,
 }: {
   properties: Property[];
   clientCounts: Record<string, number>;
   canManage: boolean;
   missingTable: boolean;
+  missingDetails?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Property | null>(null);
@@ -67,6 +80,10 @@ export function PropertiesBoard({
       {missingTable ? (
         <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
           O cadastro de imóveis ainda não foi ativado no banco de dados. Rode a atualização <code>20261106000000_properties.sql</code> no Supabase.
+        </p>
+      ) : missingDetails && canManage ? (
+        <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
+          Para usar opções de quartos, valor garantido e % pós-chaves, rode a atualização <code>20261112000000_property_details.sql</code> no Supabase.
         </p>
       ) : !canManage ? (
         <p className="rounded-xl bg-surface-2 px-4 py-3 text-sm text-ink-2">
@@ -133,6 +150,9 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
   const [error, setError] = useState<string | null>(null);
   const st = PROPERTY_STATUS[p.status];
   const place = [p.neighborhood, p.city].filter(Boolean).join(", ");
+  const layouts = propertyLayouts(p);
+  const bedrooms = bedroomsLabel(layouts);
+  const area = areaLabel(layouts);
 
   const remove = () =>
     start(async () => {
@@ -156,11 +176,27 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
           <Badge tone={st.tone}>{st.label}</Badge>
         </div>
 
-        {p.price_cents != null ? (
-          <p className="font-display text-xl font-semibold tabular-nums">
-            {formatMoney(p.price_cents)}
-            {p.deal === "locacao" ? <span className="text-sm font-normal text-muted">/mês</span> : null}
-          </p>
+        {p.price_cents != null || p.guaranteed_cents != null || p.post_keys_pct != null ? (
+          <div>
+            {p.price_cents != null ? (
+              <p className="font-display text-xl font-semibold tabular-nums">
+                {formatMoney(p.price_cents)}
+                {p.deal === "locacao" ? <span className="text-sm font-normal text-muted">/mês</span> : null}
+              </p>
+            ) : null}
+            {p.guaranteed_cents != null ? (
+              <p className="text-sm text-ink-2 tabular-nums">
+                <span className="text-muted">Garantido:</span> {formatMoney(p.guaranteed_cents)}
+              </p>
+            ) : null}
+            {p.post_keys_pct != null ? (
+              <p className="mt-1.5">
+                <span className="inline-flex items-center rounded-md bg-brand-soft px-2 py-0.5 text-xs font-semibold text-brand-text">
+                  Pós chaves: {formatPct(Number(p.post_keys_pct))}
+                </span>
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-2">
@@ -170,19 +206,30 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
               {place}
             </span>
           ) : null}
-          {p.bedrooms != null ? (
+          {bedrooms ? (
             <span className="flex items-center gap-1.5">
               <BedDouble className="size-3.5 text-muted" />
-              {p.bedrooms} {p.bedrooms === 1 ? "quarto" : "quartos"}
+              {bedrooms}
             </span>
           ) : null}
-          {p.area_m2 != null ? (
+          {area ? (
             <span className="flex items-center gap-1.5">
               <Ruler className="size-3.5 text-muted" />
-              {p.area_m2} m²
+              {area}
             </span>
           ) : null}
         </div>
+        {layouts.length > 1 ? (
+          <ul className="flex flex-wrap gap-1.5">
+            {layouts.map((l, i) => (
+              <li key={i} className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-ink-2">
+                {[l.bedrooms != null ? `${l.bedrooms} ${l.bedrooms === 1 ? "quarto" : "quartos"}` : null, l.area_m2 != null ? `${l.area_m2} m²` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {p.notes ? <p className="line-clamp-2 text-sm text-muted">{p.notes}</p> : null}
 
@@ -220,10 +267,75 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
   );
 }
 
+type LayoutRow = { key: number; bedrooms: string; area: string };
+
+/** Opções de quartos: cada linha é uma planta (quartos + área). */
+function LayoutsField({ initial, error }: { initial: PropertyLayout[]; error?: string }) {
+  const nextKey = useRef(initial.length + 1);
+  const [rows, setRows] = useState<LayoutRow[]>(() =>
+    initial.length
+      ? initial.map((l, i) => ({ key: i, bedrooms: l.bedrooms != null ? String(l.bedrooms) : "", area: l.area_m2 != null ? String(l.area_m2) : "" }))
+      : [{ key: 0, bedrooms: "", area: "" }],
+  );
+  const update = (key: number, patch: Partial<LayoutRow>) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  return (
+    <fieldset className="flex flex-col gap-2 sm:col-span-2">
+      <legend className="mb-1.5 text-[13px] font-medium text-ink-2">Quartos e área</legend>
+      {rows.map((r, i) => (
+        <div key={r.key} className="flex items-end gap-2">
+          <Field label={rows.length > 1 ? `Opção ${i + 1}: quartos` : "Quartos"} className="flex-1">
+            <Input
+              name="layoutBedrooms"
+              value={r.bedrooms}
+              onChange={(e) => update(r.key, { bedrooms: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+              inputMode="numeric"
+              placeholder="2"
+            />
+          </Field>
+          <Field label="Área (m²)" className="flex-1">
+            <Input
+              name="layoutArea"
+              value={r.area}
+              onChange={(e) => update(r.key, { area: e.target.value.replace(/\D/g, "").slice(0, 7) })}
+              inputMode="numeric"
+              placeholder="45"
+            />
+          </Field>
+          {rows.length > 1 ? (
+            <button
+              type="button"
+              onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))}
+              aria-label={`Remover opção ${i + 1}`}
+              className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          ) : null}
+        </div>
+      ))}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
+      {rows.length < 10 ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="self-start"
+          onClick={() => setRows((list) => [...list, { key: nextKey.current++, bedrooms: "", area: "" }])}
+        >
+          <Plus className="size-3.5" />
+          Adicionar outra opção de quartos
+        </Button>
+      ) : null}
+    </fieldset>
+  );
+}
+
 function PropertyDialog({ property: p, onClose }: { property?: Property; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const [price, setPrice] = useState(centsToInput(p?.price_cents ?? null));
+  const [guaranteed, setGuaranteed] = useState(centsToInput(p?.guaranteed_cents ?? null));
   const action = p ? updateProperty.bind(null, p.id) : createProperty;
   const [state, formAction, pending] = useActionState(async (prev: FormState, data: FormData) => {
     const r = await action(prev, data);
@@ -293,20 +405,41 @@ function PropertyDialog({ property: p, onClose }: { property?: Property; onClose
           <Field label="Cidade" error={state.fieldErrors?.city}>
             <Input name="city" defaultValue={p?.city ?? ""} maxLength={80} />
           </Field>
-          <Field label="Valor" error={state.fieldErrors?.price}>
-            <span className="relative block">
-              <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[15px] text-muted">R$</span>
-              <Input name="price" value={price} onChange={(e) => setPrice(maskMoneyInput(e.target.value))} inputMode="decimal" placeholder="450.000" className="pl-11" />
-            </span>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Quartos" error={state.fieldErrors?.bedrooms}>
-              <Input name="bedrooms" defaultValue={p?.bedrooms ?? ""} inputMode="numeric" maxLength={2} />
+          <div className="flex flex-col gap-2">
+            <Field label="Valor do imóvel" error={state.fieldErrors?.price}>
+              <span className="relative block">
+                <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-[15px] text-muted">R$</span>
+                <Input name="price" value={price} onChange={(e) => setPrice(maskMoneyInput(e.target.value))} inputMode="decimal" placeholder="450.000" className="pl-11" />
+              </span>
             </Field>
-            <Field label="Área (m²)" error={state.fieldErrors?.area}>
-              <Input name="area" defaultValue={p?.area_m2 ?? ""} inputMode="numeric" maxLength={7} />
+            <Field label="Valor garantido" hint="Opcional" error={state.fieldErrors?.guaranteed}>
+              <span className="relative block">
+                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted">R$</span>
+                <Input
+                  name="guaranteed"
+                  value={guaranteed}
+                  onChange={(e) => setGuaranteed(maskMoneyInput(e.target.value))}
+                  inputMode="decimal"
+                  placeholder="400.000"
+                  className="h-9 pl-10 text-sm"
+                />
+              </span>
             </Field>
           </div>
+          <Field label="% Pós Chaves" hint="Opcional" error={state.fieldErrors?.postKeys}>
+            <span className="relative block">
+              <Input
+                name="postKeys"
+                defaultValue={p?.post_keys_pct != null ? String(p.post_keys_pct).replace(".", ",") : ""}
+                inputMode="decimal"
+                maxLength={6}
+                placeholder="30"
+                className="pr-9"
+              />
+              <span className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-[15px] text-muted">%</span>
+            </span>
+          </Field>
+          <LayoutsField initial={p ? propertyLayouts(p) : []} error={state.fieldErrors?.layouts} />
           <Field label="Observações" hint="Opcional" error={state.fieldErrors?.notes} className="sm:col-span-2">
             <textarea name="notes" defaultValue={p?.notes ?? ""} rows={3} maxLength={2000} placeholder="Vagas de garagem, condomínio, diferenciais..." className={textarea} />
           </Field>

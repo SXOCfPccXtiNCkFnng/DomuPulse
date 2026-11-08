@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getCurrentMember, isLeader, orgCanWrite } from "@/lib/auth";
 import { describeError, logger } from "@/lib/logger";
 import { parseMoney } from "@/lib/money";
+import type { PropertyLayout } from "@/lib/properties";
 import { createClient } from "@/lib/supabase/server";
 import { fieldErrors, type FormState } from "@/lib/validation";
 
@@ -29,13 +30,37 @@ const propertySchema = z.object({
   neighborhood: optionalText(120),
   city: optionalText(80),
   price: optionalText(30),
-  bedrooms: optionalInt(50, "Informe um número de quartos válido."),
-  area: optionalInt(1_000_000, "Informe a área em m², só números."),
+  guaranteed: optionalText(30),
+  postKeys: z.preprocess(
+    (v) => (typeof v === "string" ? (v.trim() === "" ? undefined : v.replace("%", "").replace(",", ".").trim()) : v),
+    z.coerce.number("Informe a porcentagem, como 30 ou 12,5.").min(0, "Use de 0 a 100%.").max(100, "Use de 0 a 100%.").optional(),
+  ),
   status: z.enum(["available", "reserved", "sold", "inactive"]),
   notes: optionalText(2000),
 });
 
-function toRow(v: z.infer<typeof propertySchema>) {
+const layoutBedrooms = optionalInt(50, "Informe um número de quartos válido.");
+const layoutArea = optionalInt(1_000_000, "Informe a área em m², só números.");
+
+/** Opções de quartos: pares "quartos" + "área" do formulário; linhas vazias são ignoradas. */
+function parseLayouts(formData: FormData): { layouts: PropertyLayout[] } | { fieldErrors: Record<string, string> } {
+  const beds = formData.getAll("layoutBedrooms");
+  const areas = formData.getAll("layoutArea");
+  const layouts: PropertyLayout[] = [];
+  for (let i = 0; i < Math.min(beds.length, 10); i++) {
+    const b = layoutBedrooms.safeParse(beds[i]);
+    if (!b.success) return { fieldErrors: { layouts: b.error.issues[0].message } };
+    const a = layoutArea.safeParse(areas[i]);
+    if (!a.success) return { fieldErrors: { layouts: a.error.issues[0].message } };
+    if (b.data == null && a.data == null) continue;
+    layouts.push({ bedrooms: b.data ?? null, area_m2: a.data ?? null });
+  }
+  return { layouts };
+}
+
+function toRow(v: z.infer<typeof propertySchema>, layouts: PropertyLayout[]) {
+  const beds = layouts.map((l) => l.bedrooms).filter((n): n is number => n != null);
+  const areas = layouts.map((l) => l.area_m2).filter((n): n is number => n != null);
   return {
     title: v.title,
     code: v.code ?? null,
@@ -44,23 +69,37 @@ function toRow(v: z.infer<typeof propertySchema>) {
     neighborhood: v.neighborhood ?? null,
     city: v.city ?? null,
     price_cents: v.price ? parseMoney(v.price) : null,
-    bedrooms: v.bedrooms ?? null,
-    area_m2: v.area ?? null,
+    guaranteed_cents: v.guaranteed ? parseMoney(v.guaranteed) : null,
+    post_keys_pct: v.postKeys ?? null,
+    layouts,
+    bedrooms: beds.length ? Math.min(...beds) : null,
+    area_m2: areas.length ? Math.min(...areas) : null,
     status: v.status,
     notes: v.notes ?? null,
   };
 }
 
+function parseProperty(formData: FormData) {
+  const parsed = propertySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
+  const layouts = parseLayouts(formData);
+  if ("fieldErrors" in layouts) return layouts;
+  return { row: toRow(parsed.data, layouts.layouts) };
+}
+
+const MISSING_DETAILS = "Falta rodar a atualização do banco de imóveis (quartos, garantido e pós-chaves). Fale com o suporte.";
+
 export async function createProperty(_: FormState, formData: FormData): Promise<FormState> {
   const gate = await requireLeader();
   if ("error" in gate) return gate;
-  const parsed = propertySchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
+  const parsed = parseProperty(formData);
+  if ("fieldErrors" in parsed) return { fieldErrors: parsed.fieldErrors };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("properties").insert({ org_id: gate.org.id, ...toRow(parsed.data) });
+  const { error } = await supabase.from("properties").insert({ org_id: gate.org.id, ...parsed.row });
   if (error) {
     logger.error("property.create", { message: describeError(error), orgId: gate.org.id });
+    if (error.code === "42703" || error.code === "PGRST204") return { error: MISSING_DETAILS };
     return { error: error.code === "42P01" ? "Falta rodar a atualização do banco (imóveis). Fale com o suporte." : "Não foi possível cadastrar o imóvel. Tente de novo." };
   }
   revalidatePath("/imoveis");
@@ -71,12 +110,12 @@ export async function updateProperty(id: string, _: FormState, formData: FormDat
   const gate = await requireLeader();
   if ("error" in gate) return gate;
   if (!z.uuid().safeParse(id).success) return { error: "Imóvel inválido." };
-  const parsed = propertySchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
+  const parsed = parseProperty(formData);
+  if ("fieldErrors" in parsed) return { fieldErrors: parsed.fieldErrors };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("properties").update(toRow(parsed.data)).eq("id", id);
-  if (error) return { error: "Não foi possível salvar. Tente de novo." };
+  const { error } = await supabase.from("properties").update(parsed.row).eq("id", id);
+  if (error) return { error: error.code === "42703" || error.code === "PGRST204" ? MISSING_DETAILS : "Não foi possível salvar. Tente de novo." };
   revalidatePath("/imoveis");
   return { success: "Imóvel atualizado." };
 }
