@@ -13,7 +13,7 @@ import { Funnel, SlotChip, type SlotStatus } from "@/components/live/viz";
 import { REPORT_SELECT, useLiveDay } from "@/lib/live/use-live-day";
 import { emptyTotals, METRICS, sumReports, type MetricKey, type Report, type Totals } from "@/lib/metrics";
 import type { getBrowserClient } from "@/lib/supabase/client";
-import { addDays, formatDate, formatLongDate, slotLabel, slotState, startOfMonth, startOfWeek } from "@/lib/time";
+import { addDays, formatDate, formatLongDate, normalizeSlot, slotLabel, slotPeriodLabel, slotState, startOfMonth, startOfWeek } from "@/lib/time";
 import type { ClientMember } from "@/components/live/types";
 
 const NOTES_MAX = 500;
@@ -45,6 +45,12 @@ export function BrokerToday({ member }: { member: ClientMember }) {
   // Segue o horário sugerido até a pessoa escolher outro.
   const [picked, setPicked] = useState<string | null>(null);
   const slot = picked ?? suggested;
+
+  const goals = usePeriodGoals(supabase, member.id, clock.today);
+  const slotGoals = Object.fromEntries(
+    goals.filter((g) => g.period === "slot" && g.slot && normalizeSlot(g.slot) === normalizeSlot(slot)).map((g) => [g.metric, g.target]),
+  ) as Partial<Totals>;
+  const slotIndex = [...slots].map(normalizeSlot).sort().indexOf(normalizeSlot(slot));
 
   const [statusError, setStatusError] = useState<string | null>(null);
   async function setOnline(value: boolean) {
@@ -134,6 +140,8 @@ export function BrokerToday({ member }: { member: ClientMember }) {
             today={clock.today}
             supabase={supabase}
             existing={live.reportFor(member.id, slot)}
+            goals={slotGoals}
+            periodLabel={slotIndex >= 0 ? slotPeriodLabel([...slots].map(normalizeSlot).sort(), slotIndex) : null}
             onSave={async (values, notes) => {
               const isNew = !live.reportFor(member.id, slot);
               const { data, error } = await supabase
@@ -166,14 +174,36 @@ export function BrokerToday({ member }: { member: ClientMember }) {
               <Funnel totals={totals} />
             </div>
           </Card>
-          <DailyGoals memberId={member.id} today={clock.today} totals={totals} supabase={supabase} />
+          <DailyGoals memberId={member.id} today={clock.today} totals={totals} goals={goals.filter((g) => g.period !== "slot")} supabase={supabase} />
         </div>
       </div>
     </div>
   );
 }
 
-type PeriodGoal = { metric: MetricKey; target: number; period: "week" | "day" };
+type PeriodGoal = { metric: MetricKey; target: number; period: "week" | "day" | "slot"; slot: string | null };
+
+/** Metas por semana, por dia e por horário do corretor no mês de hoje. */
+function usePeriodGoals(supabase: ReturnType<typeof getBrowserClient>, memberId: string, today: string) {
+  const [goals, setGoals] = useState<PeriodGoal[]>([]);
+  const month = startOfMonth(today);
+  useEffect(() => {
+    let alive = true;
+    void supabase
+      .from("goals")
+      .select("metric, target, period, slot")
+      .eq("member_id", memberId)
+      .eq("month", month)
+      .in("period", ["week", "day", "slot"])
+      .then(({ data }) => {
+        if (alive) setGoals((data ?? []) as PeriodGoal[]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [supabase, memberId, month]);
+  return goals;
+}
 
 /**
  * Metas por semana e por dia definidas pela liderança. O dia usa os relatórios
@@ -183,32 +213,24 @@ function DailyGoals({
   memberId,
   today,
   totals,
+  goals,
   supabase,
 }: {
   memberId: string;
   today: string;
   totals: Totals;
+  goals: PeriodGoal[];
   supabase: ReturnType<typeof getBrowserClient>;
 }) {
-  const [goals, setGoals] = useState<PeriodGoal[]>([]);
   // Guardado com a semana a que pertence: na virada para segunda, o da semana passada some.
   const [earlier, setEarlier] = useState<{ week: string; totals: Totals } | null>(null);
-  const month = startOfMonth(today);
   const weekStart = startOfWeek(today);
   const earlierInWeek = earlier?.week === weekStart ? earlier.totals : emptyTotals();
+  const hasWeekly = goals.some((g) => g.period === "week");
 
   useEffect(() => {
     let alive = true;
-    void supabase
-      .from("goals")
-      .select("metric, target, period")
-      .eq("member_id", memberId)
-      .eq("month", month)
-      .in("period", ["week", "day"])
-      .then(({ data }) => {
-        if (alive) setGoals((data ?? []) as PeriodGoal[]);
-      });
-    if (weekStart < today) {
+    if (hasWeekly && weekStart < today) {
       void supabase.rpc("report_totals_by_member", { p_from: weekStart, p_to: addDays(today, -1) }).then(({ data }) => {
         const row = ((data ?? []) as Record<string, unknown>[]).find((r) => r.member_id === memberId);
         if (alive) setEarlier({ week: weekStart, totals: Object.fromEntries(METRICS.map((m) => [m.key, Number(row?.[m.key] ?? 0)])) as Totals });
@@ -217,7 +239,7 @@ function DailyGoals({
     return () => {
       alive = false;
     };
-  }, [supabase, memberId, month, weekStart, today]);
+  }, [supabase, memberId, weekStart, today, hasWeekly]);
 
   if (goals.length === 0) return null;
   return (
@@ -306,6 +328,8 @@ function ReportForm({
   today,
   supabase,
   existing,
+  goals,
+  periodLabel,
   onSave,
 }: {
   slot: string;
@@ -313,8 +337,12 @@ function ReportForm({
   today: string;
   supabase: ReturnType<typeof getBrowserClient>;
   existing?: Report;
+  /** Meta deste horário por tarefa (definida pela liderança). */
+  goals: Partial<Totals>;
+  periodLabel: string | null;
   onSave: (values: Totals, notes: string) => Promise<string | null>;
 }) {
+  const goalKeys = METRICS.filter((m) => (goals[m.key] ?? 0) > 0).map((m) => m.key);
   const [values, setValues] = useState<Totals>(() => {
     if (!existing) return emptyTotals();
     return Object.fromEntries(METRICS.map((m) => [m.key, existing[m.key]])) as Totals;
@@ -385,7 +413,12 @@ function ReportForm({
     <Card>
       <CardHeader
         title={`Relatório das ${slotLabel(slot)}`}
-        description={existing ? "Já entregue. Você pode corrigir os números e reenviar." : "O que você fez desde o último relatório"}
+        description={
+          (existing ? "Já entregue. Você pode corrigir os números e reenviar." : "O que você fez desde o último relatório") +
+          (goalKeys.length
+            ? ` · Meta ${periodLabel ? `(${periodLabel.toLowerCase()})` : "do horário"}: ${goalKeys.filter((k) => values[k] >= goals[k]!).length} de ${goalKeys.length} batidas`
+            : "")
+        }
         action={
           draftState === "none" ? undefined : (
             <span className={clsx("text-[13px] whitespace-nowrap", draftState === "error" ? "text-danger" : "text-muted")}>
@@ -437,8 +470,13 @@ function ReportForm({
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {METRICS.map((m) => (
             <div key={m.key} className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 py-1.5 pr-1.5 pl-4">
-              <label htmlFor={`m-${m.key}`} className="text-sm font-medium text-ink-2">
+              <label htmlFor={`m-${m.key}`} className="flex flex-col text-sm font-medium text-ink-2">
                 {m.label}
+                {goals[m.key] ? (
+                  <span className={clsx("text-xs font-normal", values[m.key] >= goals[m.key]! ? "text-brand-text" : "text-muted")}>
+                    {values[m.key] >= goals[m.key]! ? `Meta batida (${goals[m.key]})` : `Meta: ${goals[m.key]} · faltam ${goals[m.key]! - values[m.key]}`}
+                  </span>
+                ) : null}
               </label>
               <div className="flex items-center gap-1">
                 <button

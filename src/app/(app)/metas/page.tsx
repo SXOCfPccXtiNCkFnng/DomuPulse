@@ -9,9 +9,9 @@ import { GOAL_METRICS, projection, type GoalMetric, type GoalPeriod } from "@/li
 import { formatMoney, formatNumber, METRICS } from "@/lib/metrics";
 import { endOfMonth } from "@/lib/period";
 import { createClient } from "@/lib/supabase/server";
-import { addDays, formatDate, startOfMonth, startOfWeek, todayIn } from "@/lib/time";
+import { addDays, formatDate, normalizeSlot, slotPeriodLabel, startOfMonth, startOfWeek, todayIn } from "@/lib/time";
 import { deleteCommission } from "./actions";
-import { BulkGoalsForm, CommissionForm, GoalRowForm } from "./forms";
+import { BulkGoalsForm, CommissionForm, GoalRowForm, type SlotGoalValues } from "./forms";
 
 export const metadata: Metadata = { title: "Metas" };
 
@@ -35,12 +35,14 @@ export default async function MetasPage(props: PageProps<"/metas">) {
   const supabase = await createClient();
   const isCurrent = month === startOfMonth(today);
   const weekStart = startOfWeek(today);
-  const [{ data: brokers }, { data: goals }, { data: totals }, { data: todayTotals }, { data: weekTotals }, { data: commissions }] = await Promise.all([
+  const slots = me.org.reportSlots.map(normalizeSlot).sort();
+  const [{ data: brokers }, { data: goals }, { data: totals }, { data: todayTotals }, { data: weekTotals }, { data: todayReports }, { data: commissions }] = await Promise.all([
     supabase.from("members").select("id, full_name:display_name, team_id").eq("role", "broker").eq("active", true).order("display_name"),
-    supabase.from("goals").select("member_id, metric, target, period").eq("month", month),
+    supabase.from("goals").select("member_id, metric, target, period, slot").eq("month", month),
     supabase.rpc("report_totals_by_member", { p_from: month, p_to: to }),
     isCurrent ? supabase.rpc("report_totals_by_member", { p_from: today, p_to: today }) : Promise.resolve({ data: [] }),
     isCurrent ? supabase.rpc("report_totals_by_member", { p_from: weekStart, p_to: today }) : Promise.resolve({ data: [] }),
+    isCurrent ? supabase.from("reports").select(`member_id, report_slot, ${GOAL_METRICS.join(", ")}`).eq("report_date", today) : Promise.resolve({ data: [] }),
     supabase
       .from("commissions")
       .select("id, member_id, received_on, amount_cents, description")
@@ -61,6 +63,15 @@ export default async function MetasPage(props: PageProps<"/metas">) {
   };
   const goalValues = (memberId: string, period: GoalPeriod) =>
     Object.fromEntries(GOAL_METRICS.map((m) => [m, goalOf(memberId, m, period) ?? 0])) as Record<GoalMetric, number>;
+  const slotGoalOf = (memberId: string, slot: string, metric: GoalMetric) =>
+    (goals ?? []).find((g) => g.member_id === memberId && g.metric === metric && g.period === "slot" && normalizeSlot(String(g.slot)) === slot)
+      ?.target as number | undefined;
+  const slotActual = (memberId: string, slot: string, metric: GoalMetric) =>
+    Number(
+      ((todayReports ?? []) as unknown as Record<string, unknown>[]).find((r) => r.member_id === memberId && normalizeSlot(String(r.report_slot)) === slot)?.[metric] ?? 0,
+    );
+  const slotValues = (memberId: string): SlotGoalValues =>
+    Object.fromEntries(slots.map((s) => [s, Object.fromEntries(GOAL_METRICS.map((m) => [m, slotGoalOf(memberId, s, m) ?? 0]))])) as SlotGoalValues;
   const nameOf = new Map((brokers ?? []).map((b) => [b.id, b.full_name]));
   const people = leader ? (brokers ?? []) : (brokers ?? []).filter((b) => b.id === me.id);
   const commissionTotal = (commissions ?? []).reduce((s, c) => s + Number(c.amount_cents), 0);
@@ -93,9 +104,9 @@ export default async function MetasPage(props: PageProps<"/metas">) {
         <Card>
           <CardHeader
             title="Mesma meta para todos"
-            description={`Aplica a ${people.length} corretores ativos. Zero apaga a meta. As metas por semana (segunda a domingo) e por dia valem para todo o mês.`}
+            description={`Aplica a ${people.length} corretores ativos. Zero apaga a meta. As metas por semana (segunda a domingo), por dia e por horário valem para todo o mês.`}
           />
-          <BulkGoalsForm month={month} memberIds={people.map((p) => p.id)} />
+          <BulkGoalsForm month={month} memberIds={people.map((p) => p.id)} slots={slots} />
         </Card>
       ) : null}
 
@@ -113,6 +124,9 @@ export default async function MetasPage(props: PageProps<"/metas">) {
               week: GOAL_METRICS.filter((m) => goalOf(p.id, m, "week") !== undefined),
               day: GOAL_METRICS.filter((m) => goalOf(p.id, m, "day") !== undefined),
             };
+            const slotsWithGoals = slots
+              .map((s, i) => ({ slot: s, index: i, metrics: GOAL_METRICS.filter((m) => slotGoalOf(p.id, s, m) !== undefined) }))
+              .filter((s) => s.metrics.length > 0);
             return (
               <li key={p.id} className="flex flex-col gap-4 px-5 py-4 sm:px-6 lg:flex-row lg:flex-wrap lg:items-center">
                 <span className="flex w-56 shrink-0 items-center gap-2.5">
@@ -120,7 +134,7 @@ export default async function MetasPage(props: PageProps<"/metas">) {
                   <span className="truncate font-medium">{p.full_name}</span>
                 </span>
                 <div className="flex min-w-0 flex-1 flex-col gap-4">
-                  {withGoals.length === 0 && withPeriod.week.length === 0 && withPeriod.day.length === 0 ? (
+                  {withGoals.length === 0 && withPeriod.week.length === 0 && withPeriod.day.length === 0 && slotsWithGoals.length === 0 ? (
                     <p className="text-sm text-muted">Sem metas neste mês.{leader ? " Defina em “Editar metas”." : ""}</p>
                   ) : null}
                   {withGoals.length > 0 ? (
@@ -165,8 +179,45 @@ export default async function MetasPage(props: PageProps<"/metas">) {
                       </div>
                     ) : null,
                   )}
+                  {slotsWithGoals.length > 0 ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">{isCurrent ? "Meta por horário · hoje" : "Meta por horário"}</p>
+                      <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {slotsWithGoals.map(({ slot, index, metrics }) => (
+                          <div key={slot} className="flex flex-col gap-2.5">
+                            <p className="text-sm font-medium">{slotPeriodLabel(slots, index)}</p>
+                            {metrics.map((metric) =>
+                              isCurrent ? (
+                                <Progress
+                                  key={metric}
+                                  label={LABEL[metric]}
+                                  actual={slotActual(p.id, slot, metric)}
+                                  goal={slotGoalOf(p.id, slot, metric)}
+                                  projected={0}
+                                  showProjection={false}
+                                />
+                              ) : (
+                                <p key={metric} className="flex justify-between gap-2 text-sm">
+                                  <span className="text-ink-2">{LABEL[metric]}</span>
+                                  <span className="tabular-nums">{formatNumber(slotGoalOf(p.id, slot, metric) ?? 0)}</span>
+                                </p>
+                              ),
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-                {leader ? <GoalRowForm month={month} memberId={p.id} values={{ month: goalValues(p.id, "month"), week: goalValues(p.id, "week"), day: goalValues(p.id, "day") }} /> : null}
+                {leader ? (
+                  <GoalRowForm
+                    month={month}
+                    memberId={p.id}
+                    values={{ month: goalValues(p.id, "month"), week: goalValues(p.id, "week"), day: goalValues(p.id, "day") }}
+                    slots={slots}
+                    slotValues={slotValues(p.id)}
+                  />
+                ) : null}
               </li>
             );
           })}

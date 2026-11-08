@@ -39,6 +39,11 @@ export function slotLabel(slot: string): string {
   return m === "00" ? `${Number(h)}h` : `${Number(h)}h${m}`;
 }
 
+/** Período que o relatório de um horário cobre: "Até 13h", "13h às 16h"... (horários em ordem). */
+export function slotPeriodLabel(slots: string[], index: number): string {
+  return index === 0 ? `Até ${slotLabel(slots[0])}` : `${slotLabel(slots[index - 1])} às ${slotLabel(slots[index])}`;
+}
+
 export function addDays(date: string, amount: number): string {
   const d = new Date(`${date}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + amount);

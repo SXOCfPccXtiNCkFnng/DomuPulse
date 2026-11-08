@@ -21,6 +21,9 @@ export const GOAL_PERIODS = ["month", "week", "day"] as const satisfies readonly
 /** Nome do campo no formulário de metas. */
 export const goalField = (period: GoalPeriod, metric: GoalMetric) => (period === "month" ? metric : `${period}_${metric}`);
 
+/** Campo da meta por horário de relatório ("13:00" -> "slot_1300_leads"). */
+export const slotGoalField = (slot: string, metric: GoalMetric) => `slot_${slot.slice(0, 5).replace(":", "")}_${metric}`;
+
 export function daysInMonth(month: string) {
   const [y, m] = month.split("-").map(Number);
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
