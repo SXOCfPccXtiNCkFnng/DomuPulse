@@ -35,7 +35,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-bg/85 px-4 backdrop-blur-xl lg:hidden print:hidden">
+        <header className="sticky top-0 z-30 flex h-[calc(3.5rem_+_env(safe-area-inset-top))] items-center justify-between border-b border-line bg-bg/85 px-4 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden print:hidden">
           <Link href="/painel" aria-label="Painel">
             <BrandMark className="size-8" />
           </Link>
