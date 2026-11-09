@@ -22,6 +22,8 @@
   --danger-soft: #fde8e8;
   --warn: #9a5b00;
   --warn-soft: #fdf1dc;
+  --ok: #1f7a3d;
+  --ok-soft: #e7f6ec;
   --shadow: 0 1px 2px rgb(11 27 54 / 0.04), 0 8px 24px -12px rgb(11 27 54 / 0.14);
   color-scheme: light;
 }
@@ -44,6 +46,8 @@
   --danger-soft: #2b0f16;
   --warn: #ffb547;
   --warn-soft: #2a1f0c;
+  --ok: #4ade80;
+  --ok-soft: #10261a;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px -16px rgb(0 0 0 / 0.7);
   color-scheme: dark;
 }
@@ -107,6 +111,8 @@
   --color-danger-soft: var(--danger-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
   --shadow-card: var(--shadow);
   --font-sans: var(--font-inter);
   --font-display: var(--font-bricolage);

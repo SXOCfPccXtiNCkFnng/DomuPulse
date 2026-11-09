@@ -146,8 +146,10 @@ export function NotificationBell({ userId, align = "left" }: { userId: string; a
           role="dialog"
           aria-label="Avisos"
           className={clsx(
-            "absolute top-11 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-line bg-surface shadow-card animate-rise",
-            align === "left" ? "left-0" : "right-0",
+            "z-50 overflow-hidden rounded-2xl border border-line bg-surface shadow-card animate-rise",
+            // Mobile: caixa fixa ocupando a largura da tela (não corta). Desktop: ancorada no sino.
+            "fixed inset-x-2 top-14 sm:absolute sm:inset-x-auto sm:top-11 sm:w-[min(22rem,calc(100vw-2rem))]",
+            align === "left" ? "sm:left-0" : "sm:right-0",
           )}
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-3">

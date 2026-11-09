@@ -227,12 +227,26 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                         </th>
                       </tr>
                     ) : null}
-                    {list.map((r) => (
+                    {list.map((r) => {
+                      // Verde: em dia com o relatório do horário atual. Vermelho: tem algum atrasado.
+                      const hasLate = r.statuses.some((s) => s === "late");
+                      const curDelivered = currentIndex >= 0 && r.statuses[currentIndex] === "delivered";
+                      const tint = hasLate ? "danger" : curDelivered ? "ok" : null;
+                      return (
                       <tr
                         key={`${r.member.id}-${live.pulse?.memberId === r.member.id ? live.pulse.at : 0}`}
-                        className={clsx(live.pulse?.memberId === r.member.id && "animate-flash")}
+                        className={clsx(
+                          live.pulse?.memberId === r.member.id && "animate-flash",
+                          tint === "ok" && "bg-ok-soft",
+                          tint === "danger" && "bg-danger-soft",
+                        )}
                       >
-                        <td className="sticky left-0 border-t border-line bg-surface px-5 py-2.5 sm:px-6">
+                        <td
+                          className={clsx(
+                            "sticky left-0 border-t border-line px-5 py-2.5 sm:px-6",
+                            tint === "ok" ? "bg-ok-soft" : tint === "danger" ? "bg-danger-soft" : "bg-surface",
+                          )}
+                        >
                           <Link
                             href={`/relatorios?periodo=mes&corretor=${r.member.id}`}
                             title={`Ver o relatório de ${r.member.full_name}`}
@@ -264,7 +278,8 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                           {r.totals.sales}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 ))
               )}
