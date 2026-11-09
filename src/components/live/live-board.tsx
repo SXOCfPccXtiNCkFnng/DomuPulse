@@ -228,10 +228,10 @@ export function LiveBoard({ member }: { member: ClientMember }) {
                       </tr>
                     ) : null}
                     {list.map((r) => {
-                      // Verde: em dia com o relatório do horário atual. Vermelho: tem algum atrasado.
+                      // Verde: entregou algum relatório e não tem nenhum atrasado. Vermelho: tem atrasado.
                       const hasLate = r.statuses.some((s) => s === "late");
-                      const curDelivered = currentIndex >= 0 && r.statuses[currentIndex] === "delivered";
-                      const tint = hasLate ? "danger" : curDelivered ? "ok" : null;
+                      const anyDelivered = r.statuses.some((s) => s === "delivered");
+                      const tint = hasLate ? "danger" : anyDelivered ? "ok" : null;
                       return (
                       <tr
                         key={`${r.member.id}-${live.pulse?.memberId === r.member.id ? live.pulse.at : 0}`}
