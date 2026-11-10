@@ -2,7 +2,7 @@ import clsx from "clsx";
 import { Bell, Building2, CreditCard, Download, Lock, Palette, ShieldCheck, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ThemeSwitcher } from "@/components/theme";
+import { AccentPicker, ThemeSwitcher } from "@/components/theme";
 import { buttonClass } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
 import { requireActivatedMember, orgCanWrite, roleLabel, type OrgStatus } from "@/lib/auth";
@@ -124,9 +124,18 @@ export default async function ContaPage(props: PageProps<"/conta">) {
       {tab === "aparelho" ? (
         <div className="grid items-start gap-5 xl:grid-cols-2">
           <Card>
-            <CardHeader title="Aparência" description="Fica salvo neste aparelho" />
-            <div className="p-5 sm:p-6">
-              <ThemeSwitcher className="max-w-sm" />
+            <CardHeader title="Aparência" description="Personalize o Pulse. Fica salvo neste aparelho." />
+            <div className="flex flex-col gap-5 p-5 sm:p-6">
+              <div className="flex flex-col gap-2">
+                <p className="text-[13px] font-medium text-ink-2">Modo</p>
+                <ThemeSwitcher withSystem className="max-w-md" />
+                <p className="text-xs text-muted">“Dispositivo” acompanha o claro ou escuro do celular ou computador.</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-[13px] font-medium text-ink-2">Cor do site</p>
+                <AccentPicker />
+                <p className="text-xs text-muted">A cor muda botões, destaques e o tom das telas. O conta-gotas escolhe qualquer cor.</p>
+              </div>
             </div>
           </Card>
           <Card>

@@ -52,6 +52,32 @@
   color-scheme: dark;
 }
 
+/* Cor personalizada (Conta > Aparência): --accent vem do script do tema. A
+   cor principal muda botões, destaques e dá um leve tom ao fundo, às
+   superfícies e às linhas, como os temas do Chrome. */
+:root[data-accent] {
+  --brand: var(--accent);
+  --brand-ink: var(--accent-ink, #ffffff);
+  --brand-text: color-mix(in oklab, var(--accent) 78%, black);
+  --brand-soft: color-mix(in oklab, var(--accent) 12%, white);
+  --bg: color-mix(in oklab, var(--accent) 6%, #f6f7fa);
+  --surface-2: color-mix(in oklab, var(--accent) 8%, #f3f4f7);
+  --surface-3: color-mix(in oklab, var(--accent) 14%, #e7e9ee);
+  --line: color-mix(in oklab, var(--accent) 10%, #e4e6eb);
+  --line-strong: color-mix(in oklab, var(--accent) 18%, #cfd3db);
+}
+
+:root[data-theme="dark"][data-accent] {
+  --brand-text: color-mix(in oklab, var(--accent) 55%, white);
+  --brand-soft: color-mix(in oklab, var(--accent) 24%, #0b0d12);
+  --bg: color-mix(in oklab, var(--accent) 6%, #06070a);
+  --surface: color-mix(in oklab, var(--accent) 10%, #101216);
+  --surface-2: color-mix(in oklab, var(--accent) 14%, #15181d);
+  --surface-3: color-mix(in oklab, var(--accent) 20%, #1c2027);
+  --line: color-mix(in oklab, var(--accent) 16%, #1a1d23);
+  --line-strong: color-mix(in oklab, var(--accent) 26%, #2a2f38);
+}
+
 /* Página de vendas: cantos retos e as mesmas cores do tema escolhido. */
 .landing {
   background: var(--bg);
@@ -73,7 +99,9 @@
 @media print {
   /* Mesma especificidade da regra do tema escuro, e vem depois: vence. */
   :root,
-  :root[data-theme="dark"] {
+  :root[data-theme="dark"],
+  :root[data-accent],
+  :root[data-theme="dark"][data-accent] {
     --bg: #ffffff;
     --surface: #ffffff;
     --surface-2: #f4f6fb;

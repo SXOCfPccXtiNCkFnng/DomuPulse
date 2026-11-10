@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme-script";
 import { ServiceWorkerRegister } from "@/components/sw-register";
+import { SystemThemeSync } from "@/components/theme";
 import "./globals.css";
 
 const inter = Inter({
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full flex flex-col">
         <ServiceWorkerRegister />
+        <SystemThemeSync />
         {children}
       </body>
     </html>
