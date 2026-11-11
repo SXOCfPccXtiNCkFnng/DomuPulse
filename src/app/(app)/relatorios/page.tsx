@@ -12,6 +12,7 @@ import { conversion, formatNumber, METRICS } from "@/lib/metrics";
 import { PERIODS, periodQuery, previousPeriod, resolvePeriod } from "@/lib/period";
 import { loadReportData } from "@/lib/report-data";
 import { ExportButton } from "./export-button";
+import { ReportSummary } from "./report-summary";
 
 /** Variação percentual frente ao mesmo número no período anterior. */
 function TrendBadge({ current, previous, emphasis = false }: { current: number; previous: number; emphasis?: boolean }) {
@@ -153,6 +154,19 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
       ) : null}
 
       {view.error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{view.error}</p> : null}
+
+      <ReportSummary
+        title={period.label}
+        items={[
+          { label: "Leads", value: t.leads },
+          { label: "Interações", value: t.interactions },
+          { label: "Negociações", value: t.negotiations },
+          { label: "Agendamentos", value: t.appointments },
+          { label: "Visitas", value: t.visits },
+          { label: "Propostas", value: t.proposals },
+          { label: "Vendas", value: t.sales },
+        ]}
+      />
 
       <section className="flex flex-col gap-2">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
