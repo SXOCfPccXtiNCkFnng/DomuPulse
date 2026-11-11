@@ -143,7 +143,7 @@ export function SimuladorBoard({ properties, config }: { properties: PropOption[
                 </div>
                 {incomeResult.limitedBy === "down" ? (
                   <p className="mx-5 mb-5 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn sm:mx-6">
-                    Limitado pela <strong>entrada</strong>: com {money(incomeResult.down)} de entrada e financiamento de até {Math.round(config.maxLtv * 100)}%, o imóvel não passa de {money(incomeResult.maxProperty)}. Com mais entrada esse valor sobe — a renda ainda comportaria parcelas de até {money(incomeResult.maxInstallment)}/mês.
+                    Limitado pela <strong>entrada</strong>: com {money(incomeResult.down)} de entrada e financiamento de até {Math.round(config.maxLtv * 100)}%, o imóvel não passa de {money(incomeResult.maxProperty)}. Com mais entrada esse valor sobe. A renda ainda comportaria parcelas de até {money(incomeResult.maxInstallment)}/mês.
                   </p>
                 ) : null}
                 {incomeResult.band ? (
