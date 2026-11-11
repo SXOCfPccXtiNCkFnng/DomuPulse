@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { siteUrl } from "@/lib/email";
+import { sendPasswordResetEmail } from "@/lib/email-templates";
 import { normalizeConfig } from "@/lib/financing";
 import { getSignupAlertEmails } from "@/lib/interno";
 import { describeError } from "@/lib/logger";
@@ -284,6 +286,26 @@ export async function setFinancingConfig(input: unknown): Promise<{ error: strin
   await audit(userId, null, "set_financing_config", {});
   revalidatePath("/interno");
   revalidatePath("/simulador");
+  return { ok: true };
+}
+
+/** Manda para a pessoa o e-mail de redefinição de senha (link para ela criar uma nova). */
+export async function sendPasswordResetFor(emailInput: string): Promise<{ error: string } | { ok: true }> {
+  const { userId: actor } = await requirePlatformAdmin();
+  const email = String(emailInput ?? "").trim().toLowerCase();
+  if (!emailSchema.safeParse(email).success) return { error: "E-mail inválido." };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email });
+  const hash = data?.properties?.hashed_token;
+  if (error || !hash || !data?.user) return { error: "Não foi possível gerar o link. Confira o e-mail." };
+
+  const link = siteUrl(`/auth/confirm?token_hash=${encodeURIComponent(hash)}&type=recovery`);
+  const result = await sendPasswordResetEmail({ to: email, link });
+  if (!result.ok) return { error: result.error ?? "Não foi possível enviar o e-mail." };
+
+  await audit(actor, null, "send_password_reset", { email });
+  revalidatePath("/interno");
   return { ok: true };
 }
 

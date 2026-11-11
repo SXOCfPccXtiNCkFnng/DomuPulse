@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import type { FinancingConfig } from "@/lib/financing";
 import type { FormState } from "@/lib/validation";
-import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, setFinancingConfig, setMonthlyPrice } from "./actions";
+import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, sendPasswordResetFor, setFinancingConfig, setMonthlyPrice } from "./actions";
 
 // Ações que mexem no acesso de um cliente pedem um segundo clique.
 export function ConfirmButton({ label, confirmLabel, danger = false }: { label: string; confirmLabel: string; danger?: boolean }) {
@@ -204,6 +204,7 @@ export function MfaResetCard() {
   const [note, setNote] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
   const [resetting, startReset] = useTransition();
+  const [sending, startSend] = useTransition();
 
   const search = (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,6 +230,16 @@ export function MfaResetCard() {
           : "Essa conta já não tinha verificação em duas etapas.",
       );
       setResult((cur) => (cur && cur !== "none" ? { ...cur, factors: [] } : cur));
+    });
+  };
+
+  const sendReset = (toEmail: string) => {
+    setError(null);
+    setNote(null);
+    startSend(async () => {
+      const r = await sendPasswordResetFor(toEmail);
+      if ("error" in r) return setError(r.error);
+      setNote(`E-mail de redefinição de senha enviado para ${toEmail}.`);
     });
   };
 
@@ -282,6 +293,13 @@ export function MfaResetCard() {
           ) : (
             <p className="text-sm text-muted">Sem verificação em duas etapas ativa nesta conta.</p>
           )}
+
+          <div className="border-t border-line pt-3">
+            <p className="mb-2 text-xs text-muted">A pessoa recebe um link por e-mail para criar uma nova senha (vale 1 hora).</p>
+            <Button variant="secondary" disabled={sending} onClick={() => sendReset(result.email)}>
+              {sending ? "Enviando..." : "Enviar e-mail para redefinir senha"}
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>
