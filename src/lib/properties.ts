@@ -101,7 +101,7 @@ export function areaLabel(layouts: PropertyLayout[]) {
 /** 30 -> "30%", 12.5 -> "12,5%". */
 export const formatPct = (n: number) => `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
-export const PROPERTY_KINDS = ["Apartamento", "Casa", "Casa em condomínio", "Terreno", "Sala comercial", "Loja", "Galpão", "Chácara", "Outro"];
+export const PROPERTY_KINDS = ["Apartamento", "Studio", "Studio 24 m²", "1 dormitório", "1 dormitório + office", "2 dormitórios", "3 dormitórios", "Casa", "Casa em condomínio", "Terreno", "Sala comercial", "Loja", "Galpão", "Chácara", "Outro"];
 
 export const PROPERTY_STATUS: Record<PropertyStatus, { label: string; tone: "neutral" | "brand" | "warn" | "danger" }> = {
   available: { label: "Disponível", tone: "brand" },
@@ -112,9 +112,10 @@ export const PROPERTY_STATUS: Record<PropertyStatus, { label: string; tone: "neu
 
 export const DEAL_LABEL: Record<PropertyDeal, string> = { venda: "Venda", locacao: "Locação" };
 
-/** Texto que vai no "interesse" do cliente: "Apto Jardins (REF 102) · Centro". */
-export function propertyLabel(p: Pick<Property, "title" | "code" | "neighborhood">) {
+/** Texto que vai no "interesse" do cliente: "Residencial Jardins – 2 dormitórios (REF 102) · Centro". */
+export function propertyLabel(p: Pick<Property, "title" | "code" | "neighborhood"> & { kind?: string | null }) {
+  const kind = p.kind ? ` – ${p.kind}` : "";
   const ref = p.code ? ` (${p.code})` : "";
   const place = p.neighborhood ? ` · ${p.neighborhood}` : "";
-  return `${p.title}${ref}${place}`.slice(0, 200);
+  return `${p.title}${kind}${ref}${place}`.slice(0, 200);
 }

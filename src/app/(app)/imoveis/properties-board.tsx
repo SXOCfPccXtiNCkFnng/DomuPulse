@@ -628,7 +628,7 @@ function PropertyDialog({ property: p, withPricing, onClose }: { property?: Prop
           <Field label="Tipo" error={state.fieldErrors?.kind}>
             <Select name="kind" defaultValue={p?.kind ?? ""}>
               <option value="">Não informado</option>
-              {PROPERTY_KINDS.map((k) => (
+              {(p?.kind && !PROPERTY_KINDS.includes(p.kind) ? [p.kind, ...PROPERTY_KINDS] : PROPERTY_KINDS).map((k) => (
                 <option key={k} value={k}>
                   {k}
                 </option>

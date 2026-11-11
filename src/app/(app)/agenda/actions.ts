@@ -33,9 +33,9 @@ export async function scheduleVisit(input: {
   // Imóvel escolhido vira o imóvel de interesse do cliente (o RLS garante que é da mesma empresa).
   let propertyLink: { property_id: string; interest: string } | null = null;
   if (input.propertyId) {
-    const { data: p } = await supabase.from("properties").select("id, title, code, neighborhood").eq("id", input.propertyId).maybeSingle();
+    const { data: p } = await supabase.from("properties").select("id, title, code, kind, neighborhood").eq("id", input.propertyId).maybeSingle();
     if (!p) return { error: "Imóvel não encontrado." };
-    propertyLink = { property_id: p.id as string, interest: propertyLabel(p as Pick<Property, "title" | "code" | "neighborhood">) };
+    propertyLink = { property_id: p.id as string, interest: propertyLabel(p as Pick<Property, "title" | "code" | "kind" | "neighborhood">) };
   }
 
   if (clientId) {
@@ -152,9 +152,9 @@ export async function updateVisit(
     if (!clientId) return { error: "Esta visita não está ligada a um cliente, então não dá para vincular o imóvel." };
     let link: { property_id: string | null; interest?: string } = { property_id: null };
     if (input.propertyId) {
-      const { data: p } = await supabase.from("properties").select("id, title, code, neighborhood").eq("id", input.propertyId).maybeSingle();
+      const { data: p } = await supabase.from("properties").select("id, title, code, kind, neighborhood").eq("id", input.propertyId).maybeSingle();
       if (!p) return { error: "Imóvel não encontrado." };
-      link = { property_id: p.id as string, interest: propertyLabel(p as Pick<Property, "title" | "code" | "neighborhood">) };
+      link = { property_id: p.id as string, interest: propertyLabel(p as Pick<Property, "title" | "code" | "kind" | "neighborhood">) };
     }
     const { error } = await supabase.from("clients").update(link).eq("id", clientId);
     if (error) return { error: "Não foi possível vincular o imóvel." };

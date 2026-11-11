@@ -27,7 +27,7 @@ type Appointment = {
 };
 
 type ClientOption = { id: string; member_id: string; name: string; phone: string | null; stage: string };
-type PropertyOption = Pick<Property, "id" | "title" | "code" | "neighborhood" | "status">;
+type PropertyOption = Pick<Property, "id" | "title" | "code" | "kind" | "neighborhood" | "status">;
 
 const STATUS: Record<Status, { label: string; tone: "neutral" | "brand" | "danger" | "warn" }> = {
   scheduled: { label: "Agendada", tone: "neutral" },
@@ -73,7 +73,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
       supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("role", "broker").order("display_name"),
       supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
       // Sem a tabela de imóveis (migração ainda não rodada), o campo só não aparece.
-      supabase.from("properties").select("id, title, code, neighborhood, status").in("status", ["available", "reserved"]).order("title"),
+      supabase.from("properties").select("id, title, code, kind, neighborhood, status").in("status", ["available", "reserved"]).order("title"),
       supabase.from("clients").select("id, property_id").not("property_id", "is", null),
     ]);
     const clientProperty: Record<string, string> = {};
