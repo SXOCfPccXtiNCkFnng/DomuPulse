@@ -3,8 +3,9 @@
 import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
+import type { FinancingConfig } from "@/lib/financing";
 import type { FormState } from "@/lib/validation";
-import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, setMonthlyPrice } from "./actions";
+import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, setFinancingConfig, setMonthlyPrice } from "./actions";
 
 // Ações que mexem no acesso de um cliente pedem um segundo clique.
 export function ConfirmButton({ label, confirmLabel, danger = false }: { label: string; confirmLabel: string; danger?: boolean }) {
@@ -283,6 +284,89 @@ export function MfaResetCard() {
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const asPct = (n: number) => (n * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+const toDec = (s: string) => Number(String(s).replace(",", ".")) / 100;
+const toInt = (s: string) => Number(String(s).replace(/\D/g, ""));
+
+/** Editor das taxas do simulador: juros, 30%, LTV, prazo e faixas do MCMV. */
+export function FinancingForm({ config }: { config: FinancingConfig }) {
+  const [annualRate, setAnnualRate] = useState(asPct(config.annualRate));
+  const [commit, setCommit] = useState(asPct(config.maxIncomeCommit));
+  const [ltv, setLtv] = useState(asPct(config.maxLtv));
+  const [term, setTerm] = useState(String(config.maxTermMonths));
+  const [bands, setBands] = useState(
+    config.mcmvBands.map((b) => ({ name: b.name, incomeMax: String(b.incomeMax), annualRate: asPct(b.annualRate), propertyCap: String(b.propertyCap) })),
+  );
+  const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
+  const [pending, start] = useTransition();
+
+  const setBand = (i: number, key: "name" | "incomeMax" | "annualRate" | "propertyCap", val: string) =>
+    setBands((bs) => bs.map((b, j) => (j === i ? { ...b, [key]: val } : b)));
+
+  const save = () =>
+    start(async () => {
+      setMessage(null);
+      const payload: FinancingConfig = {
+        annualRate: toDec(annualRate),
+        maxIncomeCommit: toDec(commit),
+        maxLtv: toDec(ltv),
+        maxTermMonths: toInt(term),
+        mcmvBands: bands.map((b) => ({
+          name: b.name.trim() || "Faixa",
+          incomeMax: toInt(b.incomeMax),
+          annualRate: toDec(b.annualRate),
+          propertyCap: toInt(b.propertyCap),
+        })),
+      };
+      const r = await setFinancingConfig(payload);
+      setMessage("error" in r ? { tone: "error", text: r.error } : { tone: "success", text: "Taxas do simulador atualizadas." });
+    });
+
+  return (
+    <div className="flex flex-col gap-4 p-5 sm:p-6">
+      {message ? <FormMessage tone={message.tone}>{message.text}</FormMessage> : null}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Juros SBPE (% a.a.)">
+          <Input value={annualRate} onChange={(e) => setAnnualRate(e.target.value)} inputMode="decimal" />
+        </Field>
+        <Field label="Prazo máximo (meses)">
+          <Input value={term} onChange={(e) => setTerm(e.target.value)} inputMode="numeric" />
+        </Field>
+        <Field label="Parcela máx. da renda (%)">
+          <Input value={commit} onChange={(e) => setCommit(e.target.value)} inputMode="decimal" />
+        </Field>
+        <Field label="Financia até (% do imóvel)">
+          <Input value={ltv} onChange={(e) => setLtv(e.target.value)} inputMode="decimal" />
+        </Field>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted">Faixas do Minha Casa Minha Vida</p>
+        {bands.map((b, i) => (
+          <div key={i} className="grid grid-cols-2 gap-2 rounded-xl border border-line p-3 sm:grid-cols-4">
+            <Field label="Nome">
+              <Input value={b.name} onChange={(e) => setBand(i, "name", e.target.value)} maxLength={40} />
+            </Field>
+            <Field label="Renda até (R$)">
+              <Input value={b.incomeMax} onChange={(e) => setBand(i, "incomeMax", e.target.value)} inputMode="numeric" />
+            </Field>
+            <Field label="Juros (% a.a.)">
+              <Input value={b.annualRate} onChange={(e) => setBand(i, "annualRate", e.target.value)} inputMode="decimal" />
+            </Field>
+            <Field label="Teto imóvel (R$)">
+              <Input value={b.propertyCap} onChange={(e) => setBand(i, "propertyCap", e.target.value)} inputMode="numeric" />
+            </Field>
+          </div>
+        ))}
+      </div>
+
+      <Button onClick={save} disabled={pending} className="self-start">
+        {pending ? "Salvando..." : "Salvar taxas"}
+      </Button>
     </div>
   );
 }

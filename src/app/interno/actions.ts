@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { normalizeConfig } from "@/lib/financing";
 import { getSignupAlertEmails } from "@/lib/interno";
 import { describeError } from "@/lib/logger";
 import { clearRecoveryCodes } from "@/lib/mfa-recovery";
@@ -268,5 +269,21 @@ export async function resetMfa(userId: string): Promise<{ error: string } | { ok
   await audit(actor, null, "reset_mfa", { targetUserId: userId, email: data.user.email ?? null, removed });
   revalidatePath("/interno");
   return { ok: true, removed };
+}
+
+/** Salva os parâmetros do simulador de financiamento (juros, 30%, LTV, faixas do MCMV). */
+export async function setFinancingConfig(input: unknown): Promise<{ error: string } | { ok: true }> {
+  const { userId } = await requirePlatformAdmin();
+  const config = normalizeConfig(input);
+  if (config.maxIncomeCommit <= 0 || config.maxIncomeCommit > 1) return { error: "O comprometimento da renda deve ficar entre 1% e 100%." };
+  if (config.maxLtv <= 0 || config.maxLtv >= 1) return { error: "O financiamento máximo do imóvel deve ficar entre 1% e 99%." };
+  if (config.annualRate < 0 || config.annualRate > 1) return { error: "O juro anual parece inválido (use, por exemplo, 11,5)." };
+  if (config.maxTermMonths < 12 || config.maxTermMonths > 600) return { error: "O prazo máximo parece inválido." };
+  const { error } = await createAdminClient().from("platform_settings").upsert({ id: true, financing: config, updated_at: new Date().toISOString() });
+  if (error) return { error: describeError(error) };
+  await audit(userId, null, "set_financing_config", {});
+  revalidatePath("/interno");
+  revalidatePath("/simulador");
+  return { ok: true };
 }
 

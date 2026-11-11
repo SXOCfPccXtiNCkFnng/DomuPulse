@@ -1,5 +1,6 @@
 import "server-only";
 import { publicEnv, vapidPublicKey } from "@/lib/env";
+import { type FinancingConfig, normalizeConfig } from "@/lib/financing";
 import { HEARTBEATS } from "@/lib/heartbeat";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -401,5 +402,15 @@ export async function loadPayingClients(search = ""): Promise<PayingClientRow[]>
   }
 
   return clients;
+}
+
+/** Parâmetros do simulador (juros, faixas do MCMV, etc.), com o padrão como fallback. */
+export async function getFinancingConfig(): Promise<FinancingConfig> {
+  try {
+    const { data } = await createAdminClient().from("platform_settings").select("financing").maybeSingle();
+    return normalizeConfig(data?.financing);
+  } catch {
+    return normalizeConfig(null);
+  }
 }
 

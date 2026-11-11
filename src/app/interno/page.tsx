@@ -18,13 +18,14 @@ import {
   loadPayingClients,
   type HealthStatus,
   type OrgStatusView,
+  getFinancingConfig,
 } from "@/lib/interno";
 import { formatMoney, formatNumber } from "@/lib/metrics";
 import { platformAdminSession } from "@/lib/platform-admin";
 import { getMonthlyPriceCents } from "@/lib/pricing";
 import { formatDate } from "@/lib/time";
 import { extendTrial, grantAccess, resolveAlertsBySource, setAlertResolved, setCouponActive, suspendAccess } from "./actions";
-import { ConfirmButton, CouponForm, MfaResetCard, PriceForm, SignupAlertEmailsCard } from "./client";
+import { ConfirmButton, CouponForm, FinancingForm, MfaResetCard, PriceForm, SignupAlertEmailsCard } from "./client";
 
 // Título neutro: a página não se anuncia para quem não tem acesso.
 export const metadata: Metadata = { title: "Pulse", robots: { index: false, follow: false } };
@@ -455,8 +456,9 @@ async function Orgs({ search }: { search: string }) {
 }
 
 async function Commercial() {
-  const [coupons, priceCents] = await Promise.all([loadCoupons(), getMonthlyPriceCents()]);
+  const [coupons, priceCents, financing] = await Promise.all([loadCoupons(), getMonthlyPriceCents(), getFinancingConfig()]);
   return (
+    <div className="flex flex-col gap-5">
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
       <Card className="min-w-0">
         <CardHeader title="Cupons" description={`Valor atual: ${formatMoney(priceCents)} por conta, por mês`} />
@@ -514,6 +516,11 @@ async function Commercial() {
           <CouponForm />
         </Card>
       </div>
+    </div>
+      <Card className="min-w-0">
+        <CardHeader title="Taxas do simulador" description="Juros, limite de renda, financiamento e faixas do Minha Casa Minha Vida. Usadas no Simulador." />
+        <FinancingForm config={financing} />
+      </Card>
     </div>
   );
 }
