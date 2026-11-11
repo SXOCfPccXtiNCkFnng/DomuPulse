@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DailyChart, PrintButton } from "@/components/reports/daily-chart";
@@ -11,6 +11,7 @@ import { requireActivatedMember, isLeader } from "@/lib/auth";
 import { conversion, formatNumber, METRICS } from "@/lib/metrics";
 import { PERIODS, periodQuery, previousPeriod, resolvePeriod } from "@/lib/period";
 import { loadReportData } from "@/lib/report-data";
+import { ExportButton } from "./export-button";
 
 /** Variação percentual frente ao mesmo número no período anterior. */
 function TrendBadge({ current, previous, emphasis = false }: { current: number; previous: number; emphasis?: boolean }) {
@@ -70,10 +71,7 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Relatórios</h1>
         </div>
         <div className="flex flex-wrap gap-2 print:hidden">
-          <a href={`/relatorios/exportar?${periodQuery(period, teamParam)}`} className={buttonClass("secondary", "md")}>
-            <Download className="size-4" />
-            Exportar planilha
-          </a>
+          <ExportButton href={`/relatorios/exportar?${periodQuery(period, teamParam)}`} />
           <PrintButton />
         </div>
       </header>
