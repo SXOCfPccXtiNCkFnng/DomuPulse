@@ -76,8 +76,18 @@ export async function GET(request: NextRequest) {
       .join(";"),
   );
 
+  // Resumo no topo: total de cada métrica no período, pra bater o olho antes da tabela.
+  const totals = METRICS.map((m) => rows.reduce((sum, r) => sum + Number(r[m.key] ?? 0), 0));
+  const summary = [
+    cell(`Resumo do período: ${formatDate(period.from)} a ${formatDate(period.to)}`),
+    `${cell("Relatórios enviados")};${rows.length}`,
+    ...METRICS.map((m, i) => `${cell(m.label)};${totals[i]}`),
+    "",
+    cell("Detalhado por corretor e horário"),
+  ];
+
   // BOM no começo: o Excel abre os acentos corretamente.
-  const csv = `﻿${[header.map(cell).join(";"), ...lines].join("\r\n")}`;
+  const csv = `﻿${[...summary, header.map(cell).join(";"), ...lines].join("\r\n")}`;
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
