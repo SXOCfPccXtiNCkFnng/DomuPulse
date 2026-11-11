@@ -50,7 +50,6 @@ export const MAX_PRICING = 40;
 export const PROPERTY_COLUMNS = "id, title, code, kind, deal, neighborhood, city, price_cents, bedrooms, area_m2, status, notes";
 export const PROPERTY_DETAIL_COLUMNS = `${PROPERTY_COLUMNS}, layouts, guaranteed_cents, post_keys_pct`;
 export const PROPERTY_PRICING_COLUMNS = `${PROPERTY_DETAIL_COLUMNS}, pricing, pricing_date`;
-
 /** "Até o 5º", "6º ao 10º", "A partir do 11º". */
 export function floorRangeLabel(from: number | null, to: number | null) {
   if (from == null && to == null) return null;
@@ -101,7 +100,7 @@ export function areaLabel(layouts: PropertyLayout[]) {
 /** 30 -> "30%", 12.5 -> "12,5%". */
 export const formatPct = (n: number) => `${n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
-export const PROPERTY_KINDS = ["Apartamento", "Studio", "Studio 24 m²", "1 dormitório", "1 dormitório + office", "2 dormitórios", "3 dormitórios", "Casa", "Casa em condomínio", "Terreno", "Sala comercial", "Loja", "Galpão", "Chácara", "Outro"];
+export const PROPERTY_KINDS = ["Studio 24 m²", "Studio", "1 dormitório + office", "1 dormitório", "2 dormitórios", "3 dormitórios", "Apartamento", "Casa", "Casa em condomínio", "Terreno", "Sala comercial", "Loja", "Galpão", "Chácara", "Outro"];
 
 export const PROPERTY_STATUS: Record<PropertyStatus, { label: string; tone: "neutral" | "brand" | "warn" | "danger" }> = {
   available: { label: "Disponível", tone: "brand" },

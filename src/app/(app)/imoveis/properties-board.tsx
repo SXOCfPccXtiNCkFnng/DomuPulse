@@ -32,7 +32,13 @@ import type { FormState } from "@/lib/validation";
 import { createProperty, deleteProperty, updateProperty } from "./actions";
 
 const STATUS_KEYS = Object.keys(PROPERTY_STATUS) as PropertyStatus[];
-const textarea =
+const NO_KIND = "Sem tipo";
+const kindKey = (p: Property) => p.kind?.trim() || NO_KIND;
+/** Ordem da alçada (Studio, 1 dormitório + office, 1 dormitório, 2 dormitórios...), depois os demais tipos. */
+const kindOrder = (k: string) => {
+  const i = PROPERTY_KINDS.indexOf(k);
+  return k === NO_KIND ? 999 : i === -1 ? 500 : i;
+};const textarea =
   "w-full resize-y rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] hover:border-line-strong focus:border-ink focus:outline-none";
 
 export function PropertiesBoard({
@@ -54,9 +60,10 @@ export function PropertiesBoard({
   const [editing, setEditing] = useState<Property | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | PropertyStatus>("all");
+  const [kind, setKind] = useState<string>("all");
 
   const q = query.trim().toLowerCase();
-  const visible = useMemo(
+  const byStatus = useMemo(
     () =>
       properties.filter(
         (p) =>
@@ -64,6 +71,20 @@ export function PropertiesBoard({
           (!q || [p.title, p.code, p.neighborhood, p.city, p.kind].some((v) => v?.toLowerCase().includes(q))),
       ),
     [properties, status, q],
+  );
+  const kinds = useMemo(() => {
+    const c = new Map<string, number>();
+    for (const p of byStatus) c.set(kindKey(p), (c.get(kindKey(p)) ?? 0) + 1);
+    return [...c].sort(([a], [b]) => kindOrder(a) - kindOrder(b) || a.localeCompare(b, "pt-BR"));
+  }, [byStatus]);
+  const activeKind = kind !== "all" && kinds.some(([k]) => k === kind) ? kind : "all";
+  const visible = activeKind === "all" ? byStatus : byStatus.filter((p) => kindKey(p) === activeKind);
+  const groups = useMemo(
+    () =>
+      kinds
+        .filter(([k]) => activeKind === "all" || k === activeKind)
+        .map(([k]) => [k, visible.filter((p) => kindKey(p) === k).sort((a, b) => a.title.localeCompare(b.title, "pt-BR"))] as const),
+    [kinds, visible, activeKind],
   );
   const counts = useMemo(() => {
     const c: Partial<Record<"all" | PropertyStatus, number>> = { all: properties.length };
@@ -135,6 +156,26 @@ export function PropertiesBoard({
         </div>
       </div>
 
+      {kinds.length > 1 ? (
+        <div role="tablist" aria-label="Tipo" className="-mt-2 flex max-w-full gap-1.5 overflow-x-auto [scrollbar-width:none]">
+          {[["all", byStatus.length] as const, ...kinds].map(([k, n]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={activeKind === k}
+              onClick={() => setKind(k)}
+              className={clsx(
+                "flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-medium transition-colors",
+                activeKind === k ? "border-ink bg-ink text-surface" : "border-line text-ink-2 hover:border-line-strong",
+              )}
+            >
+              {k === "all" ? "Todos os tipos" : k}
+              <span className={clsx("text-xs tabular-nums", activeKind === k ? "opacity-70" : "text-muted")}>{n}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {visible.length === 0 ? (
         <Card className="flex flex-col items-center gap-2 px-6 py-14 text-center">
           <Building2 className="size-8 text-muted" />
@@ -144,11 +185,21 @@ export function PropertiesBoard({
           </p>
         </Card>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {visible.map((p) => (
-            <PropertyCard key={p.id} property={p} clients={clientCounts[p.id] ?? 0} canManage={canManage} onEdit={() => setEditing(p)} />
-          ))}
-        </ul>
+        groups.map(([k, list]) => (
+          <section key={k} className="flex flex-col gap-3">
+            {groups.length > 1 ? (
+              <h2 className="flex items-baseline gap-2 border-b border-line pb-2 font-display text-lg font-semibold">
+                {k}
+                <span className="text-sm font-normal text-muted tabular-nums">{list.length}</span>
+              </h2>
+            ) : null}
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {list.map((p) => (
+                <PropertyCard key={p.id} property={p} clients={clientCounts[p.id] ?? 0} canManage={canManage} onEdit={() => setEditing(p)} />
+              ))}
+            </ul>
+          </section>
+        ))
       )}
 
       {creating ? <PropertyDialog withPricing={!missingPricing} onClose={() => setCreating(false)} /> : null}

@@ -33,7 +33,6 @@ export default async function ImoveisPage() {
       canManage={isLeader(member.role)}
       missingTable={error?.code === "42P01" || error?.code === "PGRST205"}
       missingDetails={missingDetails}
-      missingPricing={missingPricing}
-    />
+      missingPricing={missingPricing}    />
   );
 }
