@@ -110,6 +110,8 @@ export type IncomeResult = {
   installment: number;
   lastInstallment: number | null;
   overMcmvCap: boolean;
+  /** O que está segurando o valor: a entrada (LTV) ou a renda (30%). */
+  limitedBy: "down" | "income";
 };
 
 /** Modo 1: pela renda e entrada, quanto o cliente consegue comprar. */
@@ -122,7 +124,9 @@ export function simulateByIncome(
   const maxInstallment = config.maxIncomeCommit * input.incomeReais;
   const maxFinanced = maxPrincipal(input.system, maxInstallment, annual, input.months);
   const ltvCap = config.maxLtv < 1 ? input.downReais / (1 - config.maxLtv) : Infinity;
-  const maxProperty = Math.max(0, Math.min(input.downReais + maxFinanced, ltvCap));
+  const byIncome = input.downReais + maxFinanced;
+  const maxProperty = Math.max(0, Math.min(byIncome, ltvCap));
+  const limitedBy: "down" | "income" = ltvCap < byIncome ? "down" : "income";
   const financed = Math.max(0, maxProperty - input.downReais);
   const installment = input.system === "price" ? priceInstallment(financed, annual, input.months) : sacFirstInstallment(financed, annual, input.months);
   return {
@@ -135,6 +139,7 @@ export function simulateByIncome(
     installment,
     lastInstallment: input.system === "sac" ? sacLastInstallment(financed, annual, input.months) : null,
     overMcmvCap: band ? maxProperty > band.propertyCap : false,
+    limitedBy,
   };
 }
 

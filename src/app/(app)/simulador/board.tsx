@@ -141,6 +141,11 @@ export function SimuladorBoard({ properties, config }: { properties: PropOption[
                   {incomeResult.lastInstallment ? <Stat label="Última parcela (SAC)" value={`${money(incomeResult.lastInstallment)}/mês`} /> : null}
                   <Stat label="Parcela máxima (30%)" value={`${money(incomeResult.maxInstallment)}/mês`} />
                 </div>
+                {incomeResult.limitedBy === "down" ? (
+                  <p className="mx-5 mb-5 rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn sm:mx-6">
+                    Limitado pela <strong>entrada</strong>: com {money(incomeResult.down)} de entrada e financiamento de até {Math.round(config.maxLtv * 100)}%, o imóvel não passa de {money(incomeResult.maxProperty)}. Com mais entrada esse valor sobe — a renda ainda comportaria parcelas de até {money(incomeResult.maxInstallment)}/mês.
+                  </p>
+                ) : null}
                 {incomeResult.band ? (
                   <p className="mx-5 mb-5 rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-text sm:mx-6">
                     Pela renda, enquadra no <strong>Minha Casa Minha Vida · {incomeResult.band.name}</strong> ({formatRate(incomeResult.band.annualRate)}).
