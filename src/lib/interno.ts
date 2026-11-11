@@ -167,6 +167,8 @@ export async function loadHealth(): Promise<HealthCheck[]> {
     ["members", "broker_name, display_name", "20261108000000_broker_name.sql"],
     ["goals", "period", "20261109000000_daily_goals.sql"],
     ["goals", "slot", "20261111000000_slot_goals.sql"],
+    ["properties", "layouts, guaranteed_cents, post_keys_pct", "20261112000000_property_details.sql"],
+    ["properties", "pricing, pricing_date", "20261113000000_property_pricing.sql"],
   ];
   const results = await Promise.all(marks.map(([t, c]) => admin.from(t).select(c).limit(1)));
   const missing = marks.filter((_, i) => results[i].error);

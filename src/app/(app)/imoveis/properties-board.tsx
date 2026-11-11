@@ -8,19 +8,26 @@ import { Button } from "@/components/ui/button";
 import { Badge, Card } from "@/components/ui/card";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { formatMoney } from "@/lib/metrics";
-import { centsToInput, maskMoneyInput } from "@/lib/money";
+import { centsToInput, maskMoneyInput, parseMoney } from "@/lib/money";
 import {
   areaLabel,
   bedroomsLabel,
   DEAL_LABEL,
+  floorRangeLabel,
   formatPct,
+  incomeLabel,
+  MAX_PRICING,
+  PRICING_TYPOLOGIES,
+  pricingByTypology,
   PROPERTY_KINDS,
   PROPERTY_STATUS,
   propertyLayouts,
+  type PricingCondition,
   type Property,
   type PropertyLayout,
   type PropertyStatus,
 } from "@/lib/properties";
+import { formatDate } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
 import { createProperty, deleteProperty, updateProperty } from "./actions";
 
@@ -34,12 +41,14 @@ export function PropertiesBoard({
   canManage,
   missingTable,
   missingDetails = false,
+  missingPricing = false,
 }: {
   properties: Property[];
   clientCounts: Record<string, number>;
   canManage: boolean;
   missingTable: boolean;
   missingDetails?: boolean;
+  missingPricing?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Property | null>(null);
@@ -83,7 +92,12 @@ export function PropertiesBoard({
         </p>
       ) : missingDetails && canManage ? (
         <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
-          Para usar opções de quartos, valor garantido e % pós-chaves, rode a atualização <code>20261112000000_property_details.sql</code> no Supabase.
+          Para usar opções de quartos, valor garantido, % pós-chaves e alçada comercial, rode as atualizações <code>20261112000000_property_details.sql</code> e{" "}
+          <code>20261113000000_property_pricing.sql</code> no Supabase.
+        </p>
+      ) : missingPricing && canManage ? (
+        <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
+          Para usar a alçada comercial (garantido e valor final por renda real e andar), rode a atualização <code>20261113000000_property_pricing.sql</code> no Supabase.
         </p>
       ) : !canManage ? (
         <p className="rounded-xl bg-surface-2 px-4 py-3 text-sm text-ink-2">
@@ -137,8 +151,8 @@ export function PropertiesBoard({
         </ul>
       )}
 
-      {creating ? <PropertyDialog onClose={() => setCreating(false)} /> : null}
-      {editing ? <PropertyDialog property={editing} onClose={() => setEditing(null)} /> : null}
+      {creating ? <PropertyDialog withPricing={!missingPricing} onClose={() => setCreating(false)} /> : null}
+      {editing ? <PropertyDialog property={editing} withPricing={!missingPricing} onClose={() => setEditing(null)} /> : null}
     </div>
   );
 }
@@ -231,6 +245,8 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
           </ul>
         ) : null}
 
+        {p.pricing?.length ? <PricingSummary pricing={p.pricing} date={p.pricing_date ?? null} /> : null}
+
         {p.notes ? <p className="line-clamp-2 text-sm text-muted">{p.notes}</p> : null}
 
         <p className="flex items-center gap-1.5 text-sm text-muted">
@@ -264,6 +280,244 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
         ) : null}
       </Card>
     </li>
+  );
+}
+
+/** "R$ 204.787" (sem ",00" quando o valor é redondo). */
+const brl = (cents: number) => formatMoney(cents).replace(/,00$/, "");
+
+function PricingSummary({ pricing, date }: { pricing: PricingCondition[]; date: string | null }) {
+  const usesIncome = pricing.some((c) => c.income_from_cents != null || c.income_below_cents != null);
+  return (
+    <section className="flex flex-col gap-2.5 rounded-xl bg-surface-2 p-3">
+      <p className="flex items-baseline justify-between gap-2 text-xs font-semibold tracking-wide text-muted uppercase">
+        Alçada comercial
+        {date ? <span className="font-normal tracking-normal normal-case">Base {formatDate(date)}</span> : null}
+      </p>
+      {pricingByTypology(pricing).map(([typology, list]) => (
+        <div key={typology}>
+          <p className="text-sm font-semibold">{typology}</p>
+          <ul className="mt-1 flex flex-col gap-1.5">
+            {list.map((c, i) => {
+              const when = [incomeLabel(c, brl), floorRangeLabel(c.floor_from, c.floor_to)].filter(Boolean).join(" · ");
+              return (
+                <li key={i} className="border-l-2 border-line-strong pl-2 text-xs text-ink-2">
+                  {when ? <p className="text-muted">{when}</p> : null}
+                  <p className="tabular-nums">
+                    {c.guaranteed_cents != null ? (
+                      <span className="font-semibold text-brand-text">Garantido {brl(c.guaranteed_cents)}</span>
+                    ) : null}
+                    {c.guaranteed_cents != null && c.final_cents != null ? " · " : null}
+                    {c.final_cents != null ? <span className="font-semibold text-ink">Valor final {brl(c.final_cents)}</span> : null}
+                  </p>
+                  {c.floor_addons.length ? (
+                    <p className="text-muted">
+                      Adicional por andar:{" "}
+                      {c.floor_addons.map((a) => `${floorRangeLabel(a.from, a.to)} + ${brl(a.add_cents)}`).join("; ")}
+                    </p>
+                  ) : null}
+                  {c.note ? <p className="font-medium text-warn">{c.note}</p> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+      {usesIncome ? <p className="text-[11px] text-muted">Critério: renda real do cliente (não a renda apurada no SICAQ).</p> : null}
+    </section>
+  );
+}
+
+type AddonRow = { key: number; from: string; to: string; add: string };
+type PricingRow = {
+  key: number;
+  typology: string;
+  incomeFrom: string;
+  incomeBelow: string;
+  floorFrom: string;
+  floorTo: string;
+  guaranteed: string;
+  final: string;
+  note: string;
+  addons: AddonRow[];
+};
+
+const intText = (n: number | null) => (n != null ? String(n) : "");
+const toInt = (s: string) => (s.trim() === "" ? null : Number(s));
+const digits = (s: string, max: number) => s.replace(/\D/g, "").slice(0, max);
+
+function toPricing(rows: PricingRow[]): PricingCondition[] {
+  return rows
+    .filter((r) => r.typology.trim() || r.guaranteed || r.final)
+    .map((r) => ({
+      typology: r.typology.trim(),
+      income_from_cents: parseMoney(r.incomeFrom),
+      income_below_cents: parseMoney(r.incomeBelow),
+      floor_from: toInt(r.floorFrom),
+      floor_to: toInt(r.floorTo),
+      guaranteed_cents: parseMoney(r.guaranteed),
+      final_cents: parseMoney(r.final),
+      floor_addons: r.addons
+        .map((a) => ({ from: toInt(a.from), to: toInt(a.to), add_cents: parseMoney(a.add) ?? 0 }))
+        .filter((a) => a.add_cents > 0),
+      note: r.note.trim() || null,
+    }));
+}
+
+function MoneyField({ label, value, onChange, small }: { label: string; value: string; onChange: (v: string) => void; small?: boolean }) {
+  return (
+    <Field label={label}>
+      <span className="relative block">
+        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted">R$</span>
+        <Input
+          value={value}
+          onChange={(e) => onChange(maskMoneyInput(e.target.value))}
+          inputMode="decimal"
+          className={clsx("pl-10", small && "h-9 text-sm")}
+        />
+      </span>
+    </Field>
+  );
+}
+
+/** Alçada comercial: condições por tipologia, renda real e andar. Vai para o servidor como JSON. */
+function PricingField({ initial, initialDate, error }: { initial: PricingCondition[]; initialDate: string | null; error?: string }) {
+  const nextKey = useRef(1000);
+  const blankAddon = (): AddonRow => ({ key: nextKey.current++, from: "", to: "", add: "" });
+  const blank = (): PricingRow => ({
+    key: nextKey.current++,
+    typology: "",
+    incomeFrom: "",
+    incomeBelow: "",
+    floorFrom: "",
+    floorTo: "",
+    guaranteed: "",
+    final: "",
+    note: "",
+    addons: [],
+  });
+  const [rows, setRows] = useState<PricingRow[]>(() =>
+    initial.map((c, i) => ({
+      key: i,
+      typology: c.typology,
+      incomeFrom: centsToInput(c.income_from_cents),
+      incomeBelow: centsToInput(c.income_below_cents),
+      floorFrom: intText(c.floor_from),
+      floorTo: intText(c.floor_to),
+      guaranteed: centsToInput(c.guaranteed_cents),
+      final: centsToInput(c.final_cents),
+      note: c.note ?? "",
+      addons: c.floor_addons.map((a, j) => ({ key: i * 20 + j, from: intText(a.from), to: intText(a.to), add: centsToInput(a.add_cents) })),
+    })),
+  );
+  const update = (key: number, patch: Partial<PricingRow>) => setRows((list) => list.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const updateAddon = (key: number, addonKey: number, patch: Partial<AddonRow>) =>
+    setRows((list) => list.map((r) => (r.key === key ? { ...r, addons: r.addons.map((a) => (a.key === addonKey ? { ...a, ...patch } : a)) } : r)));
+  const duplicate = (r: PricingRow) =>
+    setRows((list) => {
+      const i = list.findIndex((x) => x.key === r.key);
+      const copy = { ...r, key: nextKey.current++, addons: r.addons.map((a) => ({ ...a, key: nextKey.current++ })) };
+      return [...list.slice(0, i + 1), copy, ...list.slice(i + 1)];
+    });
+
+  return (
+    <fieldset className="flex flex-col gap-3 sm:col-span-2">
+      <legend className="mb-1.5 text-[13px] font-medium text-ink-2">Alçada comercial</legend>
+      <input type="hidden" name="pricing" value={JSON.stringify(toPricing(rows))} />
+      <datalist id="pricing-typologies">
+        {PRICING_TYPOLOGIES.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+      <Field label="Data base da alçada" hint="Opcional" className="sm:max-w-56">
+        <Input type="date" name="pricingDate" defaultValue={initialDate ?? ""} />
+      </Field>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">Sem condições. Adicione uma para cada tipologia, faixa de renda real ou faixa de andar.</p>
+      ) : null}
+      {rows.map((r, i) => (
+        <div key={r.key} className="flex flex-col gap-3 rounded-xl border border-line p-3">
+          <div className="flex items-end gap-2">
+            <Field label={`Condição ${i + 1}: tipologia`} className="flex-1">
+              <Input
+                value={r.typology}
+                onChange={(e) => update(r.key, { typology: e.target.value.slice(0, 60) })}
+                list="pricing-typologies"
+                placeholder="Ex.: Studio 24 m²"
+              />
+            </Field>
+            <Button type="button" size="sm" variant="ghost" onClick={() => duplicate(r)} disabled={rows.length >= MAX_PRICING} className="mb-0.5">
+              Duplicar
+            </Button>
+            <button
+              type="button"
+              onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))}
+              aria-label={`Remover condição ${i + 1}`}
+              className="mb-0.5 grid size-10 shrink-0 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <MoneyField label="Renda real a partir de" value={r.incomeFrom} onChange={(v) => update(r.key, { incomeFrom: v })} small />
+            <MoneyField label="Renda real abaixo de" value={r.incomeBelow} onChange={(v) => update(r.key, { incomeBelow: v })} small />
+            <Field label="Do andar" hint="Vazio = térreo">
+              <Input value={r.floorFrom} onChange={(e) => update(r.key, { floorFrom: digits(e.target.value, 3) })} inputMode="numeric" className="h-9 text-sm" />
+            </Field>
+            <Field label="Até o andar" hint="Vazio = sem limite">
+              <Input value={r.floorTo} onChange={(e) => update(r.key, { floorTo: digits(e.target.value, 3) })} inputMode="numeric" className="h-9 text-sm" />
+            </Field>
+            <MoneyField label="Garantido" value={r.guaranteed} onChange={(v) => update(r.key, { guaranteed: v })} />
+            <MoneyField label="Valor final" value={r.final} onChange={(v) => update(r.key, { final: v })} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-[13px] font-medium text-ink-2">Adicional por andar no valor final</p>
+            {r.addons.map((a) => (
+              <div key={a.key} className="flex items-end gap-2">
+                <Field label="Do andar" className="w-20 shrink-0">
+                  <Input value={a.from} onChange={(e) => updateAddon(r.key, a.key, { from: digits(e.target.value, 3) })} inputMode="numeric" className="h-9 text-sm" />
+                </Field>
+                <Field label="Até" className="w-20 shrink-0">
+                  <Input value={a.to} onChange={(e) => updateAddon(r.key, a.key, { to: digits(e.target.value, 3) })} inputMode="numeric" className="h-9 text-sm" />
+                </Field>
+                <div className="flex-1">
+                  <MoneyField label="Adicional" value={a.add} onChange={(v) => updateAddon(r.key, a.key, { add: v })} small />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => update(r.key, { addons: r.addons.filter((x) => x.key !== a.key) })}
+                  aria-label="Remover adicional"
+                  className="mb-0.5 grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            ))}
+            {r.addons.length < 10 ? (
+              <Button type="button" size="sm" variant="ghost" className="self-start" onClick={() => update(r.key, { addons: [...r.addons, blankAddon()] })}>
+                <Plus className="size-3.5" />
+                Adicionar faixa de andar
+              </Button>
+            ) : null}
+          </div>
+          <Field label="Observação" hint="Opcional">
+            <Input
+              value={r.note}
+              onChange={(e) => update(r.key, { note: e.target.value.slice(0, 300) })}
+              placeholder="Ex.: 1 fiador na hora"
+              className="h-9 text-sm"
+            />
+          </Field>
+        </div>
+      ))}
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
+      {rows.length < MAX_PRICING ? (
+        <Button type="button" size="sm" variant="ghost" className="self-start" onClick={() => setRows((list) => [...list, blank()])}>
+          <Plus className="size-3.5" />
+          Adicionar condição da alçada
+        </Button>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -331,7 +585,7 @@ function LayoutsField({ initial, error }: { initial: PropertyLayout[]; error?: s
   );
 }
 
-function PropertyDialog({ property: p, onClose }: { property?: Property; onClose: () => void }) {
+function PropertyDialog({ property: p, withPricing, onClose }: { property?: Property; withPricing: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const [price, setPrice] = useState(centsToInput(p?.price_cents ?? null));
@@ -440,6 +694,9 @@ function PropertyDialog({ property: p, onClose }: { property?: Property; onClose
             </span>
           </Field>
           <LayoutsField initial={p ? propertyLayouts(p) : []} error={state.fieldErrors?.layouts} />
+          {withPricing ? (
+            <PricingField initial={p?.pricing ?? []} initialDate={p?.pricing_date ?? null} error={state.fieldErrors?.pricing ?? state.fieldErrors?.pricingDate} />
+          ) : null}
           <Field label="Observações" hint="Opcional" error={state.fieldErrors?.notes} className="sm:col-span-2">
             <textarea name="notes" defaultValue={p?.notes ?? ""} rows={3} maxLength={2000} placeholder="Vagas de garagem, condomínio, diferenciais..." className={textarea} />
           </Field>

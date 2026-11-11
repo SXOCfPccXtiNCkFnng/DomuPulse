@@ -20,12 +20,60 @@ export type Property = {
   layouts?: PropertyLayout[];
   guaranteed_cents?: number | null;
   post_keys_pct?: number | null;
+  /** Alçada comercial. Ausente enquanto a atualização do banco não rodou. */
+  pricing?: PricingCondition[];
+  /** Data base da alçada, "AAAA-MM-DD". */
+  pricing_date?: string | null;
 };
 
 export type PropertyLayout = { bedrooms: number | null; area_m2: number | null };
 
+/** Adicional no valor final conforme o andar da unidade. */
+export type FloorAddon = { from: number | null; to: number | null; add_cents: number };
+
+/** Uma linha da alçada comercial: tipologia + renda real + andar -> garantido e valor final. */
+export type PricingCondition = {
+  typology: string;
+  income_from_cents: number | null;
+  income_below_cents: number | null;
+  floor_from: number | null;
+  floor_to: number | null;
+  guaranteed_cents: number | null;
+  final_cents: number | null;
+  floor_addons: FloorAddon[];
+  note: string | null;
+};
+
+export const PRICING_TYPOLOGIES = ["Studio", "1 dormitório", "1 dormitório + office", "2 dormitórios", "3 dormitórios"];
+export const MAX_PRICING = 40;
+
 export const PROPERTY_COLUMNS = "id, title, code, kind, deal, neighborhood, city, price_cents, bedrooms, area_m2, status, notes";
 export const PROPERTY_DETAIL_COLUMNS = `${PROPERTY_COLUMNS}, layouts, guaranteed_cents, post_keys_pct`;
+export const PROPERTY_PRICING_COLUMNS = `${PROPERTY_DETAIL_COLUMNS}, pricing, pricing_date`;
+
+/** "Até o 5º", "6º ao 10º", "A partir do 11º". */
+export function floorRangeLabel(from: number | null, to: number | null) {
+  if (from == null && to == null) return null;
+  if (from == null || from <= 1) return to != null ? `Até o ${to}º andar` : null;
+  if (to == null) return `A partir do ${from}º andar`;
+  return from === to ? `${from}º andar` : `${from}º ao ${to}º andar`;
+}
+
+/** "Renda real abaixo de R$ 2.800", "Renda real a partir de R$ 3.201". */
+export function incomeLabel(c: Pick<PricingCondition, "income_from_cents" | "income_below_cents">, money: (cents: number) => string) {
+  const { income_from_cents: from, income_below_cents: below } = c;
+  if (from != null && below != null) return `Renda real de ${money(from)} a abaixo de ${money(below)}`;
+  if (from != null) return `Renda real a partir de ${money(from)}`;
+  if (below != null) return `Renda real abaixo de ${money(below)}`;
+  return null;
+}
+
+/** Condições agrupadas por tipologia, na ordem em que aparecem. */
+export function pricingByTypology(pricing: PricingCondition[]) {
+  const groups = new Map<string, PricingCondition[]>();
+  for (const c of pricing) groups.set(c.typology, [...(groups.get(c.typology) ?? []), c]);
+  return [...groups];
+}
 
 /** Opções de quartos do imóvel; imóveis antigos viram uma opção com os quartos e a área deles. */
 export function propertyLayouts(p: Pick<Property, "bedrooms" | "area_m2" | "layouts">): PropertyLayout[] {

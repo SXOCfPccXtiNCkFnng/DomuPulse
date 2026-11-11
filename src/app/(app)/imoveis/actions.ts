@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getCurrentMember, isLeader, orgCanWrite } from "@/lib/auth";
 import { describeError, logger } from "@/lib/logger";
 import { parseMoney } from "@/lib/money";
-import type { PropertyLayout } from "@/lib/properties";
+import { MAX_PRICING, type PricingCondition, type PropertyLayout } from "@/lib/properties";
 import { createClient } from "@/lib/supabase/server";
 import { fieldErrors, type FormState } from "@/lib/validation";
 
@@ -58,6 +58,43 @@ function parseLayouts(formData: FormData): { layouts: PropertyLayout[] } | { fie
   return { layouts };
 }
 
+const cents = z.number().int().min(0).max(100_000_000_000).nullable();
+const floor = z.number().int().min(-5).max(200).nullable();
+const pricingSchema = z
+  .array(
+    z.object({
+      typology: z.string().trim().min(1, "Informe a tipologia de cada condição da alçada.").max(60),
+      income_from_cents: cents,
+      income_below_cents: cents,
+      floor_from: floor,
+      floor_to: floor,
+      guaranteed_cents: cents,
+      final_cents: cents,
+      floor_addons: z
+        .array(z.object({ from: floor, to: floor, add_cents: z.number().int().min(0).max(100_000_000_000) }))
+        .max(10),
+      note: z.string().trim().max(300).nullable(),
+    }),
+  )
+  .max(MAX_PRICING, `Use no máximo ${MAX_PRICING} condições na alçada.`);
+
+/** Alçada comercial: vem do formulário como JSON. Ausente quando o banco ainda não tem a coluna. */
+function parsePricing(formData: FormData): { pricing?: { pricing: PricingCondition[]; pricing_date: string | null } } | { fieldErrors: Record<string, string> } {
+  const raw = formData.get("pricing");
+  if (typeof raw !== "string") return {};
+  let json: unknown;
+  try {
+    json = JSON.parse(raw || "[]");
+  } catch {
+    return { fieldErrors: { pricing: "Não foi possível ler a alçada. Recarregue a página." } };
+  }
+  const parsed = pricingSchema.safeParse(json);
+  if (!parsed.success) return { fieldErrors: { pricing: parsed.error.issues[0].message } };
+  const date = String(formData.get("pricingDate") ?? "").trim();
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { fieldErrors: { pricingDate: "Data inválida." } };
+  return { pricing: { pricing: parsed.data, pricing_date: date || null } };
+}
+
 function toRow(v: z.infer<typeof propertySchema>, layouts: PropertyLayout[]) {
   const beds = layouts.map((l) => l.bedrooms).filter((n): n is number => n != null);
   const areas = layouts.map((l) => l.area_m2).filter((n): n is number => n != null);
@@ -84,10 +121,12 @@ function parseProperty(formData: FormData) {
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
   const layouts = parseLayouts(formData);
   if ("fieldErrors" in layouts) return layouts;
-  return { row: toRow(parsed.data, layouts.layouts) };
+  const pricing = parsePricing(formData);
+  if ("fieldErrors" in pricing) return pricing;
+  return { row: { ...toRow(parsed.data, layouts.layouts), ...pricing.pricing } };
 }
 
-const MISSING_DETAILS = "Falta rodar a atualização do banco de imóveis (quartos, garantido e pós-chaves). Fale com o suporte.";
+const MISSING_DETAILS = "Falta rodar a atualização do banco de imóveis (quartos, garantido, pós-chaves e alçada). Fale com o suporte.";
 
 export async function createProperty(_: FormState, formData: FormData): Promise<FormState> {
   const gate = await requireLeader();
