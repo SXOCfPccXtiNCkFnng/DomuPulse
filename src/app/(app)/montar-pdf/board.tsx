@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Images, Paperclip, RotateCw, ScrollText, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Images, Paperclip, RotateCw, Scissors, ScrollText, Stamp, Trash2, Upload } from "lucide-react";
 import { degrees, PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,29 @@ async function copyPdfInto(out: PDFDocument, bytes: ArrayBuffer) {
   const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const pages = await out.copyPages(src, src.getPageIndices());
   pages.forEach((p) => out.addPage(p));
+}
+
+// Lê algo como "1-3, 5, 8-10" e devolve os índices (base 0) na ordem pedida.
+// Devolve null quando algum pedaço está escrito errado.
+function parsePageRanges(input: string, max: number): number[] | null {
+  const out: number[] = [];
+  for (const raw of input.split(",")) {
+    const p = raw.trim();
+    if (!p) continue;
+    const range = p.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (range) {
+      let a = Number(range[1]);
+      let b = Number(range[2]);
+      if (a > b) [a, b] = [b, a];
+      for (let i = a; i <= b; i++) if (i >= 1 && i <= max) out.push(i - 1);
+    } else if (/^\d+$/.test(p)) {
+      const i = Number(p);
+      if (i >= 1 && i <= max) out.push(i - 1);
+    } else {
+      return null;
+    }
+  }
+  return out;
 }
 
 function mapError(e: unknown) {
@@ -504,6 +527,198 @@ function ClientKit({ clients }: { clients: { id: string; name: string }[] }) {
   );
 }
 
+/** Dividir PDF: extrai páginas avulsas ou um intervalo para um novo PDF. */
+function SplitPdf() {
+  const [file, setFile] = useState<File | null>(null);
+  const [count, setCount] = useState(0);
+  const [range, setRange] = useState("");
+  const [name, setName] = useState("paginas-extraidas");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const open = async (f: File) => {
+    setError(null);
+    try {
+      const doc = await PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true });
+      const n = doc.getPageCount();
+      setFile(f);
+      setCount(n);
+      setRange(`1-${n}`);
+      setName(`${f.name.replace(/\.pdf$/i, "") || "documento"}-paginas`);
+    } catch {
+      setError("Não consegui abrir esse PDF (pode estar protegido por senha).");
+    }
+  };
+
+  const generate = async () => {
+    if (!file) return;
+    const idx = parsePageRanges(range, count);
+    if (idx === null) return setError("Confira o que digitou. Use algo como 1-3, 5, 8-10.");
+    if (!idx.length) return setError("Escolha ao menos uma página dentro do documento.");
+    setBusy(true);
+    setError(null);
+    try {
+      const src = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+      const out = await PDFDocument.create();
+      const copied = await out.copyPages(src, idx);
+      copied.forEach((p) => out.addPage(p));
+      downloadPdf(await out.save(), name);
+    } catch {
+      setError("Não foi possível gerar o PDF.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!file) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Dropzone kind="pdf" multiple={false} onPick={(f) => f[0] && open(f[0])} label="Escolha um PDF para dividir" sub="Tudo no seu aparelho, nada é enviado." />
+        {error ? <FormMessage>{error}</FormMessage> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="truncate text-sm text-muted">{file.name} · {count} {count === 1 ? "página" : "páginas"}</p>
+        <Button size="sm" variant="ghost" onClick={() => { setFile(null); setError(null); }}>
+          Trocar arquivo
+        </Button>
+      </div>
+      {error ? <FormMessage>{error}</FormMessage> : null}
+      <Field label="Páginas" hint={`De 1 a ${count}. Use vírgula para avulsas e traço para intervalo, por exemplo 1-3, 5, 8-10.`}>
+        <Input value={range} onChange={(e) => setRange(e.target.value)} placeholder={`1-${count}`} />
+      </Field>
+      <GenerateBar name={name} setName={setName} onGenerate={generate} busy={busy} disabled={false} label="Extrair páginas" />
+    </div>
+  );
+}
+
+type Corner = "left" | "center";
+function drawFooter(page: { drawText: (t: string, o: Record<string, unknown>) => void; getWidth: () => number }, font: unknown, text: string, where: Corner, size: number) {
+  const gray = rgb(0.45, 0.5, 0.58);
+  const width = page.getWidth();
+  const x = where === "center" ? width / 2 - (text.length * size) / 4 : 40;
+  page.drawText(text, { x, y: 24, size, font, color: gray });
+}
+
+/** Carimbar PDF: marca d'água, numeração e rodapé, cada um opcional. */
+function StampPdf() {
+  const [file, setFile] = useState<File | null>(null);
+  const [count, setCount] = useState(0);
+  const [name, setName] = useState("documento-carimbado");
+  const [useMark, setUseMark] = useState(true);
+  const [markText, setMarkText] = useState("CONFIDENCIAL");
+  const [useNumbers, setUseNumbers] = useState(true);
+  const [useFooter, setUseFooter] = useState(false);
+  const [footerText, setFooterText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const open = async (f: File) => {
+    setError(null);
+    try {
+      const doc = await PDFDocument.load(await f.arrayBuffer(), { ignoreEncryption: true });
+      setFile(f);
+      setCount(doc.getPageCount());
+      setName(`${f.name.replace(/\.pdf$/i, "") || "documento"}-carimbado`);
+    } catch {
+      setError("Não consegui abrir esse PDF (pode estar protegido por senha).");
+    }
+  };
+
+  const generate = async () => {
+    if (!file) return;
+    if (!useMark && !useNumbers && !useFooter) return setError("Marque ao menos uma opção.");
+    if (useMark && !markText.trim()) return setError("Escreva o texto da marca d'água.");
+    if (useFooter && !footerText.trim()) return setError("Escreva o texto do rodapé.");
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+      const font = await out.embedFont(StandardFonts.Helvetica);
+      const bold = await out.embedFont(StandardFonts.HelveticaBold);
+      const pages = out.getPages();
+      pages.forEach((page, i) => {
+        const { width, height } = page.getSize();
+        if (useMark) {
+          const text = markText.trim();
+          const size = Math.max(28, Math.min(width, height) / 10);
+          const tw = bold.widthOfTextAtSize(text, size);
+          page.drawText(text, {
+            x: width / 2 - (tw / 2) * Math.cos(Math.PI / 4),
+            y: height / 2 - (tw / 2) * Math.sin(Math.PI / 4),
+            size,
+            font: bold,
+            color: rgb(0.55, 0.58, 0.64),
+            rotate: degrees(45),
+            opacity: 0.18,
+          });
+        }
+        if (useNumbers) drawFooter(page, font, `${i + 1} / ${pages.length}`, "center", 9);
+        if (useFooter) drawFooter(page, font, footerText.trim(), "left", 9);
+      });
+      downloadPdf(await out.save(), name);
+    } catch {
+      setError("Não foi possível gerar o PDF.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!file) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Dropzone kind="pdf" multiple={false} onPick={(f) => f[0] && open(f[0])} label="Escolha um PDF para carimbar" sub="Tudo no seu aparelho, nada é enviado." />
+        {error ? <FormMessage>{error}</FormMessage> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="truncate text-sm text-muted">{file.name} · {count} {count === 1 ? "página" : "páginas"}</p>
+        <Button size="sm" variant="ghost" onClick={() => { setFile(null); setError(null); }}>
+          Trocar arquivo
+        </Button>
+      </div>
+      {error ? <FormMessage>{error}</FormMessage> : null}
+
+      <div className="flex flex-col gap-3">
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={useMark} onChange={(e) => setUseMark(e.target.checked)} className="size-4 accent-[var(--brand)]" />
+          Marca d&apos;água por cima das páginas
+        </label>
+        {useMark ? (
+          <Field label="Texto da marca d'água" className="ml-6" hint="Por exemplo o nome da empresa ou CONFIDENCIAL. Fica em diagonal e levemente transparente.">
+            <Input value={markText} onChange={(e) => setMarkText(e.target.value)} maxLength={40} />
+          </Field>
+        ) : null}
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={useNumbers} onChange={(e) => setUseNumbers(e.target.checked)} className="size-4 accent-[var(--brand)]" />
+          Numerar as páginas no rodapé
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={useFooter} onChange={(e) => setUseFooter(e.target.checked)} className="size-4 accent-[var(--brand)]" />
+          Rodapé com um texto fixo
+        </label>
+        {useFooter ? (
+          <Field label="Texto do rodapé" className="ml-6" hint="Por exemplo a data, o nome da empresa ou o contato.">
+            <Input value={footerText} onChange={(e) => setFooterText(e.target.value)} maxLength={80} />
+          </Field>
+        ) : null}
+      </div>
+
+      <GenerateBar name={name} setName={setName} onGenerate={generate} busy={busy} disabled={false} label="Carimbar PDF" />
+    </div>
+  );
+}
+
 function GenerateBar({ name, setName, onGenerate, busy, disabled, onClear, label }: { name: string; setName: (v: string) => void; onGenerate: () => void; busy: boolean; disabled: boolean; onClear?: () => void; label: string }) {
   return (
     <div className="flex flex-wrap items-end gap-3 border-t border-line pt-4">
@@ -532,8 +747,10 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 
 const TABS = [
   { id: "merge", label: "Juntar PDF", Icon: FileText },
+  { id: "split", label: "Dividir PDF", Icon: Scissors },
   { id: "images", label: "Imagens em PDF", Icon: ImageIcon },
   { id: "organize", label: "Organizar páginas", Icon: Images },
+  { id: "stamp", label: "Carimbar PDF", Icon: Stamp },
   { id: "kit", label: "Kit do cliente", Icon: ScrollText },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -550,7 +767,7 @@ export function MontarPdfBoard({ clients }: { clients: { id: string; name: strin
         <p className="mt-1 text-xs text-muted">Junte PDFs, transforme fotos em PDF, organize páginas e monte o documento do cliente. Tudo no seu aparelho: nenhum arquivo é enviado nem fica guardado.</p>
       </header>
 
-      <div role="tablist" aria-label="Ferramenta" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div role="tablist" aria-label="Ferramenta" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -574,17 +791,23 @@ export function MontarPdfBoard({ clients }: { clients: { id: string; name: strin
           description={
             tab === "merge"
               ? "Vários PDFs viram um só, na ordem que você definir."
-              : tab === "images"
-                ? "Fotos (JPG, PNG ou WEBP) viram páginas de um PDF."
-                : tab === "organize"
-                  ? "Gire, apague e reordene as páginas de um PDF."
-                  : "Junte os documentos do cliente num PDF só, com capa opcional."
+              : tab === "split"
+                ? "Extraia páginas avulsas ou um intervalo para um novo PDF."
+                : tab === "images"
+                  ? "Fotos (JPG, PNG ou WEBP) viram páginas de um PDF."
+                  : tab === "organize"
+                    ? "Gire, apague e reordene as páginas de um PDF."
+                    : tab === "stamp"
+                      ? "Marca d'água, numeração e rodapé, cada um opcional."
+                      : "Junte os documentos do cliente num PDF só, com capa opcional."
           }
         />
         <div className="p-5 sm:p-6">
           {tab === "merge" ? <MergePdf /> : null}
+          {tab === "split" ? <SplitPdf /> : null}
           {tab === "images" ? <ImagesToPdf /> : null}
           {tab === "organize" ? <Organize /> : null}
+          {tab === "stamp" ? <StampPdf /> : null}
           {tab === "kit" ? <ClientKit clients={clients} /> : null}
         </div>
       </Card>
