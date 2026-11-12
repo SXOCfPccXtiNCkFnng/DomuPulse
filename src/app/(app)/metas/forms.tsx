@@ -1,16 +1,20 @@
 "use client";
 
 import clsx from "clsx";
-import { Pencil } from "lucide-react";
+import { ChevronRight, Pencil, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { GOAL_METRICS, goalField, slotGoalField, type GoalMetric, type GoalPeriod } from "@/lib/goals";
-import { METRICS } from "@/lib/metrics";
+import { formatNumber, METRICS } from "@/lib/metrics";
 import { slotPeriodLabel } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
 import { addCommission, saveGoals } from "./actions";
+
+const DIALOG_CLASS =
+  "mx-auto mt-auto mb-0 w-full max-w-none max-h-[92dvh] overflow-y-auto rounded-t-card border border-line bg-surface p-0 text-ink shadow-card backdrop:bg-black/50 sm:m-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-card";
 
 const LABEL = Object.fromEntries(METRICS.map((m) => [m.key, m.label])) as Record<GoalMetric, string>;
 
@@ -89,9 +93,9 @@ function SlotGoalGrid({ slots, values, errors }: { slots: string[]; values?: Slo
 
 type Tab = GoalPeriod | "slot";
 
-export function BulkGoalsForm({ month, memberIds, slots }: { month: string; memberIds: string[]; slots: string[] }) {
+export function BulkGoalsForm({ month, memberIds, slots, initialPeriod }: { month: string; memberIds: string[]; slots: string[]; initialPeriod?: Tab }) {
   const router = useRouter();
-  const [period, setPeriod] = useState<Tab>("month");
+  const [period, setPeriod] = useState<Tab>(initialPeriod ?? "month");
   const [state, action, pending] = useActionState(async (prev: FormState, data: FormData) => {
     const result = await saveGoals(prev, data);
     if (result.success) router.refresh();
@@ -152,26 +156,38 @@ function PeriodTabs({ value, onChange, withSlots }: { value: Tab; onChange: (p: 
 export function GoalRowForm({
   month,
   memberId,
+  memberName,
   values,
   slots,
   slotValues,
 }: {
   month: string;
   memberId: string;
+  memberName: string;
   values: Record<GoalPeriod, Record<GoalMetric, number>>;
   slots: string[];
   slotValues: SlotGoalValues;
 }) {
   const router = useRouter();
+  const dialog = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("month");
   const [state, action, pending] = useActionState(async (prev: FormState, data: FormData) => {
     const result = await saveGoals(prev, data);
     if (result.success) {
-      setOpen(false);
+      dialog.current?.close();
       router.refresh();
     }
     return result;
   }, {} as FormState);
+
+  // Abre o modal nativo quando o usuário clica em "Editar metas".
+  useEffect(() => {
+    const el = dialog.current;
+    if (open && el && !el.open) el.showModal();
+  }, [open]);
+
+  const close = () => dialog.current?.close();
 
   if (!open) {
     return (
@@ -182,38 +198,168 @@ export function GoalRowForm({
     );
   }
 
+  // Todas as abas ficam montadas (só escondo as inativas), então um único
+  // "Salvar" grava mês, semana, dia e horário de uma vez, sem apagar o resto.
   return (
-    <form action={action} className="flex w-full flex-col gap-3 rounded-xl bg-surface-2 p-3 lg:w-[34rem]" noValidate>
-      <input type="hidden" name="month" value={month} />
-      <input type="hidden" name="memberId" value={memberId} />
-      {state.error ? <FormMessage>{state.error}</FormMessage> : null}
-      <p className="text-xs font-semibold tracking-wide text-muted uppercase">Meta do mês</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <GoalInputs period="month" values={values.month} errors={state.fieldErrors} />
+    <dialog ref={dialog} onClose={() => setOpen(false)} onClick={(e) => e.target === dialog.current && close()} className={clsx(DIALOG_CLASS, "sm:w-[min(48rem,calc(100vw-2rem))]")}>
+      <form action={action} className="flex flex-col gap-4 p-5 sm:p-6" noValidate>
+        <input type="hidden" name="month" value={month} />
+        <input type="hidden" name="memberId" value={memberId} />
+        <header className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-muted">Editar metas</p>
+            <h2 className="mt-0.5 truncate font-display text-xl font-semibold tracking-tight">{memberName}</h2>
+          </div>
+          <button type="button" onClick={close} aria-label="Fechar" className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:size-8">
+            <X className="size-4" />
+          </button>
+        </header>
+        {state.error ? <FormMessage>{state.error}</FormMessage> : null}
+        <PeriodTabs value={tab} onChange={setTab} withSlots={slots.length > 0} />
+        <div className={clsx(tab !== "month" && "hidden")}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <GoalInputs period="month" values={values.month} errors={state.fieldErrors} />
+          </div>
+        </div>
+        <div className={clsx(tab !== "week" && "hidden")}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <GoalInputs period="week" values={values.week} errors={state.fieldErrors} />
+          </div>
+        </div>
+        <div className={clsx(tab !== "day" && "hidden")}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <GoalInputs period="day" values={values.day} errors={state.fieldErrors} />
+          </div>
+        </div>
+        {slots.length > 0 ? (
+          <div className={clsx(tab !== "slot" && "hidden")}>
+            <SlotGoalGrid slots={slots} values={slotValues} errors={state.fieldErrors} />
+          </div>
+        ) : null}
+        <p className="text-xs text-muted">Salvar grava todas as abas. Deixar em zero apaga aquela meta.</p>
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? "Salvando..." : "Salvar"}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={close}>
+            Cancelar
+          </Button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+export type GoalParticipant = { name: string; target: number; actual: number };
+export type CreatedGoal = {
+  key: string;
+  title: string;
+  subtitle: string;
+  target: number | null;
+  participants: GoalParticipant[];
+  showProgress: boolean;
+};
+
+function MiniProgress({ actual, target }: { actual: number; target: number }) {
+  const pct = target ? Math.min(100, (actual / target) * 100) : 0;
+  return (
+    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-surface-2">
+      <div className={clsx("h-full rounded-full", pct >= 100 ? "bg-brand" : "bg-brand-text")} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** Lista das metas criadas no período; clicar abre os corretores e o progresso. */
+export function CreatedGoals({ goals }: { goals: CreatedGoal[] }) {
+  const [active, setActive] = useState<CreatedGoal | null>(null);
+  if (!goals.length) {
+    return <p className="px-6 py-10 text-center text-sm text-muted">Nenhuma meta criada para este período.</p>;
+  }
+  return (
+    <>
+      <ul className="mt-3 divide-y divide-line border-t border-line">
+        {goals.map((g) => {
+          const totalTarget = g.participants.reduce((s, p) => s + p.target, 0);
+          const totalActual = g.participants.reduce((s, p) => s + p.actual, 0);
+          const pct = totalTarget ? Math.min(100, (totalActual / totalTarget) * 100) : 0;
+          const count = g.participants.length;
+          return (
+            <li key={g.key}>
+              <button type="button" onClick={() => setActive(g)} className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-2 sm:px-6">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{g.title}</span>
+                  <span className="block text-xs text-muted">
+                    {g.subtitle} · {count} {count === 1 ? "corretor" : "corretores"}
+                    {g.target !== null ? ` · alvo ${formatNumber(g.target)}` : ""}
+                  </span>
+                </span>
+                {g.showProgress ? (
+                  <span className="hidden w-40 shrink-0 sm:block">
+                    <span className="flex justify-between text-xs">
+                      <span className="text-muted">equipe</span>
+                      <span className="tabular-nums">
+                        {formatNumber(totalActual)} / {formatNumber(totalTarget)}
+                      </span>
+                    </span>
+                    <span className="mt-1 block h-2 overflow-hidden rounded-full bg-surface-2">
+                      <span className="block h-full rounded-full bg-brand-text" style={{ width: `${pct}%` }} />
+                    </span>
+                  </span>
+                ) : null}
+                <ChevronRight className="size-4 shrink-0 text-muted" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {active ? <CreatedGoalModal goal={active} onClose={() => setActive(null)} /> : null}
+    </>
+  );
+}
+
+function CreatedGoalModal({ goal, onClose }: { goal: CreatedGoal; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const el = dialog.current;
+    if (el && !el.open) el.showModal();
+  }, []);
+  const close = () => dialog.current?.close();
+  const sorted = [...goal.participants].sort((a, b) => (goal.showProgress ? b.actual - a.actual : a.name.localeCompare(b.name)));
+  return (
+    <dialog ref={dialog} onClose={onClose} onClick={(e) => e.target === dialog.current && close()} className={clsx(DIALOG_CLASS, "sm:w-[min(32rem,calc(100vw-2rem))]")}>
+      <div className="flex flex-col gap-5 p-5 sm:p-6">
+        <header className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-muted">{goal.subtitle}</p>
+            <h2 className="mt-0.5 font-display text-xl font-semibold tracking-tight">
+              {goal.title}
+              {goal.target !== null ? <span className="text-muted"> · alvo {formatNumber(goal.target)}</span> : null}
+            </h2>
+          </div>
+          <button type="button" onClick={close} aria-label="Fechar" className="grid size-9 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 sm:size-8">
+            <X className="size-4" />
+          </button>
+        </header>
+        <ul className="flex flex-col gap-3.5">
+          {sorted.map((p) => (
+            <li key={p.name}>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Avatar name={p.name} />
+                  <span className="truncate font-medium">{p.name}</span>
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  <span className="font-semibold">{formatNumber(p.actual)}</span>
+                  <span className="text-muted"> de {formatNumber(p.target)}</span>
+                </span>
+              </div>
+              {goal.showProgress ? <MiniProgress actual={p.actual} target={p.target} /> : null}
+            </li>
+          ))}
+        </ul>
+        {!goal.showProgress ? <p className="text-xs text-muted">O progresso aparece no mês em andamento.</p> : null}
       </div>
-      <p className="text-xs font-semibold tracking-wide text-muted uppercase">Meta por semana</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <GoalInputs period="week" values={values.week} errors={state.fieldErrors} />
-      </div>
-      <p className="text-xs font-semibold tracking-wide text-muted uppercase">Meta por dia</p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <GoalInputs period="day" values={values.day} errors={state.fieldErrors} />
-      </div>
-      {slots.length > 0 ? (
-        <>
-          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Meta por horário de relatório</p>
-          <SlotGoalGrid slots={slots} values={slotValues} errors={state.fieldErrors} />
-        </>
-      ) : null}
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? "Salvando..." : "Salvar"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancelar
-        </Button>
-      </div>
-    </form>
+    </dialog>
   );
 }
 
