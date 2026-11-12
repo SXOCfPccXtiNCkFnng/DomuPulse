@@ -1,26 +1,25 @@
 "use client";
 
 import clsx from "clsx";
-import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Images, RotateCw, ScrollText, Trash2, Upload } from "lucide-react";
-import { degrees, PDFDocument } from "pdf-lib";
+import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Images, Paperclip, RotateCw, ScrollText, Trash2, Upload } from "lucide-react";
+import { degrees, PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Field, FormMessage, Input } from "@/components/ui/field";
+import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 
 const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const MAX_PAGES = 300;
 
 type Kind = "pdf" | "image" | "both";
 const isPdf = (f: File) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
-const isImg = (f: File) => f.type.startsWith("image/") || /\.(jpe?g|png)$/i.test(f.name);
+const isImg = (f: File) => f.type.startsWith("image/") || /\.(jpe?g|png|webp)$/i.test(f.name);
 const accepts = (f: File, kind: Kind) => (kind === "pdf" ? isPdf(f) : kind === "image" ? isImg(f) : isPdf(f) || isImg(f));
-const acceptAttr = (kind: Kind) => (kind === "pdf" ? "application/pdf" : kind === "image" ? "image/jpeg,image/png" : "application/pdf,image/jpeg,image/png");
+const acceptAttr = (kind: Kind) => (kind === "pdf" ? "application/pdf" : kind === "image" ? "image/jpeg,image/png,image/webp" : "application/pdf,image/jpeg,image/png,image/webp");
 
 function downloadPdf(bytes: Uint8Array, name: string) {
   const file = name.trim().replace(/[\\/:*?"<>|]+/g, "").slice(0, 80) || "documento";
-  const blob = new Blob([new Uint8Array(bytes)], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/pdf" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = file.toLowerCase().endsWith(".pdf") ? file : `${file}.pdf`;
@@ -28,33 +27,57 @@ function downloadPdf(bytes: Uint8Array, name: string) {
   URL.revokeObjectURL(url);
 }
 
-/** Junta PDFs e imagens (na ordem) em um único PDF. */
-async function combineFiles(files: File[]): Promise<Uint8Array> {
-  const out = await PDFDocument.create();
-  for (const f of files) {
-    const bytes = await f.arrayBuffer();
-    if (isPdf(f)) {
-      const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
-      const pages = await out.copyPages(src, src.getPageIndices());
-      pages.forEach((p) => out.addPage(p));
-    } else {
-      const img = f.type.includes("png") || /\.png$/i.test(f.name) ? await out.embedPng(bytes) : await out.embedJpg(bytes);
-      const A4W = 595.28;
-      const A4H = 841.89;
-      const scale = Math.min((A4W - 48) / img.width, (A4H - 48) / img.height, 1);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      const page = out.addPage([A4W, A4H]);
-      page.drawImage(img, { x: (A4W - w) / 2, y: (A4H - h) / 2, width: w, height: h });
-    }
-  }
-  if (out.getPageCount() > MAX_PAGES) throw new Error("too-many-pages");
-  return out.save();
+// Converte qualquer imagem (inclusive WEBP) em JPEG pelo canvas, aplicando a
+// qualidade escolhida e um fundo branco (JPEG não tem transparência).
+async function imageToJpeg(file: File, quality: number): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
+  if (!blob) throw new Error("encode");
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
-function Dropzone({ kind, multiple, onPick, label }: { kind: Kind; multiple: boolean; onPick: (files: File[]) => void; label: string }) {
+type PageOpts = { size: "a4" | "carta"; orientation: "auto" | "retrato" | "paisagem"; margin: number };
+const DEFAULT_OPTS: PageOpts = { size: "a4", orientation: "auto", margin: 24 };
+
+async function addImagePage(out: PDFDocument, jpg: Uint8Array, opts: PageOpts) {
+  const img = await out.embedJpg(jpg);
+  const base = opts.size === "carta" ? [612, 792] : [595.28, 841.89];
+  const landscape = opts.orientation === "paisagem" || (opts.orientation === "auto" && img.width > img.height);
+  const pw = landscape ? base[1] : base[0];
+  const ph = landscape ? base[0] : base[1];
+  const availW = pw - 2 * opts.margin;
+  const availH = ph - 2 * opts.margin;
+  const scale = Math.min(availW / img.width, availH / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  const page = out.addPage([pw, ph]);
+  page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
+}
+
+async function copyPdfInto(out: PDFDocument, bytes: ArrayBuffer) {
+  const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  const pages = await out.copyPages(src, src.getPageIndices());
+  pages.forEach((p) => out.addPage(p));
+}
+
+function mapError(e: unknown) {
+  return e instanceof Error && e.message === "too-many-pages" ? "O PDF final passaria de 300 páginas." : "Não foi possível gerar. Confira se os arquivos não têm senha.";
+}
+const ensureLimit = (out: PDFDocument) => {
+  if (out.getPageCount() > MAX_PAGES) throw new Error("too-many-pages");
+};
+
+function Dropzone({ kind, multiple, onPick, label, sub }: { kind: Kind; multiple: boolean; onPick: (files: File[]) => void; label: string; sub: string }) {
   const [over, setOver] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
   const take = (list: FileList | null) => {
     if (!list) return;
     const ok = Array.from(list).filter((f) => accepts(f, kind));
@@ -79,9 +102,8 @@ function Dropzone({ kind, multiple, onPick, label }: { kind: Kind; multiple: boo
     >
       <Upload className="size-6 text-muted" />
       <span className="text-sm font-medium">{label}</span>
-      <span className="text-xs text-muted">Até 100 MB no total e 300 páginas. Tudo no seu aparelho, nada é enviado.</span>
+      <span className="text-xs text-muted">{sub}</span>
       <input
-        ref={input}
         type="file"
         accept={acceptAttr(kind)}
         multiple={multiple}
@@ -95,10 +117,27 @@ function Dropzone({ kind, multiple, onPick, label }: { kind: Kind; multiple: boo
   );
 }
 
-/** Juntar PDF, Imagens em PDF e Kit do cliente usam o mesmo motor (combinar). */
-function Combine({ kind, title, pickLabel, defaultName }: { kind: Kind; title: string; pickLabel: string; defaultName: string }) {
+function FileRow({ f, onUp, onDown, onRemove, upDisabled, downDisabled }: { f: File; onUp?: () => void; onDown?: () => void; onRemove: () => void; upDisabled?: boolean; downDisabled?: boolean }) {
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted">{isPdf(f) ? <FileText className="size-4" /> : <ImageIcon className="size-4" />}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{f.name}</span>
+        <span className="block text-xs text-muted">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        {onUp ? <IconButton label="Subir" onClick={onUp} disabled={upDisabled}><ArrowUp className="size-4" /></IconButton> : null}
+        {onDown ? <IconButton label="Descer" onClick={onDown} disabled={downDisabled}><ArrowDown className="size-4" /></IconButton> : null}
+        <IconButton label="Remover" onClick={onRemove}><Trash2 className="size-4" /></IconButton>
+      </span>
+    </li>
+  );
+}
+
+/** Juntar PDF: vários PDFs viram um. */
+function MergePdf() {
   const [files, setFiles] = useState<File[]>([]);
-  const [name, setName] = useState(defaultName);
+  const [name, setName] = useState("documentos-juntos");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,14 +151,17 @@ function Combine({ kind, title, pickLabel, defaultName }: { kind: Kind; title: s
     });
 
   const generate = async () => {
-    if (!files.length) return setError("Escolha os arquivos.");
+    if (!files.length) return setError("Escolha os PDFs.");
     if (files.reduce((s, f) => s + f.size, 0) > MAX_BYTES) return setError("Os arquivos somam mais de 100 MB.");
     setBusy(true);
     setError(null);
     try {
-      downloadPdf(await combineFiles(files), name);
+      const out = await PDFDocument.create();
+      for (const f of files) await copyPdfInto(out, await f.arrayBuffer());
+      ensureLimit(out);
+      downloadPdf(await out.save(), name);
     } catch (e) {
-      setError(e instanceof Error && e.message === "too-many-pages" ? "O PDF final passaria de 300 páginas." : "Não foi possível gerar. Confira se os arquivos não têm senha.");
+      setError(mapError(e));
     } finally {
       setBusy(false);
     }
@@ -127,44 +169,105 @@ function Combine({ kind, title, pickLabel, defaultName }: { kind: Kind; title: s
 
   return (
     <div className="flex flex-col gap-5">
-      <Dropzone kind={kind} multiple onPick={(picked) => setFiles((cur) => [...cur, ...picked])} label={pickLabel} />
+      <Dropzone kind="pdf" multiple onPick={(p) => setFiles((c) => [...c, ...p])} label="Toque para escolher ou arraste os PDFs" sub="Até 100 MB no total e 300 páginas. Tudo no seu aparelho, nada é enviado." />
       {error ? <FormMessage>{error}</FormMessage> : null}
       {files.length ? (
         <ul className="flex flex-col gap-2">
           {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5">
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted">{isPdf(f) ? <FileText className="size-4" /> : <ImageIcon className="size-4" />}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{f.name}</span>
-                <span className="block text-xs text-muted">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
-              </span>
-              <span className="flex shrink-0 items-center gap-1">
-                <IconButton label="Subir" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp className="size-4" /></IconButton>
-                <IconButton label="Descer" onClick={() => move(i, 1)} disabled={i === files.length - 1}><ArrowDown className="size-4" /></IconButton>
-                <IconButton label="Remover" onClick={() => setFiles((cur) => cur.filter((_, j) => j !== i))}><Trash2 className="size-4" /></IconButton>
-              </span>
-            </li>
+            <FileRow key={`${f.name}-${i}`} f={f} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === files.length - 1} onRemove={() => setFiles((c) => c.filter((_, j) => j !== i))} />
           ))}
         </ul>
       ) : null}
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="Nome do arquivo" className="flex-1">
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
-        </Field>
-        <Button onClick={generate} disabled={busy || !files.length} className="h-11">
-          {busy ? "Gerando..." : title}
-        </Button>
-        {files.length ? (
-          <Button variant="ghost" onClick={() => setFiles([])} disabled={busy} className="h-11">
-            Limpar
-          </Button>
-        ) : null}
-      </div>
+      <GenerateBar name={name} setName={setName} onGenerate={generate} busy={busy} disabled={!files.length} onClear={files.length ? () => setFiles([]) : undefined} label="Juntar PDFs" />
     </div>
   );
 }
 
-/** Organizar páginas: girar, apagar e reordenar as páginas de um PDF. */
+/** Imagens em PDF, com ajuste de página. */
+function ImagesToPdf() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [name, setName] = useState("fotos");
+  const [size, setSize] = useState<PageOpts["size"]>("a4");
+  const [orientation, setOrientation] = useState<PageOpts["orientation"]>("auto");
+  const [margin, setMargin] = useState("24");
+  const [quality, setQuality] = useState("0.72");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const move = (i: number, dir: -1 | 1) =>
+    setFiles((cur) => {
+      const a = [...cur];
+      const j = i + dir;
+      if (j < 0 || j >= a.length) return cur;
+      [a[i], a[j]] = [a[j], a[i]];
+      return a;
+    });
+
+  const generate = async () => {
+    if (!files.length) return setError("Escolha as imagens.");
+    if (files.reduce((s, f) => s + f.size, 0) > MAX_BYTES) return setError("As imagens somam mais de 100 MB.");
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await PDFDocument.create();
+      const opts: PageOpts = { size, orientation, margin: Number(margin) };
+      for (const f of files) await addImagePage(out, await imageToJpeg(f, Number(quality)), opts);
+      ensureLimit(out);
+      downloadPdf(await out.save(), name);
+    } catch (e) {
+      setError(mapError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Dropzone kind="image" multiple onPick={(p) => setFiles((c) => [...c, ...p])} label="Toque para escolher ou arraste as imagens" sub="JPG, PNG ou WEBP. Até 100 MB no total." />
+      {error ? <FormMessage>{error}</FormMessage> : null}
+      {files.length ? (
+        <ul className="flex flex-col gap-2">
+          {files.map((f, i) => (
+            <FileRow key={`${f.name}-${i}`} f={f} onUp={() => move(i, -1)} onDown={() => move(i, 1)} upDisabled={i === 0} downDisabled={i === files.length - 1} onRemove={() => setFiles((c) => c.filter((_, j) => j !== i))} />
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Field label="Tamanho da página">
+          <Select value={size} onChange={(e) => setSize(e.target.value as PageOpts["size"])}>
+            <option value="a4">A4</option>
+            <option value="carta">Carta</option>
+          </Select>
+        </Field>
+        <Field label="Orientação">
+          <Select value={orientation} onChange={(e) => setOrientation(e.target.value as PageOpts["orientation"])}>
+            <option value="auto">Automática</option>
+            <option value="retrato">Retrato</option>
+            <option value="paisagem">Paisagem</option>
+          </Select>
+        </Field>
+        <Field label="Margem">
+          <Select value={margin} onChange={(e) => setMargin(e.target.value)}>
+            <option value="0">Nenhuma</option>
+            <option value="24">Pequena</option>
+            <option value="48">Média</option>
+          </Select>
+        </Field>
+        <Field label="Qualidade">
+          <Select value={quality} onChange={(e) => setQuality(e.target.value)}>
+            <option value="0.72">Compacta (arquivo menor)</option>
+            <option value="0.92">Alta</option>
+          </Select>
+        </Field>
+      </div>
+
+      <GenerateBar name={name} setName={setName} onGenerate={generate} busy={busy} disabled={!files.length} onClear={files.length ? () => setFiles([]) : undefined} label="Converter em PDF" />
+    </div>
+  );
+}
+
+/** Organizar páginas de um PDF: girar, apagar e reordenar. */
 function Organize() {
   const [file, setFile] = useState<File | null>(null);
   const [pages, setPages] = useState<{ src: number; rot: number }[]>([]);
@@ -217,7 +320,7 @@ function Organize() {
   if (!file) {
     return (
       <div className="flex flex-col gap-4">
-        <Dropzone kind="pdf" multiple={false} onPick={(f) => f[0] && open(f[0])} label="Escolha um PDF para organizar" />
+        <Dropzone kind="pdf" multiple={false} onPick={(f) => f[0] && open(f[0])} label="Escolha um PDF para organizar" sub="Tudo no seu aparelho, nada é enviado." />
         {error ? <FormMessage>{error}</FormMessage> : null}
       </div>
     );
@@ -249,28 +352,179 @@ function Organize() {
           </li>
         ))}
       </ul>
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="Nome do arquivo" className="flex-1">
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+      <GenerateBar name={name} setName={setName} onGenerate={generate} busy={busy} disabled={!pages.length} label="Gerar PDF" />
+    </div>
+  );
+}
+
+const KIT_ITEMS = [
+  { id: "identidade", title: "Documento de identidade", hint: "RG ou CNH, frente e verso" },
+  { id: "cpf", title: "CPF", hint: "Se o número não estiver no RG ou na CNH" },
+  { id: "estado_civil", title: "Estado civil", hint: "Certidão de nascimento ou de casamento" },
+  { id: "residencia", title: "Comprovante de residência", hint: "Conta de luz, água ou telefone recente" },
+  { id: "renda", title: "Comprovante de renda", hint: "Holerites, extrato bancário ou declaração de IR" },
+  { id: "trabalho", title: "Carteira de trabalho / FGTS", hint: "Páginas da carteira ou extrato do FGTS" },
+  { id: "outros", title: "Outros documentos", hint: "Qualquer outro documento pedido" },
+] as const;
+
+/** Kit do cliente: checklist de documentos (vários arquivos por item) viram um PDF, com capa opcional. */
+function ClientKit({ clients }: { clients: { id: string; name: string }[] }) {
+  const [client, setClient] = useState("");
+  const [files, setFiles] = useState<Record<string, File[]>>({});
+  const [cover, setCover] = useState(true);
+  const [name, setName] = useState("kit-do-cliente");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const addTo = (id: string, list: FileList | null) => {
+    if (!list) return;
+    const ok = Array.from(list).filter((f) => isPdf(f) || isImg(f));
+    if (ok.length) setFiles((cur) => ({ ...cur, [id]: [...(cur[id] ?? []), ...ok] }));
+  };
+  const removeFrom = (id: string, i: number) => setFiles((cur) => ({ ...cur, [id]: (cur[id] ?? []).filter((_, j) => j !== i) }));
+
+  const generate = async () => {
+    const used = KIT_ITEMS.filter((it) => files[it.id]?.length);
+    if (!used.length) return setError("Anexe ao menos um documento.");
+    const total = Object.values(files).flat().reduce((s, f) => s + f.size, 0);
+    if (total > MAX_BYTES) return setError("Os arquivos somam mais de 100 MB.");
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await PDFDocument.create();
+      if (cover) {
+        const font = await out.embedFont(StandardFonts.Helvetica);
+        const bold = await out.embedFont(StandardFonts.HelveticaBold);
+        const page = out.addPage([595.28, 841.89]);
+        const gray = rgb(0.4, 0.45, 0.55);
+        let y = 780;
+        page.drawText("Documentos do cliente", { x: 48, y, size: 22, font: bold });
+        y -= 30;
+        if (client.trim()) {
+          page.drawText(client.trim().slice(0, 80), { x: 48, y, size: 14, font });
+          y -= 22;
+        }
+        page.drawText(new Date().toLocaleDateString("pt-BR"), { x: 48, y, size: 11, font, color: gray });
+        y -= 34;
+        page.drawText("Documentos incluidos:", { x: 48, y, size: 12, font: bold });
+        y -= 20;
+        for (const it of used) {
+          page.drawText(`- ${it.title}`, { x: 56, y, size: 12, font });
+          y -= 18;
+        }
+      }
+      for (const it of used) {
+        for (const f of files[it.id]) {
+          if (isPdf(f)) await copyPdfInto(out, await f.arrayBuffer());
+          else await addImagePage(out, await imageToJpeg(f, 0.72), DEFAULT_OPTS);
+        }
+      }
+      ensureLimit(out);
+      downloadPdf(await out.save(), name || `kit-${client.trim() || "cliente"}`);
+    } catch (e) {
+      setError(mapError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <Field label="Cliente" hint={clients.length ? "Comece a digitar para buscar na sua carteira, ou digite um nome novo." : "Digite o nome do cliente."}>
+          <Input list="kit-clients" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Nome do cliente" maxLength={80} />
         </Field>
-        <Button onClick={generate} disabled={busy || !pages.length} className="h-11">
-          {busy ? "Gerando..." : "Gerar PDF"}
-        </Button>
+        <datalist id="kit-clients">
+          {clients.map((c) => (
+            <option key={c.id} value={c.name} />
+          ))}
+        </datalist>
       </div>
+
+      {error ? <FormMessage>{error}</FormMessage> : null}
+
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-muted">Anexe cada documento (PDF ou foto). Pode anexar mais de um arquivo por item (frente e verso). Os itens sem arquivo ficam de fora.</p>
+        {KIT_ITEMS.map((it) => {
+          const list = files[it.id] ?? [];
+          return (
+            <div key={it.id} className="rounded-xl border border-line p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <span className={clsx("size-2 rounded-full", list.length ? "bg-ok" : "bg-surface-3")} />
+                    {it.title}
+                  </span>
+                  <span className="block text-xs text-muted">{it.hint}</span>
+                </span>
+                <Button size="sm" variant="secondary" onClick={() => inputs.current[it.id]?.click()}>
+                  <Paperclip className="size-3.5" />
+                  Anexar
+                </Button>
+                <input
+                  ref={(el) => {
+                    inputs.current[it.id] = el;
+                  }}
+                  type="file"
+                  accept={acceptAttr("both")}
+                  multiple
+                  className="sr-only"
+                  onChange={(e) => {
+                    addTo(it.id, e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              {list.length ? (
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {list.map((f, i) => (
+                    <li key={`${f.name}-${i}`} className="flex items-center gap-2 text-xs text-ink-2">
+                      {isPdf(f) ? <FileText className="size-3.5 shrink-0 text-muted" /> : <ImageIcon className="size-3.5 shrink-0 text-muted" />}
+                      <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                      <button type="button" onClick={() => removeFrom(it.id, i)} aria-label="Remover" className="text-muted hover:text-danger">
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <input type="checkbox" checked={cover} onChange={(e) => setCover(e.target.checked)} className="size-4 accent-[var(--brand)]" />
+        Incluir uma capa com o nome do cliente e a lista de documentos
+      </label>
+
+      <GenerateBar name={name} setName={setName} onGenerate={generate} busy={busy} disabled={false} onClear={() => setFiles({})} label="Montar kit" />
+    </div>
+  );
+}
+
+function GenerateBar({ name, setName, onGenerate, busy, disabled, onClear, label }: { name: string; setName: (v: string) => void; onGenerate: () => void; busy: boolean; disabled: boolean; onClear?: () => void; label: string }) {
+  return (
+    <div className="flex flex-wrap items-end gap-3 border-t border-line pt-4">
+      <Field label="Nome do arquivo" className="flex-1">
+        <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
+      </Field>
+      <Button onClick={onGenerate} disabled={busy || disabled} className="h-11">
+        {busy ? "Gerando..." : label}
+      </Button>
+      {onClear ? (
+        <Button variant="ghost" onClick={onClear} disabled={busy} className="h-11">
+          Limpar
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className="grid size-8 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30"
-    >
+    <button type="button" onClick={onClick} disabled={disabled} aria-label={label} title={label} className="grid size-8 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-30">
       {children}
     </button>
   );
@@ -284,8 +538,9 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-export function MontarPdfBoard() {
+export function MontarPdfBoard({ clients }: { clients: { id: string; name: string }[] }) {
   const [tab, setTab] = useState<TabId>("merge");
+  const active = TABS.find((t) => t.id === tab)!;
 
   return (
     <div className="flex flex-col gap-5">
@@ -315,22 +570,22 @@ export function MontarPdfBoard() {
 
       <Card>
         <CardHeader
-          title={TABS.find((t) => t.id === tab)!.label}
+          title={active.label}
           description={
             tab === "merge"
               ? "Vários PDFs viram um só, na ordem que você definir."
               : tab === "images"
-                ? "Fotos (JPG ou PNG) viram páginas de um PDF."
+                ? "Fotos (JPG, PNG ou WEBP) viram páginas de um PDF."
                 : tab === "organize"
                   ? "Gire, apague e reordene as páginas de um PDF."
-                  : "Junte PDFs e fotos do cliente num documento só."
+                  : "Junte os documentos do cliente num PDF só, com capa opcional."
           }
         />
         <div className="p-5 sm:p-6">
-          {tab === "merge" ? <Combine kind="pdf" title="Juntar PDFs" pickLabel="Toque para escolher ou arraste os PDFs" defaultName="documentos-juntos" /> : null}
-          {tab === "images" ? <Combine kind="image" title="Gerar PDF" pickLabel="Toque para escolher ou arraste as imagens" defaultName="imagens" /> : null}
+          {tab === "merge" ? <MergePdf /> : null}
+          {tab === "images" ? <ImagesToPdf /> : null}
           {tab === "organize" ? <Organize /> : null}
-          {tab === "kit" ? <Combine kind="both" title="Montar kit" pickLabel="Toque para escolher ou arraste PDFs e fotos" defaultName="kit-do-cliente" /> : null}
+          {tab === "kit" ? <ClientKit clients={clients} /> : null}
         </div>
       </Card>
     </div>
