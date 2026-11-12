@@ -7,36 +7,80 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Role, Segment } from "@/lib/auth";
 
-const BROKER_ITEMS = [
-  { href: "/painel", label: "Painel", Icon: Activity, leadersOnly: false },
-  { href: "/clientes", label: "Clientes", Icon: Contact, leadersOnly: false },
-  { href: "/agenda", label: "Agenda", Icon: CalendarDays, leadersOnly: false },
-  { href: "/relatorios", label: "Relatórios", Icon: BarChart3, leadersOnly: false },
-  { href: "/imoveis", label: "Imóveis", Icon: Building2, leadersOnly: false },
-  { href: "/simulador", label: "Simulador", Icon: Calculator, leadersOnly: false },
-  { href: "/metas", label: "Metas", Icon: Target, leadersOnly: false },
-  { href: "/notas", label: "Notas fiscais", Icon: FileText, leadersOnly: false },
-  { href: "/contratos", label: "Contratos", Icon: ScrollText, leadersOnly: true },
-  { href: "/equipe", label: "Equipe", Icon: Users, leadersOnly: true },
-  { href: "/conta", label: "Conta", Icon: CircleUser, leadersOnly: false },
+type NavItem = { href: string; label: string; Icon: typeof Activity; leadersOnly: boolean };
+type NavGroup = { title: string; items: NavItem[] };
+
+const BROKER_GROUPS: NavGroup[] = [
+  {
+    title: "Dia a dia",
+    items: [
+      { href: "/painel", label: "Painel", Icon: Activity, leadersOnly: false },
+      { href: "/clientes", label: "Clientes", Icon: Contact, leadersOnly: false },
+      { href: "/agenda", label: "Agenda", Icon: CalendarDays, leadersOnly: false },
+      { href: "/relatorios", label: "Relatórios", Icon: BarChart3, leadersOnly: false },
+      { href: "/metas", label: "Metas", Icon: Target, leadersOnly: false },
+    ],
+  },
+  {
+    title: "Imóveis e crédito",
+    items: [
+      { href: "/imoveis", label: "Imóveis", Icon: Building2, leadersOnly: false },
+      { href: "/simulador", label: "Simulador", Icon: Calculator, leadersOnly: false },
+    ],
+  },
+  {
+    title: "Documentos",
+    items: [
+      { href: "/contratos", label: "Contratos", Icon: ScrollText, leadersOnly: true },
+      { href: "/notas", label: "Notas fiscais", Icon: FileText, leadersOnly: false },
+    ],
+  },
+  {
+    title: "Gestão",
+    items: [
+      { href: "/equipe", label: "Equipe", Icon: Users, leadersOnly: true },
+      { href: "/conta", label: "Conta", Icon: CircleUser, leadersOnly: false },
+    ],
+  },
 ];
 
-const HR_ITEMS = [
-  { href: "/recrutamento", label: "Painel", Icon: LayoutDashboard, leadersOnly: false },
-  { href: "/vagas", label: "Vagas", Icon: Briefcase, leadersOnly: false },
-  { href: "/candidatos", label: "Candidatos", Icon: UserSearch, leadersOnly: false },
-  { href: "/entrevistas", label: "Entrevistas", Icon: CalendarDays, leadersOnly: false },
-  { href: "/automacao", label: "Automação", Icon: Zap, leadersOnly: true },
-  { href: "/equipe", label: "Equipe", Icon: Users, leadersOnly: true },
-  { href: "/conta", label: "Conta", Icon: CircleUser, leadersOnly: false },
+const HR_GROUPS: NavGroup[] = [
+  {
+    title: "Recrutamento",
+    items: [
+      { href: "/recrutamento", label: "Painel", Icon: LayoutDashboard, leadersOnly: false },
+      { href: "/vagas", label: "Vagas", Icon: Briefcase, leadersOnly: false },
+      { href: "/candidatos", label: "Candidatos", Icon: UserSearch, leadersOnly: false },
+      { href: "/entrevistas", label: "Entrevistas", Icon: CalendarDays, leadersOnly: false },
+    ],
+  },
+  {
+    title: "Gestão",
+    items: [
+      { href: "/automacao", label: "Automação", Icon: Zap, leadersOnly: true },
+      { href: "/equipe", label: "Equipe", Icon: Users, leadersOnly: true },
+      { href: "/conta", label: "Conta", Icon: CircleUser, leadersOnly: false },
+    ],
+  },
 ];
 
 // Na barra do celular cabem 4 itens; o resto fica em "Mais".
 const TAB_COUNT = 4;
 
+const groupsFor = (segment: Segment) => (segment === "hr" ? HR_GROUPS : BROKER_GROUPS);
+
+/** Grupos visíveis para o cargo (esconde itens só da liderança para o corretor). */
+function visibleGroups(role: Role, segment: Segment): NavGroup[] {
+  return groupsFor(segment)
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.leadersOnly || role !== "broker") }))
+    .filter((g) => g.items.length > 0);
+}
+
+/** Lista achatada, na ordem dos grupos (usada pela barra do celular). */
 function useItems(role: Role, segment: Segment) {
-  const items = segment === "hr" ? HR_ITEMS : BROKER_ITEMS;
-  return items.filter((i) => !i.leadersOnly || role !== "broker");
+  return groupsFor(segment)
+    .flatMap((g) => g.items)
+    .filter((i) => !i.leadersOnly || role !== "broker");
 }
 
 const isActive = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
@@ -44,24 +88,29 @@ const isActive = (path: string, href: string) => path === href || path.startsWit
 export function SideNav({ role, segment }: { role: Role; segment: Segment }) {
   const path = usePathname();
   return (
-    <nav aria-label="Principal" className="flex flex-col gap-1">
-      {useItems(role, segment).map(({ href, label, Icon }) => {
-        const active = isActive(path, href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={clsx(
-              "flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
-              active ? "bg-brand text-brand-ink" : "text-ink-2 hover:bg-surface-2 hover:text-ink",
-            )}
-          >
-            <Icon className="size-[18px]" strokeWidth={active ? 2.4 : 2} />
-            {label}
-          </Link>
-        );
-      })}
+    <nav aria-label="Principal" className="flex flex-col gap-0.5">
+      {visibleGroups(role, segment).map((group, gi) => (
+        <div key={group.title} className="flex flex-col gap-0.5">
+          <p className={clsx("px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted uppercase", gi === 0 ? "pt-1" : "pt-4")}>{group.title}</p>
+          {group.items.map(({ href, label, Icon }) => {
+            const active = isActive(path, href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={clsx(
+                  "flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",
+                  active ? "bg-brand text-brand-ink" : "text-ink-2 hover:bg-surface-2 hover:text-ink",
+                )}
+              >
+                <Icon className="size-[18px]" strokeWidth={active ? 2.4 : 2} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
