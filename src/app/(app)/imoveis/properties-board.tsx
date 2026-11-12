@@ -1,9 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { BedDouble, Building2, MapPin, Pencil, Plus, Ruler, Search, Trash2, Users, X } from "lucide-react";
+import { BedDouble, Building2, Check, ExternalLink, GripVertical, ImagePlus, MapPin, Pencil, Plus, Ruler, Search, Share2, Trash2, Users, X } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge, Card } from "@/components/ui/card";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
@@ -17,6 +18,9 @@ import {
   formatPct,
   incomeLabel,
   MAX_PRICING,
+  PHOTO_BUCKET,
+  PHOTO_FILE_TYPES,
+  PHOTO_MAX,
   PRICING_TYPOLOGIES,
   pricingByTypology,
   PROPERTY_KINDS,
@@ -25,11 +29,13 @@ import {
   type PricingCondition,
   type Property,
   type PropertyLayout,
+  type PropertyPhoto,
   type PropertyStatus,
 } from "@/lib/properties";
+import { getBrowserClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
-import { createProperty, deleteProperty, updateProperty } from "./actions";
+import { addPropertyPhoto, createProperty, deleteProperty, deletePropertyPhoto, preparePropertyPhotoUpload, reorderPropertyPhotos, updateProperty } from "./actions";
 
 const STATUS_KEYS = Object.keys(PROPERTY_STATUS) as PropertyStatus[];
 const NO_KIND = "Sem tipo";
@@ -44,17 +50,21 @@ const kindOrder = (k: string) => {
 export function PropertiesBoard({
   properties,
   clientCounts,
+  photos: photosByProperty,
   canManage,
   missingTable,
   missingDetails = false,
   missingPricing = false,
+  missingPhotos = false,
 }: {
   properties: Property[];
   clientCounts: Record<string, number>;
+  photos: Record<string, PropertyPhoto[]>;
   canManage: boolean;
   missingTable: boolean;
   missingDetails?: boolean;
   missingPricing?: boolean;
+  missingPhotos?: boolean;
 }) {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Property | null>(null);
@@ -195,29 +205,53 @@ export function PropertiesBoard({
             ) : null}
             <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {list.map((p) => (
-                <PropertyCard key={p.id} property={p} clients={clientCounts[p.id] ?? 0} canManage={canManage} onEdit={() => setEditing(p)} />
+                <PropertyCard key={p.id} property={p} photos={photosByProperty[p.id] ?? []} clients={clientCounts[p.id] ?? 0} canManage={canManage} onEdit={() => setEditing(p)} />
               ))}
             </ul>
           </section>
         ))
       )}
 
-      {creating ? <PropertyDialog withPricing={!missingPricing} onClose={() => setCreating(false)} /> : null}
-      {editing ? <PropertyDialog property={editing} withPricing={!missingPricing} onClose={() => setEditing(null)} /> : null}
+      {creating ? <PropertyDialog withPricing={!missingPricing} withPhotos={!missingPhotos} onClose={() => setCreating(false)} /> : null}
+      {editing ? <PropertyDialog property={editing} photos={photosByProperty[editing.id] ?? []} withPricing={!missingPricing} withPhotos={!missingPhotos} onClose={() => setEditing(null)} /> : null}
     </div>
   );
 }
 
-function PropertyCard({ property: p, clients, canManage, onEdit }: { property: Property; clients: number; canManage: boolean; onEdit: () => void }) {
+function PropertyCard({ property: p, photos, clients, canManage, onEdit }: { property: Property; photos: PropertyPhoto[]; clients: number; canManage: boolean; onEdit: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [confirmDel, setConfirmDel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const st = PROPERTY_STATUS[p.status];
   const place = [p.neighborhood, p.city].filter(Boolean).join(", ");
   const layouts = propertyLayouts(p);
   const bedrooms = bedroomsLabel(layouts);
   const area = areaLabel(layouts);
+
+  async function copyLink() {
+    const url = `${window.location.origin}/imovel/${p.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: p.title,
+          text: `Confira este imóvel: ${p.title}`,
+          url,
+        });
+        return;
+      } catch {
+        // Usuário fechou folha de compartilhamento
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Ignora erro
+    }
+  }
 
   const remove = () =>
     start(async () => {
@@ -230,7 +264,24 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
 
   return (
     <li>
-      <Card className="flex h-full flex-col gap-3 p-5">
+      <Card className="flex h-full flex-col gap-3 overflow-hidden p-0">
+        {photos.length > 0 ? (
+          <div className="relative aspect-[16/9] w-full bg-surface-2">
+            <Image
+              src={photos[0].url}
+              alt={p.title}
+              fill
+              className="object-cover"
+              sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            />
+            {photos.length > 1 ? (
+              <span className="absolute right-2 bottom-2 rounded-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">
+                +{photos.length - 1}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        <div className={clsx("flex flex-1 flex-col gap-3", photos.length > 0 ? "px-5 pb-5" : "p-5")}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs text-muted">
@@ -307,28 +358,48 @@ function PropertyCard({ property: p, clients, canManage, onEdit }: { property: P
 
         {error ? <p className="text-xs text-danger">{error}</p> : null}
 
-        {canManage ? (
-          <div className="mt-auto flex flex-wrap gap-1.5 border-t border-line pt-3">
-            <Button size="sm" variant="ghost" onClick={onEdit} disabled={pending}>
-              <Pencil className="size-3.5" />
-              Editar
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-1.5 border-t border-line pt-3">
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="secondary" onClick={copyLink} className="gap-1.5 text-xs">
+              {copied ? <Check className="size-3.5 text-ok" /> : <Share2 className="size-3.5" />}
+              {copied ? "Link copiado!" : "Copiar link"}
             </Button>
-            {confirmDel ? (
-              <span className="flex items-center gap-1.5">
-                <Button size="sm" variant="danger" onClick={remove} disabled={pending}>
-                  Confirmar exclusão
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmDel(false)}>
-                  Cancelar
-                </Button>
-              </span>
-            ) : (
-              <Button size="sm" variant="ghost" onClick={() => setConfirmDel(true)} disabled={pending} aria-label="Apagar imóvel">
-                <Trash2 className="size-3.5" />
-              </Button>
-            )}
+            <a
+              href={`/imovel/${p.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Abrir anúncio público em nova aba"
+              title="Abrir anúncio público"
+              className="grid size-8 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-ink"
+            >
+              <ExternalLink className="size-3.5" />
+            </a>
           </div>
-        ) : null}
+
+          {canManage ? (
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onClick={onEdit} disabled={pending}>
+                <Pencil className="size-3.5" />
+                Editar
+              </Button>
+              {confirmDel ? (
+                <span className="flex items-center gap-1">
+                  <Button size="sm" variant="danger" onClick={remove} disabled={pending}>
+                    Confirmar
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmDel(false)}>
+                    Cancelar
+                  </Button>
+                </span>
+              ) : (
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDel(true)} disabled={pending} aria-label="Apagar imóvel">
+                  <Trash2 className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          ) : null}
+        </div>
+        </div>
       </Card>
     </li>
   );
@@ -636,7 +707,7 @@ function LayoutsField({ initial, error }: { initial: PropertyLayout[]; error?: s
   );
 }
 
-function PropertyDialog({ property: p, withPricing, onClose }: { property?: Property; withPricing: boolean; onClose: () => void }) {
+function PropertyDialog({ property: p, photos: initialPhotos, withPricing, withPhotos, onClose }: { property?: Property; photos?: PropertyPhoto[]; withPricing: boolean; withPhotos: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const router = useRouter();
   const [price, setPrice] = useState(centsToInput(p?.price_cents ?? null));
@@ -748,6 +819,9 @@ function PropertyDialog({ property: p, withPricing, onClose }: { property?: Prop
           {withPricing ? (
             <PricingField initial={p?.pricing ?? []} initialDate={p?.pricing_date ?? null} error={state.fieldErrors?.pricing ?? state.fieldErrors?.pricingDate} />
           ) : null}
+          {withPhotos && p ? (
+            <PhotosField propertyId={p.id} initial={initialPhotos ?? []} />
+          ) : null}
           <Field label="Observações" hint="Opcional" error={state.fieldErrors?.notes} className="sm:col-span-2">
             <textarea name="notes" defaultValue={p?.notes ?? ""} rows={3} maxLength={2000} placeholder="Vagas de garagem, condomínio, diferenciais..." className={textarea} />
           </Field>
@@ -763,5 +837,185 @@ function PropertyDialog({ property: p, withPricing, onClose }: { property?: Prop
         </footer>
       </form>
     </dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upload, galeria e reordenação de fotos do imóvel
+// ---------------------------------------------------------------------------
+
+type PhotoItem = PropertyPhoto & { uploading?: boolean };
+
+function PhotosField({ propertyId, initial }: { propertyId: string; initial: PropertyPhoto[] }) {
+  const router = useRouter();
+  const [photos, setPhotos] = useState<PhotoItem[]>(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Para drag-and-drop de reordenação
+  const dragIdx = useRef<number | null>(null);
+
+  const acceptTypes = Object.keys(PHOTO_FILE_TYPES).join(",");
+
+  const upload = useCallback(async (files: FileList | File[]) => {
+    setError(null);
+    const list = Array.from(files).slice(0, PHOTO_MAX - photos.length);
+    if (list.length === 0) {
+      if (photos.length >= PHOTO_MAX) setError(`Cada imóvel aceita até ${PHOTO_MAX} fotos.`);
+      return;
+    }
+    setBusy(true);
+    for (const file of list) {
+      // Placeholder otimista
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const localUrl = URL.createObjectURL(file);
+      setPhotos((prev) => [...prev, { id: tempId, url: localUrl, uploading: true }]);
+
+      const prepared = await preparePropertyPhotoUpload(propertyId, { name: file.name, size: file.size, type: file.type });
+      if (!("path" in prepared) || !prepared.path || !prepared.token) {
+        setPhotos((prev) => prev.filter((p) => p.id !== tempId));
+        URL.revokeObjectURL(localUrl);
+        setError(("error" in prepared && prepared.error) || "Não foi possível enviar a foto.");
+        continue;
+      }
+      const { error: uploadError } = await getBrowserClient().storage.from(PHOTO_BUCKET).uploadToSignedUrl(prepared.path, prepared.token, file, { contentType: file.type });
+      if (uploadError) {
+        setPhotos((prev) => prev.filter((p) => p.id !== tempId));
+        URL.revokeObjectURL(localUrl);
+        setError("O arquivo não subiu. Confira a internet e tente de novo.");
+        continue;
+      }
+      const result = await addPropertyPhoto(propertyId, prepared.path);
+      if ("error" in result) {
+        setPhotos((prev) => prev.filter((p) => p.id !== tempId));
+        URL.revokeObjectURL(localUrl);
+        setError(result.error ?? "Não foi possível salvar a foto.");
+        continue;
+      }
+      // Trocar placeholder pelo real com URL pública
+      const publicUrl = getBrowserClient().storage.from(PHOTO_BUCKET).getPublicUrl(prepared.path).data.publicUrl;
+      setPhotos((prev) => prev.map((p) => (p.id === tempId ? { id: result.id!, url: publicUrl } : p)));
+      URL.revokeObjectURL(localUrl);
+    }
+    setBusy(false);
+    router.refresh();
+  }, [propertyId, photos.length, router]);
+
+  const remove = useCallback(async (photoId: string) => {
+    setError(null);
+    setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, uploading: true } : p)));
+    const r = await deletePropertyPhoto(photoId);
+    if ("error" in r) {
+      setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, uploading: false } : p)));
+      setError(r.error ?? "Não foi possível apagar.");
+      return;
+    }
+    setPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    router.refresh();
+  }, [router]);
+
+  const reorder = useCallback(async (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx) return;
+    setPhotos((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+    // Salvar nova ordem no servidor (esperar a UI atualizar)
+    setPhotos((current) => {
+      const ids = current.filter((p) => !p.uploading).map((p) => p.id);
+      reorderPropertyPhotos(propertyId, ids).then(() => router.refresh());
+      return current;
+    });
+  }, [propertyId, router]);
+
+  const handleDrop = (e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault();
+    if (dragIdx.current != null && dragIdx.current !== targetIdx) {
+      reorder(dragIdx.current, targetIdx);
+    }
+    dragIdx.current = null;
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) upload(e.dataTransfer.files);
+  };
+
+  return (
+    <fieldset className="flex flex-col gap-3 sm:col-span-2">
+      <legend className="mb-1.5 text-[13px] font-medium text-ink-2">
+        Fotos do imóvel
+        <span className="ml-1.5 font-normal text-muted">({photos.filter((p) => !p.uploading).length}/{PHOTO_MAX})</span>
+      </legend>
+
+      {photos.length > 0 ? (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {photos.map((photo, i) => (
+            <div
+              key={photo.id}
+              draggable={!photo.uploading}
+              onDragStart={() => { dragIdx.current = i; }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, i)}
+              className={clsx(
+                "group relative aspect-square overflow-hidden rounded-xl border border-line bg-surface-2",
+                photo.uploading && "animate-pulse opacity-50",
+              )}
+            >
+              <Image src={photo.url} alt={`Foto ${i + 1}`} fill className="object-cover" sizes="120px" />
+              {i === 0 ? (
+                <span className="absolute top-1.5 left-1.5 rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">Capa</span>
+              ) : null}
+              {!photo.uploading ? (
+                <div className="absolute inset-0 flex items-start justify-between gap-1 bg-gradient-to-b from-black/40 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    type="button"
+                    className="grid size-7 place-items-center rounded-md bg-black/50 text-white hover:bg-red-600"
+                    onClick={() => remove(photo.id)}
+                    aria-label="Apagar foto"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                  <span className="cursor-grab text-white/80" aria-label="Arraste para reordenar">
+                    <GripVertical className="size-4" />
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {photos.length > 1 ? (
+        <p className="text-[11px] text-muted">A primeira foto é a capa. Arraste para reordenar.</p>
+      ) : null}
+
+      {photos.filter((p) => !p.uploading).length < PHOTO_MAX ? (
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+          onDrop={handleFileDrop}
+          className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-line px-4 py-6 text-center transition-colors hover:border-ink hover:bg-surface-2"
+          onClick={() => inputRef.current?.click()}
+        >
+          <ImagePlus className="size-6 text-muted" />
+          <p className="text-sm text-muted">
+            {busy ? "Enviando..." : "Clique ou arraste fotos aqui"}
+          </p>
+          <p className="text-xs text-muted">JPG, PNG ou WEBP · até 10 MB cada</p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={acceptTypes}
+            multiple
+            className="hidden"
+            onChange={(e) => { if (e.target.files?.length) upload(e.target.files); e.target.value = ""; }}
+          />
+        </div>
+      ) : null}
+
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
+    </fieldset>
   );
 }

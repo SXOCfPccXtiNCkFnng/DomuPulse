@@ -47,6 +47,15 @@ export type PricingCondition = {
 export const PRICING_TYPOLOGIES = ["Studio", "1 dormitório", "1 dormitório + office", "2 dormitórios", "3 dormitórios"];
 export const MAX_PRICING = 40;
 
+// Fotos do imóvel (bucket público, usadas na página pública/preview).
+export const PHOTO_BUCKET = "property-photos";
+export const PHOTO_MAX = 20;
+export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+export const PHOTO_FILE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+/** Uma foto do imóvel, já com a URL pública pronta para exibir. */
+export type PropertyPhoto = { id: string; url: string };
+
 export const PROPERTY_COLUMNS = "id, title, code, kind, deal, neighborhood, city, price_cents, bedrooms, area_m2, status, notes";
 export const PROPERTY_DETAIL_COLUMNS = `${PROPERTY_COLUMNS}, layouts, guaranteed_cents, post_keys_pct`;
 export const PROPERTY_PRICING_COLUMNS = `${PROPERTY_DETAIL_COLUMNS}, pricing, pricing_date`;

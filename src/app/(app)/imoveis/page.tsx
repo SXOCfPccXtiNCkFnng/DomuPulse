@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { isLeader, requireActivatedMember } from "@/lib/auth";
-import { PROPERTY_COLUMNS, PROPERTY_DETAIL_COLUMNS, PROPERTY_PRICING_COLUMNS, type Property } from "@/lib/properties";
+import { PHOTO_BUCKET, PROPERTY_COLUMNS, PROPERTY_DETAIL_COLUMNS, PROPERTY_PRICING_COLUMNS, type Property, type PropertyPhoto } from "@/lib/properties";
 import { createClient } from "@/lib/supabase/server";
 import { PropertiesBoard } from "./properties-board";
 
@@ -13,10 +13,19 @@ export default async function ImoveisPage() {
 
   const supabase = await createClient();
   const list = (columns: string) => supabase.from("properties").select(columns).order("created_at", { ascending: false });
-  const [withPricing, { data: links }] = await Promise.all([
+  const [withPricing, { data: links }, photosResult] = await Promise.all([
     list(PROPERTY_PRICING_COLUMNS),
     supabase.from("clients").select("property_id").not("property_id", "is", null),
+    supabase.from("property_photos").select("id, property_id, path").order("sort"),
   ]);
+
+  // Agrupa as fotos por imóvel, já com a URL pública pronta. Sem a tabela nova, segue sem fotos.
+  const missingPhotos = photosResult.error?.code === "42P01" || photosResult.error?.code === "PGRST205";
+  const photos: Record<string, PropertyPhoto[]> = {};
+  for (const p of (photosResult.data ?? []) as { id: string; property_id: string; path: string }[]) {
+    const url = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(p.path).data.publicUrl;
+    (photos[p.property_id] ??= []).push({ id: p.id, url });
+  }
   // Sem as atualizações mais novas do banco: mostra o que já existe.
   const missingPricing = withPricing.error?.code === "42703";
   const detailed = missingPricing ? await list(PROPERTY_DETAIL_COLUMNS) : withPricing;
@@ -30,9 +39,11 @@ export default async function ImoveisPage() {
     <PropertiesBoard
       properties={(data ?? []) as unknown as Property[]}
       clientCounts={counts}
+      photos={photos}
       canManage={isLeader(member.role)}
       missingTable={error?.code === "42P01" || error?.code === "PGRST205"}
       missingDetails={missingDetails}
-      missingPricing={missingPricing}    />
+      missingPricing={missingPricing}
+      missingPhotos={missingPhotos}    />
   );
 }

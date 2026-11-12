@@ -5,7 +5,8 @@ import { z } from "zod";
 import { getCurrentMember, isLeader, orgCanWrite } from "@/lib/auth";
 import { describeError, logger } from "@/lib/logger";
 import { parseMoney } from "@/lib/money";
-import { MAX_PRICING, type PricingCondition, type PropertyLayout } from "@/lib/properties";
+import { MAX_PRICING, PHOTO_BUCKET, PHOTO_FILE_TYPES, PHOTO_MAX, PHOTO_MAX_BYTES, type PricingCondition, type PropertyLayout } from "@/lib/properties";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fieldErrors, type FormState } from "@/lib/validation";
 
@@ -157,6 +158,87 @@ export async function updateProperty(id: string, _: FormState, formData: FormDat
   if (error) return { error: error.code === "42703" || error.code === "PGRST204" ? MISSING_DETAILS : "Não foi possível salvar. Tente de novo." };
   revalidatePath("/imoveis");
   return { success: "Imóvel atualizado." };
+}
+
+// Fotos do imóvel -------------------------------------------------------------
+
+const MISSING_PHOTOS = "Falta rodar a atualização do banco (fotos dos imóveis). Fale com o suporte.";
+const missingPhotoTable = (code?: string) => code === "42P01" || code === "PGRST205" || code === "PGRST204";
+
+/** Passo 1 do envio: confere o imóvel e devolve uma URL de upload de uso único. */
+export async function preparePropertyPhotoUpload(propertyId: string, file: { name: string; size: number; type: string }) {
+  const gate = await requireLeader();
+  if ("error" in gate) return gate;
+  if (!z.uuid().safeParse(propertyId).success) return { error: "Imóvel inválido." };
+  const ext = PHOTO_FILE_TYPES[file.type];
+  if (!ext) return { error: "Envie a foto em JPG, PNG ou WEBP." };
+  if (!(file.size > 0 && file.size <= PHOTO_MAX_BYTES)) return { error: "A foto precisa ter até 10 MB." };
+
+  const supabase = await createClient();
+  const { data: property } = await supabase.from("properties").select("id").eq("id", propertyId).maybeSingle();
+  if (!property) return { error: "Imóvel não encontrado." };
+  const { count } = await supabase.from("property_photos").select("id", { count: "exact", head: true }).eq("property_id", propertyId);
+  if ((count ?? 0) >= PHOTO_MAX) return { error: `Cada imóvel aceita até ${PHOTO_MAX} fotos.` };
+
+  const path = `${gate.org.id}/${propertyId}/${crypto.randomUUID()}.${ext}`;
+  const { data, error } = await createAdminClient().storage.from(PHOTO_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) {
+    logger.error("property_photo.upload_url", { message: describeError(error), orgId: gate.org.id });
+    return { error: "Não foi possível preparar o envio. Tente de novo." };
+  }
+  return { path: data.path, token: data.token };
+}
+
+/** Passo 2: registra a foto já enviada, no fim da ordem. */
+export async function addPropertyPhoto(propertyId: string, path: string) {
+  const gate = await requireLeader();
+  if ("error" in gate) return gate;
+  if (!z.uuid().safeParse(propertyId).success) return { error: "Imóvel inválido." };
+  if (!path.startsWith(`${gate.org.id}/${propertyId}/`)) return { error: "Arquivo inválido. Envie de novo." };
+
+  const supabase = await createClient();
+  const { data: last } = await supabase.from("property_photos").select("sort").eq("property_id", propertyId).order("sort", { ascending: false }).limit(1).maybeSingle();
+  const sort = Math.min(PHOTO_MAX * 2, ((last?.sort as number | undefined) ?? -1) + 1);
+  const { data, error } = await supabase.from("property_photos").insert({ org_id: gate.org.id, property_id: propertyId, path, sort }).select("id").single();
+  if (error || !data) {
+    if (!missingPhotoTable(error?.code)) logger.error("property_photo.add", { message: describeError(error), orgId: gate.org.id });
+    return { error: missingPhotoTable(error?.code) ? MISSING_PHOTOS : "Não foi possível salvar a foto." };
+  }
+  revalidatePath("/imoveis");
+  return { ok: true, id: data.id as string };
+}
+
+/** Apaga uma foto do imóvel (registro e arquivo). */
+export async function deletePropertyPhoto(photoId: string) {
+  const gate = await requireLeader();
+  if ("error" in gate) return gate;
+  if (!z.uuid().safeParse(photoId).success) return { error: "Foto inválida." };
+
+  const supabase = await createClient();
+  const { data: photo } = await supabase.from("property_photos").select("id, path").eq("id", photoId).maybeSingle();
+  if (!photo) return { error: "Foto não encontrada." };
+  const { error } = await supabase.from("property_photos").delete().eq("id", photoId);
+  if (error) return { error: "Não foi possível apagar a foto." };
+  const { error: storageError } = await createAdminClient().storage.from(PHOTO_BUCKET).remove([photo.path as string]);
+  if (storageError) logger.error("property_photo.remove", { message: describeError(storageError), orgId: gate.org.id });
+  revalidatePath("/imoveis");
+  return { ok: true };
+}
+
+/** Reordena as fotos (a primeira vira a capa). Recebe os ids na nova ordem. */
+export async function reorderPropertyPhotos(propertyId: string, orderedIds: string[]) {
+  const gate = await requireLeader();
+  if ("error" in gate) return gate;
+  if (!z.uuid().safeParse(propertyId).success) return { error: "Imóvel inválido." };
+  const ids = z.array(z.uuid()).max(PHOTO_MAX).safeParse(orderedIds);
+  if (!ids.success) return { error: "Ordem inválida." };
+
+  const supabase = await createClient();
+  for (let i = 0; i < ids.data.length; i++) {
+    await supabase.from("property_photos").update({ sort: i }).eq("id", ids.data[i]).eq("property_id", propertyId);
+  }
+  revalidatePath("/imoveis");
+  return { ok: true };
 }
 
 /** Apaga o imóvel. Os clientes ligados a ele continuam, só perdem o vínculo. */

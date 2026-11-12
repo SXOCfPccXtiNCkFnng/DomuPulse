@@ -14,7 +14,7 @@ const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' ${turnstile}${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:",
+  "img-src 'self' blob: data:" + (supabaseUrl ? ` ${supabaseUrl}` : ""),
   "font-src 'self'",
   `connect-src 'self' ${supabaseUrl} ${supabaseWs} ${turnstile}`.trim(),
   `frame-src ${turnstile}`,
@@ -31,6 +31,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   poweredByHeader: false,
+  images: {
+    remotePatterns: supabaseUrl
+      ? [new URL(`${supabaseUrl}/storage/v1/object/public/**`)]
+      : [],
+  },
   // Emissão de NFS-e: o gerador do PDF (pdfkit) lê as fontes do disco e não
   // pode ser empacotado.
   serverExternalPackages: ["open-nfse", "pdfkit"],
