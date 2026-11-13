@@ -289,6 +289,23 @@ export async function setFinancingConfig(input: unknown): Promise<{ error: strin
   return { ok: true };
 }
 
+/** Troca a senha da pessoa na hora (o administrador da plataforma digita a temporária). */
+export async function setUserPassword(userId: string, password: string): Promise<{ error: string } | { ok: true }> {
+  const { userId: actor } = await requirePlatformAdmin();
+  if (!z.uuid().safeParse(userId).success) return { error: "Conta inválida." };
+  if (typeof password !== "string" || password.length < 8 || password.length > 72) return { error: "A senha precisa ter de 8 a 72 caracteres." };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.auth.admin.updateUserById(userId, { password });
+  if (error) {
+    if (error.code === "weak_password") return { error: "Senha fraca. Use ao menos 8 caracteres, com letras e números." };
+    return { error: "Não foi possível trocar a senha. Tente de novo." };
+  }
+  await audit(actor, null, "set_user_password", { targetUserId: userId, email: data.user?.email ?? null });
+  revalidatePath("/interno");
+  return { ok: true };
+}
+
 /** Manda para a pessoa o e-mail de redefinição de senha (link para ela criar uma nova). */
 export async function sendPasswordResetFor(emailInput: string): Promise<{ error: string } | { ok: true }> {
   const { userId: actor } = await requirePlatformAdmin();

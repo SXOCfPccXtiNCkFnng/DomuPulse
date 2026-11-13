@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import type { FinancingConfig } from "@/lib/financing";
 import type { FormState } from "@/lib/validation";
-import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, sendPasswordResetFor, setFinancingConfig, setMonthlyPrice } from "./actions";
+import { addSignupAlertEmail, createCoupon, lookupMfa, type MfaLookup, removeSignupAlertEmail, resetMfa, sendPasswordResetFor, setFinancingConfig, setMonthlyPrice, setUserPassword } from "./actions";
 
 // Ações que mexem no acesso de um cliente pedem um segundo clique.
 export function ConfirmButton({ label, confirmLabel, danger = false }: { label: string; confirmLabel: string; danger?: boolean }) {
@@ -205,6 +205,8 @@ export function MfaResetCard() {
   const [searching, startSearch] = useTransition();
   const [resetting, startReset] = useTransition();
   const [sending, startSend] = useTransition();
+  const [pwd, setPwd] = useState("");
+  const [settingPwd, startSetPwd] = useTransition();
 
   const search = (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +242,17 @@ export function MfaResetCard() {
       const r = await sendPasswordResetFor(toEmail);
       if ("error" in r) return setError(r.error);
       setNote(`E-mail de redefinição de senha enviado para ${toEmail}.`);
+    });
+  };
+
+  const changePassword = (userId: string) => {
+    setError(null);
+    setNote(null);
+    startSetPwd(async () => {
+      const r = await setUserPassword(userId, pwd);
+      if ("error" in r) return setError(r.error);
+      setPwd("");
+      setNote("Senha trocada. Passe a senha temporária para a pessoa e peça que ela troque depois em Conta.");
     });
   };
 
@@ -299,6 +312,27 @@ export function MfaResetCard() {
             <Button variant="secondary" disabled={sending} onClick={() => sendReset(result.email)}>
               {sending ? "Enviando..." : "Enviar e-mail para redefinir senha"}
             </Button>
+          </div>
+
+          <div className="border-t border-line pt-3">
+            <p className="mb-2 text-xs text-muted">
+              Ou troque a senha na hora: digite uma senha temporária (8 caracteres ou mais), passe para a pessoa e peça que ela troque depois em Conta.
+            </p>
+            <div className="flex items-end gap-2">
+              <Field label="Senha temporária" className="flex-1">
+                <Input
+                  type="text"
+                  value={pwd}
+                  onChange={(e) => setPwd(e.target.value)}
+                  placeholder="mínimo 8 caracteres"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Field>
+              <Button variant="secondary" disabled={settingPwd || pwd.length < 8} onClick={() => changePassword(result.userId)} className="h-11 shrink-0">
+                {settingPwd ? "Trocando..." : "Trocar senha"}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
