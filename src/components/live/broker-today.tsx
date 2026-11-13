@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { BellRing, CalendarPlus, Minus, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, BellRing, CalendarPlus, Minus, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { scheduleVisit } from "@/app/(app)/agenda/actions";
@@ -138,6 +138,7 @@ export function BrokerToday({ member }: { member: ClientMember }) {
           <ReportForm
             key={slot}
             slot={slot}
+            late={statusOf(slot) === "late"}
             memberId={member.id}
             today={clock.today}
             timezone={member.org.timezone}
@@ -329,6 +330,7 @@ const clampMetric = (n: number) => Math.max(0, Math.min(100000, Number.isFinite(
 
 function ReportForm({
   slot,
+  late,
   memberId,
   today,
   timezone,
@@ -339,6 +341,8 @@ function ReportForm({
   onSave,
 }: {
   slot: string;
+  /** O horário já passou e ainda não foi entregue: pode enviar, mas avisamos. */
+  late: boolean;
   memberId: string;
   today: string;
   timezone: string;
@@ -453,6 +457,12 @@ function ReportForm({
           )
         }
       />
+      {late && !existing ? (
+        <div className="mx-5 mt-4 flex items-center gap-2 rounded-xl bg-danger-soft px-3.5 py-2.5 text-[13px] font-medium text-danger sm:mx-6">
+          <AlertTriangle className="size-4 shrink-0" />
+          Este horário está atrasado. Você ainda pode enviar normalmente.
+        </div>
+      ) : null}
       <div className="pt-4">
         <QuickReport
           current={values}
@@ -572,7 +582,7 @@ function ReportForm({
         <ScheduledClients rows={scheduled} onChange={setScheduled} today={today} suggested={values.appointments} />
         {message ? <FormMessage tone={message.tone}>{message.text}</FormMessage> : null}
         <Button type="submit" size="lg" disabled={pending}>
-          {pending ? "Enviando..." : existing ? "Atualizar relatório" : "Enviar relatório"}
+          {pending ? "Enviando..." : existing ? "Atualizar relatório" : late ? "Enviar atrasado" : "Enviar relatório"}
         </Button>
       </form>
     </Card>
