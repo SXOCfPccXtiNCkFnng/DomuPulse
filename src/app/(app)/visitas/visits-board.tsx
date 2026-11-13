@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Download, MessageCircle, X } from "lucide-re
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { setVisitStage } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
-import { roleLabel } from "@/lib/auth";
+import { roleLabel } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { VisitStageSelect } from "@/components/visit-stage-select";
