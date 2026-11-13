@@ -270,6 +270,19 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
             <Download className="size-4" />
             {exporting ? "Gerando..." : "Exportar Excel"}
           </Button>
+          <select
+            aria-label="Filtrar por dia"
+            value={dayFilter ?? ""}
+            onChange={(e) => setDayFilter(e.target.value || null)}
+            className="h-8 rounded-lg border border-line bg-surface px-2.5 text-[13px] font-medium outline-none focus:border-ink"
+          >
+            <option value="">Todos os dias</option>
+            {days.map((d, i) => (
+              <option key={d} value={d}>
+                {VISIT_WEEKDAYS[i]} {dayMonth(d)}
+              </option>
+            ))}
+          </select>
           <div className="flex items-center gap-1.5">
           <Button size="sm" variant="ghost" onClick={() => go(-1)} aria-label="Semana anterior">
             <ChevronLeft className="size-4" />
