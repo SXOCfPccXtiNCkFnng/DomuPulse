@@ -5,6 +5,7 @@ import { z } from "zod";
 import { describeError, logger } from "@/lib/logger";
 import { propertyLabel, type Property } from "@/lib/properties";
 import { createClient } from "@/lib/supabase/server";
+import { VISIT_REGIONS } from "@/lib/visits";
 
 // A agenda fica ligada ao cliente: agendar escolhe (ou cria) um cliente, e o
 // funil anda sozinho, mas só para frente (nunca rebaixa um negócio adiantado).
@@ -20,8 +21,10 @@ export async function scheduleVisit(input: {
   clientPhone: string | null;
   propertyId?: string | null;
   scheduledAt: string;
+  region?: string | null;
 }): Promise<{ error: string } | { ok: true }> {
   if (!uuid(input.memberId)) return { error: "Corretor inválido." };
+  if (input.region && !VISIT_REGIONS.includes(input.region)) return { error: "Região inválida." };
   if (!input.scheduledAt || Number.isNaN(Date.parse(input.scheduledAt))) return { error: "Data ou horário inválidos." };
   if (input.propertyId && !uuid(input.propertyId)) return { error: "Imóvel inválido." };
 
@@ -29,6 +32,14 @@ export async function scheduleVisit(input: {
   let clientId = input.clientId;
   let name = input.clientName.trim().slice(0, 120);
   let phone = input.clientPhone?.trim() || null;
+
+  // Cliente digitado à mão (ex.: no relatório) que já está na carteira do corretor: usa o cadastro dele.
+  if (!clientId && phone) {
+    const digits = phone.replace(/\D/g, "");
+    const { data: same } = await supabase.from("clients").select("id, phone").eq("member_id", input.memberId).not("phone", "is", null);
+    const match = (same ?? []).find((c) => (c.phone as string).replace(/\D/g, "") === digits);
+    if (match) clientId = match.id as string;
+  }
 
   // Imóvel escolhido vira o imóvel de interesse do cliente (o RLS garante que é da mesma empresa).
   let propertyLink: { property_id: string; interest: string } | null = null;
@@ -66,12 +77,21 @@ export async function scheduleVisit(input: {
 
   const { error: apptErr } = await supabase
     .from("appointments")
-    .insert({ member_id: input.memberId, client_id: clientId, client_name: name, client_phone: phone, scheduled_at: input.scheduledAt });
+    .insert({
+      member_id: input.memberId,
+      client_id: clientId,
+      client_name: name,
+      client_phone: phone,
+      scheduled_at: input.scheduledAt,
+      // Só manda a região quando escolhida: sem a atualização do banco, agendar continua funcionando.
+      ...(input.region ? { region: input.region } : {}),
+    });
   if (apptErr) {
     logger.error("agenda.create_appointment", { message: describeError(apptErr) });
     return { error: apptErr.code === "23514" ? "Confira o telefone informado." : "Não foi possível agendar. Tente de novo." };
   }
   revalidatePath("/agenda");
+  revalidatePath("/visitas");
   return { ok: true };
 }
 
@@ -124,12 +144,18 @@ export async function setVisitStatus(id: string, status: VisitStatus): Promise<{
  */
 export async function updateVisit(
   id: string,
-  input: { scheduledAt?: string; propertyId?: string | null },
+  input: { scheduledAt?: string; propertyId?: string | null; region?: string | null },
 ): Promise<{ error: string } | { ok: true }> {
   if (!uuid(id)) return { error: "Visita inválida." };
   if (input.scheduledAt !== undefined && Number.isNaN(Date.parse(input.scheduledAt))) return { error: "Data ou horário inválidos." };
   if (input.propertyId && !uuid(input.propertyId)) return { error: "Imóvel inválido." };
+  if (input.region && !VISIT_REGIONS.includes(input.region)) return { error: "Região inválida." };
   const supabase = await createClient();
+
+  if (input.region !== undefined) {
+    const { error } = await supabase.from("appointments").update({ region: input.region || null }).eq("id", id);
+    if (error) return { error: error.code === "42703" || error.code === "PGRST204" ? "Falta rodar a atualização do banco (região da visita)." : "Não foi possível salvar a região." };
+  }
 
   let clientId: string | null = null;
   if (input.scheduledAt !== undefined) {

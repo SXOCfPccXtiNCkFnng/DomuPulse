@@ -1,19 +1,21 @@
 "use client";
 
 import clsx from "clsx";
-import { BellRing, Minus, Plus } from "lucide-react";
+import { BellRing, CalendarPlus, Minus, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { scheduleVisit } from "@/app/(app)/agenda/actions";
 import { announceReport, pushGoalNotices } from "@/app/(app)/painel/actions";
 import { type QuickEntry, QuickReport } from "@/components/live/quick-report";
+import { RegionSelect } from "@/components/region-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { FormMessage } from "@/components/ui/field";
+import { FormMessage, Input } from "@/components/ui/field";
 import { Funnel, SlotChip, type SlotStatus } from "@/components/live/viz";
 import { REPORT_SELECT, useLiveDay } from "@/lib/live/use-live-day";
 import { emptyTotals, METRICS, sumReports, type MetricKey, type Report, type Totals } from "@/lib/metrics";
 import type { getBrowserClient } from "@/lib/supabase/client";
-import { addDays, formatDate, formatLongDate, normalizeSlot, slotLabel, slotPeriodLabel, slotState, startOfMonth, startOfWeek } from "@/lib/time";
+import { addDays, formatDate, formatLongDate, normalizeSlot, slotLabel, slotPeriodLabel, slotState, startOfMonth, startOfWeek, zonedToIso } from "@/lib/time";
 import type { ClientMember } from "@/components/live/types";
 
 const NOTES_MAX = 500;
@@ -138,6 +140,7 @@ export function BrokerToday({ member }: { member: ClientMember }) {
             slot={slot}
             memberId={member.id}
             today={clock.today}
+            timezone={member.org.timezone}
             supabase={supabase}
             existing={live.reportFor(member.id, slot)}
             goals={slotGoals}
@@ -326,6 +329,7 @@ function ReportForm({
   slot,
   memberId,
   today,
+  timezone,
   supabase,
   existing,
   goals,
@@ -335,6 +339,7 @@ function ReportForm({
   slot: string;
   memberId: string;
   today: string;
+  timezone: string;
   supabase: ReturnType<typeof getBrowserClient>;
   existing?: Report;
   /** Meta deste horário por tarefa (definida pela liderança). */
@@ -348,6 +353,7 @@ function ReportForm({
     return Object.fromEntries(METRICS.map((m) => [m.key, existing[m.key]])) as Totals;
   });
   const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [scheduled, setScheduled] = useState<ScheduledRow[]>([]);
   const [entries, setEntries] = useState<QuickEntry[]>([]);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
@@ -398,6 +404,24 @@ function ReportForm({
     dirty.current = true;
     setMessage(null);
   };
+
+  /** Agenda as visitas informadas no relatório; devolve os nomes que falharam. */
+  async function scheduleRows(rows: ScheduledRow[]) {
+    const failed: string[] = [];
+    for (const r of rows) {
+      const res = await scheduleVisit({
+        memberId,
+        clientId: null,
+        clientName: r.name.trim(),
+        clientPhone: r.phone.trim() || null,
+        scheduledAt: zonedToIso(r.date, r.time, timezone),
+        region: r.region || null,
+      });
+      if ("error" in res) failed.push(r.name.trim());
+    }
+    setScheduled((list) => list.filter((r) => failed.includes(r.name.trim())));
+    return failed;
+  }
   const set = (key: MetricKey, value: number) => {
     touch();
     setValues((v) => ({ ...v, [key]: clampMetric(value) }));
@@ -453,18 +477,33 @@ function ReportForm({
         className="flex flex-col gap-5 p-5 sm:p-6"
         onSubmit={async (e) => {
           e.preventDefault();
+          const toSchedule = scheduled.filter((r) => r.name.trim() || r.phone.trim() || r.time);
+          if (toSchedule.some((r) => !r.name.trim() || !r.date || !r.time)) {
+            setMessage({ tone: "error", text: "Nos clientes agendados, preencha nome, dia e horário (ou remova a linha)." });
+            return;
+          }
           setPending(true);
           setMessage(null);
           const error = await onSave(values, notes);
+          let failed: string[] = [];
           if (!error) {
             // Enviado: o rascunho cumpriu o papel.
             dirty.current = false;
             await supabase.from("report_drafts").delete().match(draftKey);
             setEntries([]);
             setDraftState("none");
+            failed = await scheduleRows(toSchedule);
           }
           setPending(false);
-          setMessage(error ? { tone: "error", text: error } : { tone: "success", text: "Relatório enviado. Sua liderança já está vendo." });
+          if (error) setMessage({ tone: "error", text: error });
+          else if (failed.length) setMessage({ tone: "error", text: `Relatório enviado, mas não deu para agendar: ${failed.join(", ")}. Confira na Agenda.` });
+          else
+            setMessage({
+              tone: "success",
+              text: toSchedule.length
+                ? `Relatório enviado e ${toSchedule.length === 1 ? "1 visita agendada" : `${toSchedule.length} visitas agendadas`}. Já aparecem na Agenda e em Visitas.`
+                : "Relatório enviado. Sua liderança já está vendo.",
+            });
         }}
       >
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -528,12 +567,84 @@ function ReportForm({
             </span>
           ) : null}
         </label>
+        <ScheduledClients rows={scheduled} onChange={setScheduled} today={today} suggested={values.appointments} />
         {message ? <FormMessage tone={message.tone}>{message.text}</FormMessage> : null}
         <Button type="submit" size="lg" disabled={pending}>
           {pending ? "Enviando..." : existing ? "Atualizar relatório" : "Enviar relatório"}
         </Button>
       </form>
     </Card>
+  );
+}
+
+type ScheduledRow = { key: number; name: string; phone: string; date: string; time: string; region: string };
+
+/** Clientes agendados neste relatório (opcional): cada linha vira uma visita na Agenda e em Visitas. */
+function ScheduledClients({
+  rows,
+  onChange,
+  today,
+  suggested,
+}: {
+  rows: ScheduledRow[];
+  onChange: (rows: ScheduledRow[]) => void;
+  today: string;
+  suggested: number;
+}) {
+  const nextKey = useRef(0);
+  const add = () => onChange([...rows, { key: nextKey.current++, name: "", phone: "", date: today, time: "", region: "" }]);
+  const update = (key: number, patch: Partial<ScheduledRow>) => onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-xl bg-surface-2 p-4">
+      <legend className="sr-only">Clientes agendados</legend>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <CalendarPlus className="size-4" />
+          Clientes agendados
+        </p>
+        <span className="text-xs text-muted">
+          Opcional{suggested > 0 && rows.length < suggested ? ` · você informou ${suggested} ${suggested === 1 ? "agendamento" : "agendamentos"}` : ""}
+        </span>
+      </div>
+      {rows.map((r, i) => (
+        <div key={r.key} className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-surface p-3 sm:grid-cols-6">
+          <Input
+            value={r.name}
+            onChange={(e) => update(r.key, { name: e.target.value.slice(0, 120) })}
+            placeholder="Nome do cliente"
+            aria-label={`Cliente ${i + 1}: nome`}
+            className="col-span-2 h-10 sm:col-span-2"
+          />
+          <Input
+            value={r.phone}
+            onChange={(e) => update(r.key, { phone: e.target.value.slice(0, 20) })}
+            type="tel"
+            inputMode="tel"
+            placeholder="Telefone"
+            aria-label={`Cliente ${i + 1}: telefone`}
+            className="col-span-2 h-10 sm:col-span-2"
+          />
+          <Input type="date" value={r.date} min={today} onChange={(e) => update(r.key, { date: e.target.value })} aria-label={`Cliente ${i + 1}: dia`} className="h-10" />
+          <Input type="time" value={r.time} step={900} onChange={(e) => update(r.key, { time: e.target.value })} aria-label={`Cliente ${i + 1}: horário`} className="h-10" />
+          <RegionSelect value={r.region} onChange={(region) => update(r.key, { region })} className="col-span-2 h-10 sm:col-span-5" />
+          <button
+            type="button"
+            onClick={() => onChange(rows.filter((x) => x.key !== r.key))}
+            aria-label={`Remover cliente ${i + 1}`}
+            className="col-span-2 flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm text-muted hover:bg-danger-soft hover:text-danger sm:col-span-1"
+          >
+            <Trash2 className="size-4" />
+            <span className="sm:sr-only">Remover</span>
+          </button>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="ghost" className="self-start" onClick={add}>
+        <Plus className="size-3.5" />
+        Adicionar cliente agendado
+      </Button>
+      {rows.length ? <p className="text-xs text-muted">Ao enviar, cada cliente vira uma visita na Agenda e aparece na tela de Visitas para toda a equipe.</p> : null}
+    </fieldset>
   );
 }
 

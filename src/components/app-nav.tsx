@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Activity, BarChart3, Briefcase, Building2, Calculator, CalendarDays, CircleUser, Contact, Ellipsis, FileStack, FileText, LayoutDashboard, ScrollText, Target, UserSearch, Users, Zap } from "lucide-react";
+import { Activity, BarChart3, Briefcase, Building2, Calculator, CalendarCheck, CalendarDays, CircleUser, Contact, Ellipsis, FileStack, FileText, LayoutDashboard, ScrollText, Target, UserSearch, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +17,7 @@ const BROKER_GROUPS: NavGroup[] = [
       { href: "/painel", label: "Painel", Icon: Activity, leadersOnly: false },
       { href: "/clientes", label: "Clientes", Icon: Contact, leadersOnly: false },
       { href: "/agenda", label: "Agenda", Icon: CalendarDays, leadersOnly: false },
+      { href: "/visitas", label: "Visitas", Icon: CalendarCheck, leadersOnly: false },
       { href: "/relatorios", label: "Relatórios", Icon: BarChart3, leadersOnly: false },
       { href: "/metas", label: "Metas", Icon: Target, leadersOnly: false },
     ],

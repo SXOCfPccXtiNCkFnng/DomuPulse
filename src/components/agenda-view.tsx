@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteVisit, scheduleVisit, setVisitStatus, updateVisit } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
@@ -12,6 +12,7 @@ import { useOrgClock, type LiveMember } from "@/lib/live/use-live-day";
 import { propertyLabel, type Property } from "@/lib/properties";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { addDays, dateIn, formatLongDate, formatTimeIn, zonedToIso } from "@/lib/time";
+import { RegionSelect } from "@/components/region-select";
 
 type Status = "scheduled" | "done" | "canceled" | "no_show";
 
@@ -24,7 +25,10 @@ type Appointment = {
   scheduled_at: string;
   status: Status;
   notes: string | null;
+  region?: string | null;
 };
+
+const APPOINTMENT_COLUMNS = "id, member_id, client_id, client_name, client_phone, scheduled_at, status, notes";
 
 type ClientOption = { id: string; member_id: string; name: string; phone: string | null; stage: string };
 type PropertyOption = Pick<Property, "id" | "title" | "code" | "kind" | "neighborhood" | "status">;
@@ -60,16 +64,19 @@ export function AgendaView({ member }: { member: ClientMember }) {
   const [broker, setBroker] = useState("all");
 
   const load = useCallback(async () => {
-    const appointments = supabase
-      .from("appointments")
-      .select("id, member_id, client_id, client_name, client_phone, scheduled_at, status, notes")
-      .order("scheduled_at");
-    const range =
-      view === "day"
+    const query = (columns: string) => {
+      const appointments = supabase.from("appointments").select(columns).order("scheduled_at");
+      return view === "day"
         ? appointments.gte("scheduled_at", zonedToIso(selectedDay, "00:00", tz)).lt("scheduled_at", zonedToIso(addDays(selectedDay, 1), "00:00", tz))
         : appointments.gte("scheduled_at", zonedToIso(today, "00:00", tz)).limit(UPCOMING_LIMIT);
+    };
+    const range = async () => {
+      const r = await query(`${APPOINTMENT_COLUMNS}, region`);
+      // Sem a atualização do banco (região), a agenda segue sem esse campo.
+      return r.error?.code === "42703" ? query(APPOINTMENT_COLUMNS) : r;
+    };
     const [{ data: a }, { data: m }, { data: cl }, { data: pr }, { data: links }] = await Promise.all([
-      range,
+      range(),
       supabase.from("members").select("id, full_name:display_name, role, team_id, active").eq("role", "broker").order("display_name"),
       supabase.from("clients").select("id, member_id, name, phone, stage").order("name"),
       // Sem a tabela de imóveis (migração ainda não rodada), o campo só não aparece.
@@ -80,7 +87,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
     for (const l of (links ?? []) as { id: string; property_id: string }[]) clientProperty[l.id] = l.property_id;
     return {
       clientProperty,
-      items: (a ?? []) as Appointment[],
+      items: (a ?? []) as unknown as Appointment[],
       brokers: (m ?? []) as LiveMember[],
       clients: (cl ?? []) as ClientOption[],
       properties: (pr ?? []) as PropertyOption[],
@@ -343,6 +350,7 @@ function VisitRow({
   const [date, setDate] = useState(origDate);
   const [time, setTime] = useState(origTime);
   const [property, setProperty] = useState(propertyId);
+  const [region, setRegion] = useState(a.region ?? "");
   const [confirmDel, setConfirmDel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -353,6 +361,7 @@ function VisitRow({
     setDate(origDate);
     setTime(origTime);
     setProperty(propertyId);
+    setRegion(a.region ?? "");
     setError(null);
   }
 
@@ -360,12 +369,14 @@ function VisitRow({
     if (!date || !time) return setError("Escolha data e horário.");
     const moved = date !== origDate || time !== origTime;
     const relinked = property !== propertyId;
-    if (!moved && !relinked) return setEditing(false);
+    const reregioned = region !== (a.region ?? "");
+    if (!moved && !relinked && !reregioned) return setEditing(false);
     setPending(true);
     setError(null);
     const r = await updateVisit(a.id, {
       ...(moved ? { scheduledAt: zonedToIso(date, time, timezone) } : {}),
       ...(relinked ? { propertyId: property || null } : {}),
+      ...(reregioned ? { region: region || null } : {}),
     });
     setPending(false);
     if ("error" in r) return setError(r.error);
@@ -401,6 +412,12 @@ function VisitRow({
                 <Phone className="size-3" />
                 {a.client_phone}
               </a>
+            ) : null}
+            {a.region ? (
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="size-3" />
+                {a.region}
+              </span>
             ) : null}
             {linkedTitle ? <span className="truncate">{propertyLabel(linkedTitle)}</span> : null}
           </span>
@@ -442,6 +459,9 @@ function VisitRow({
             </Field>
             <Field label="Horário">
               <Input type="time" value={time} step={900} onChange={(e) => setTime(e.target.value)} className="h-10 w-auto" />
+            </Field>
+            <Field label="Região">
+              <RegionSelect value={region} onChange={setRegion} className="h-10 w-auto" />
             </Field>
             {properties.length ? (
               <Field label="Imóvel">
@@ -510,9 +530,11 @@ function NewAppointment({
     clientPhone: string | null;
     propertyId: string | null;
     scheduledAt: string;
+    region: string | null;
   }) => Promise<string | null>;
 }) {
   const [propertyId, setPropertyId] = useState("");
+  const [region, setRegion] = useState("");
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const [pending, setPending] = useState(false);
   const [memberId, setMemberId] = useState(brokers ? (brokers[0]?.id ?? "") : selfId);
@@ -542,12 +564,14 @@ function NewAppointment({
       clientPhone: isNew ? phone.trim() || null : null,
       propertyId: propertyId || null,
       scheduledAt: zonedToIso(date, time, timezone),
+      region: region || null,
     });
     setPending(false);
     if (error) setMessage({ tone: "error", text: error });
     else {
       setClientId("new");
       setPropertyId("");
+      setRegion("");
       setName("");
       setPhone("");
       setTime("");
@@ -617,6 +641,9 @@ function NewAppointment({
           <Input value={time} onChange={(e) => setTime(e.target.value)} type="time" required step={900} />
         </Field>
       </div>
+      <Field label="Região" hint="Opcional. Aparece na tela de Visitas.">
+        <RegionSelect value={region} onChange={setRegion} />
+      </Field>
       <Button type="submit" disabled={pending}>
         {pending ? "Salvando..." : "Agendar visita"}
       </Button>

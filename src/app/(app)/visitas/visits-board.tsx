@@ -1,0 +1,352 @@
+"use client";
+
+import clsx from "clsx";
+import { ChevronLeft, ChevronRight, MessageCircle, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ClientMember } from "@/components/live/types";
+import { Button } from "@/components/ui/button";
+import { Badge, Card, CardHeader } from "@/components/ui/card";
+import { whatsappLink } from "@/lib/clients";
+import { useOrgClock } from "@/lib/live/use-live-day";
+import { getBrowserClient } from "@/lib/supabase/client";
+import { addDays, dateIn, formatTimeIn, zonedToIso } from "@/lib/time";
+import { startOfVisitWeek, VISIT_WEEKDAYS } from "@/lib/visits";
+
+type Status = "scheduled" | "done" | "no_show" | "canceled";
+type Visit = {
+  id: string;
+  member_id: string;
+  client_name: string;
+  client_phone: string | null;
+  scheduled_at: string;
+  status: Status;
+  region: string | null;
+};
+type Broker = { id: string; name: string; active: boolean; is_broker: boolean };
+type Board = { start: string; visits: Visit[]; brokers: Broker[]; error: string | null };
+
+const STATUS: Partial<Record<Status, { label: string; tone: "brand" | "warn" | "danger" }>> = {
+  done: { label: "Realizada", tone: "brand" },
+  no_show: { label: "Não compareceu", tone: "warn" },
+  canceled: { label: "Cancelada", tone: "danger" },
+};
+
+const REFRESH_MS = 60_000;
+
+/** "12/11" a partir de "2026-11-12". */
+const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+
+/** Cor fixa por corretor (mesma posição na lista, mesma cor), legível no claro e no escuro. */
+function brokerStyle(index: number) {
+  const hue = (index * 47 + 210) % 360;
+  return { backgroundColor: `hsl(${hue} 75% 50% / 0.16)`, color: `hsl(${hue} 65% 42%)` };
+}
+
+export function VisitsBoard({ member }: { member: ClientMember }) {
+  const supabase = useMemo(() => getBrowserClient(), []);
+  const tz = member.org.timezone;
+  const { today } = useOrgClock(tz);
+  const currentWeek = startOfVisitWeek(today);
+  const [week, setWeek] = useState<string | null>(null);
+  const start = week ?? currentWeek;
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [start]);
+  const [board, setBoard] = useState<Board | null>(null);
+  const [brokerFilter, setBrokerFilter] = useState<string | null>(null);
+  const [dayFilter, setDayFilter] = useState<string | null>(null);
+  const leader = member.role !== "broker";
+
+  const load = useCallback(async () => {
+    const [v, b] = await Promise.all([
+      supabase.rpc("visits_board", { p_from: zonedToIso(start, "00:00", tz), p_to: zonedToIso(addDays(start, 7), "00:00", tz) }),
+      supabase.rpc("visits_board_brokers"),
+    ]);
+    const error = v.error ?? b.error;
+    setBoard({
+      start,
+      visits: (v.data ?? []) as Visit[],
+      brokers: (b.data ?? []) as Broker[],
+      error: error
+        ? error.code === "PGRST202" || error.code === "42883"
+          ? "A tela de visitas ainda não foi ativada no banco. Rode a atualização 20261116000000_visits_board.sql no Supabase."
+          : "Não foi possível carregar as visitas. Tente de novo."
+        : null,
+    });
+  }, [supabase, start, tz]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    const id = setInterval(() => void load(), REFRESH_MS);
+    const onVisible = () => document.visibilityState === "visible" && void load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
+
+  const ready = board?.start === start ? board : null;
+  const visits = useMemo(() => ready?.visits ?? [], [ready]);
+
+  // Linhas: corretores ativos + quem tem visita na semana (inativo ou da liderança).
+  const rows = useMemo(() => {
+    const members = ready?.brokers ?? [];
+    const withVisits = new Set(visits.map((v) => v.member_id));
+    const list = members.filter((b) => (b.is_broker && b.active) || withVisits.has(b.id));
+    for (const id of withVisits) if (!list.some((b) => b.id === id)) list.push({ id, name: "Outro membro", active: false, is_broker: false });
+    return list;
+  }, [ready, visits]);
+  const colorOf = useMemo(() => new Map(rows.map((b, i) => [b.id, brokerStyle(i)])), [rows]);
+  const nameOf = useMemo(() => new Map(rows.map((b) => [b.id, b.name])), [rows]);
+
+  // Contagem: tudo que foi marcado para o dia, menos as canceladas (que aparecem à parte).
+  const grid = useMemo(() => {
+    const count = new Map<string, number>();
+    const canceled = new Map<string, number>();
+    for (const v of visits) {
+      const key = `${v.member_id}|${dateIn(v.scheduled_at, tz)}`;
+      const target = v.status === "canceled" ? canceled : count;
+      target.set(key, (target.get(key) ?? 0) + 1);
+    }
+    return { count, canceled };
+  }, [visits, tz]);
+  const cell = (memberId: string, day: string) => grid.count.get(`${memberId}|${day}`) ?? 0;
+  const canceledCell = (memberId: string, day: string) => grid.canceled.get(`${memberId}|${day}`) ?? 0;
+  const rowTotal = (memberId: string) => days.reduce((s, d) => s + cell(memberId, d), 0);
+  const dayTotal = (day: string) => rows.reduce((s, b) => s + cell(b.id, day), 0);
+  const dayCanceled = (day: string) => rows.reduce((s, b) => s + canceledCell(b.id, day), 0);
+  const weekTotal = days.reduce((s, d) => s + dayTotal(d), 0);
+  const weekCanceled = days.reduce((s, d) => s + dayCanceled(d), 0);
+
+  const list = visits.filter(
+    (v) => (!brokerFilter || v.member_id === brokerFilter) && (!dayFilter || dateIn(v.scheduled_at, tz) === dayFilter),
+  );
+
+  const isCurrent = start === currentWeek;
+  const go = (n: number) => {
+    const next = addDays(start, n * 7);
+    setWeek(next === currentWeek ? null : next);
+    setDayFilter(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <header className="flex flex-wrap items-end justify-between gap-4 animate-rise">
+        <div>
+          <p className="text-sm text-muted">Toda a equipe · semana de quinta a quarta</p>
+          <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Visitas</h1>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="ghost" onClick={() => go(-1)} aria-label="Semana anterior">
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="min-w-40 text-center text-sm font-medium tabular-nums">
+            {dayMonth(days[0])} a {dayMonth(days[6])}
+            {isCurrent ? <span className="block text-xs font-normal text-muted">Semana atual</span> : null}
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => go(1)} aria-label="Próxima semana">
+            <ChevronRight className="size-4" />
+          </Button>
+          {!isCurrent ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setWeek(null);
+                setDayFilter(null);
+              }}
+            >
+              Semana atual
+            </Button>
+          ) : null}
+        </div>
+      </header>
+
+      {ready?.error ? <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">{ready.error}</p> : null}
+
+      <Card className="overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[46rem] border-collapse text-sm">
+            <thead>
+              <tr className="bg-surface-2 text-xs font-semibold tracking-wide text-muted uppercase">
+                <th className="px-3 py-2.5 text-left">Corretor</th>
+                {days.map((d, i) => (
+                  <th key={d} className={clsx("px-2 py-2.5 text-center", d === today && "bg-brand-soft text-brand-text")}>
+                    <button
+                      type="button"
+                      onClick={() => setDayFilter((f) => (f === d ? null : d))}
+                      className={clsx("flex w-full flex-col items-center rounded-md hover:text-ink", dayFilter === d && "text-ink underline underline-offset-4")}
+                      title="Mostrar só as visitas deste dia"
+                    >
+                      {VISIT_WEEKDAYS[i]}
+                      <span className="font-normal normal-case tabular-nums">{dayMonth(d)}</span>
+                    </button>
+                  </th>
+                ))}
+                <th className="px-3 py-2.5 text-center">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!ready ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted">
+                    Carregando...
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-8 text-center text-muted">
+                    Nenhum corretor na equipe ainda.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((b) => (
+                  <tr key={b.id} className={clsx("border-t border-line", brokerFilter === b.id && "bg-surface-2")}>
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => setBrokerFilter((f) => (f === b.id ? null : b.id))}
+                        className="max-w-44 truncate rounded-md px-2 py-0.5 text-left text-[13px] font-semibold uppercase"
+                        style={colorOf.get(b.id)}
+                        title="Mostrar só as visitas deste corretor"
+                      >
+                        {b.name}
+                      </button>
+                    </td>
+                    {days.map((d) => {
+                      const n = cell(b.id, d);
+                      const c = canceledCell(b.id, d);
+                      return (
+                        <td key={d} className={clsx("px-2 py-2 text-center tabular-nums", d === today && "bg-brand-soft/50")}>
+                          <span className={clsx("font-display text-base font-semibold", n === 0 && "text-muted/60")}>{n}</span>
+                          {c ? <span className="block text-[11px] font-medium text-danger">{c} canc.</span> : null}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-center font-display text-base font-semibold tabular-nums">{rowTotal(b.id)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            {ready && rows.length ? (
+              <tfoot>
+                <tr className="border-t-2 border-line-strong bg-surface-2">
+                  <td className="px-3 py-2.5 text-xs font-semibold tracking-wide text-muted uppercase">Total do dia</td>
+                  {days.map((d) => (
+                    <td key={d} className="px-2 py-2.5 text-center tabular-nums">
+                      <span className="font-display text-base font-semibold">{dayTotal(d)}</span>
+                      {dayCanceled(d) ? <span className="block text-[11px] font-medium text-danger">{dayCanceled(d)} canc.</span> : null}
+                    </td>
+                  ))}
+                  <td className="px-3 py-2.5 text-center">
+                    <span className="font-display text-lg font-semibold tabular-nums">{weekTotal}</span>
+                    {weekCanceled ? <span className="block text-[11px] font-medium text-danger">{weekCanceled} canc.</span> : null}
+                  </td>
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Clientes da semana"
+          description={
+            brokerFilter || dayFilter
+              ? `${list.length} de ${visits.length} visitas`
+              : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Canceladas ficam destacadas e não contam no total."
+          }
+          action={
+            brokerFilter || dayFilter ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setBrokerFilter(null);
+                  setDayFilter(null);
+                }}
+              >
+                <X className="size-3.5" />
+                Limpar filtro
+              </Button>
+            ) : undefined
+          }
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[46rem] border-collapse text-sm">
+            <thead>
+              <tr className="border-y border-line bg-surface-2 text-xs font-semibold tracking-wide text-muted uppercase">
+                <th className="px-4 py-2.5 text-left">Nome do cliente</th>
+                <th className="px-3 py-2.5 text-left">Telefone</th>
+                <th className="px-3 py-2.5 text-left">Dia</th>
+                <th className="px-3 py-2.5 text-left">Horário</th>
+                <th className="px-3 py-2.5 text-left">Região</th>
+                <th className="px-3 py-2.5 text-left">Corretor</th>
+                <th className="px-3 py-2.5 text-left">Situação</th>
+                {leader ? <th className="px-4 py-2.5 text-right">Contato</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {ready && list.length === 0 ? (
+                <tr>
+                  <td colSpan={leader ? 8 : 7} className="px-4 py-8 text-center text-muted">
+                    Nenhuma visita {brokerFilter || dayFilter ? "com esse filtro" : "marcada nesta semana"}.
+                  </td>
+                </tr>
+              ) : null}
+              {list.map((v) => {
+                const day = dateIn(v.scheduled_at, tz);
+                const time = formatTimeIn(v.scheduled_at, tz);
+                const weekday = VISIT_WEEKDAYS[days.indexOf(day)] ?? dayMonth(day);
+                const canceled = v.status === "canceled";
+                const st = STATUS[v.status];
+                const text = `Olá, ${v.client_name.split(" ")[0]}! Tudo bem? Aqui é da ${member.org.name}, sobre a sua visita de ${weekday.toLowerCase()} (${dayMonth(day)}) às ${time}.`;
+                return (
+                  <tr key={v.id} className={clsx("border-t border-line", canceled && "bg-danger-soft/60")}>
+                    <td className={clsx("px-4 py-2.5 font-medium", canceled && "text-danger line-through")}>{v.client_name}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">
+                      {v.client_phone ? (
+                        <a href={`tel:${v.client_phone.replace(/[^\d+]/g, "")}`} className="hover:underline">
+                          {v.client_phone}
+                        </a>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {weekday} <span className="text-muted tabular-nums">{dayMonth(day)}</span>
+                    </td>
+                    <td className="px-3 py-2.5 tabular-nums">{time}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{v.region ?? <span className="text-muted">—</span>}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="inline-block max-w-40 truncate rounded-md px-2 py-0.5 text-[12px] font-semibold uppercase" style={colorOf.get(v.member_id)}>
+                        {nameOf.get(v.member_id) ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">{st ? <Badge tone={st.tone}>{st.label}</Badge> : <span className="text-muted">Agendada</span>}</td>
+                    {leader ? (
+                      <td className="px-4 py-2.5 text-right">
+                        {v.client_phone ? (
+                          <a
+                            href={`${whatsappLink(v.client_phone)}?text=${encodeURIComponent(text)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand-soft px-2.5 text-[13px] font-semibold text-brand-text hover:opacity-80"
+                          >
+                            <MessageCircle className="size-3.5" />
+                            WhatsApp
+                          </a>
+                        ) : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}

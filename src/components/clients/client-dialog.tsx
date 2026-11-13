@@ -2,6 +2,7 @@
 
 import { CalendarPlus, MessageCircle, Phone, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RegionSelect } from "@/components/region-select";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { CLIENT_COLUMNS, SOURCES, STAGES, whatsappLink, type Client, type Stage } from "@/lib/clients";
@@ -53,7 +54,7 @@ export function ClientDialog({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [visit, setVisit] = useState({ date: todayIn(timezone), time: "", message: "" });
+  const [visit, setVisit] = useState({ date: todayIn(timezone), time: "", region: "", message: "" });
   // null: imóveis indisponíveis (sem a migração 20261106000000_properties.sql); o interesse fica só em texto.
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [propertyId, setPropertyId] = useState("");
@@ -158,6 +159,7 @@ export function ClientDialog({
       client_name: client.name,
       client_phone: client.phone,
       scheduled_at: zonedToIso(visit.date, visit.time, timezone),
+      ...(visit.region ? { region: visit.region } : {}),
     });
     // Cliente no começo do funil avança para "Visita agendada".
     if (!error && EARLY.includes(client.stage)) {
@@ -168,7 +170,7 @@ export function ClientDialog({
       }
     }
     setPending(false);
-    setVisit((v) => ({ ...v, time: "", message: error ? "Não foi possível agendar." : "Visita agendada. Ela já aparece na Agenda." }));
+    setVisit((v) => ({ ...v, time: "", region: "", message: error ? "Não foi possível agendar." : "Visita agendada. Ela já aparece na Agenda e em Visitas." }));
   }
 
   return (
@@ -307,6 +309,7 @@ export function ClientDialog({
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <Input type="date" value={visit.date} min={todayIn(timezone)} onChange={(e) => setVisit((v) => ({ ...v, date: e.target.value }))} className="h-10 w-auto" aria-label="Data da visita" />
               <Input type="time" value={visit.time} step={900} onChange={(e) => setVisit((v) => ({ ...v, time: e.target.value }))} className="h-10 w-auto" aria-label="Horário da visita" />
+              <RegionSelect value={visit.region} onChange={(region) => setVisit((v) => ({ ...v, region }))} className="h-10 w-auto" />
               <Button size="md" variant="secondary" onClick={scheduleVisit} disabled={pending}>
                 Agendar
               </Button>

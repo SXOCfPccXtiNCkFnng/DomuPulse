@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { formatMoney } from "@/lib/metrics";
 import {
   areaLabel,
@@ -131,7 +132,15 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function PropertyPublicPage({ params, searchParams }: PageProps) {
+export default function PropertyPublicPage({ params, searchParams }: PageProps) {
+  return (
+    <Suspense fallback={<div className="min-h-dvh animate-pulse bg-surface-2" />}>
+      <PropertyPublic params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function PropertyPublic({ params, searchParams }: PageProps) {
   const { id } = await params;
   const search = await searchParams;
 
