@@ -90,24 +90,19 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
   }, [ready, visits]);
   const nameOf = useMemo(() => new Map(rows.map((b) => [b.id, b.name])), [rows]);
 
-  // Contagem: tudo que foi marcado para o dia, menos as canceladas (que aparecem à parte).
+  // Contagem de agendamentos, como na planilha: toda visita marcada conta, qualquer que seja a situação.
   const grid = useMemo(() => {
     const count = new Map<string, number>();
-    const canceled = new Map<string, number>();
     for (const v of visits) {
       const key = `${v.member_id}|${dateIn(v.scheduled_at, tz)}`;
-      const target = v.status === "canceled" ? canceled : count;
-      target.set(key, (target.get(key) ?? 0) + 1);
+      count.set(key, (count.get(key) ?? 0) + 1);
     }
-    return { count, canceled };
+    return count;
   }, [visits, tz]);
-  const cell = (memberId: string, day: string) => grid.count.get(`${memberId}|${day}`) ?? 0;
-  const canceledCell = (memberId: string, day: string) => grid.canceled.get(`${memberId}|${day}`) ?? 0;
+  const cell = (memberId: string, day: string) => grid.get(`${memberId}|${day}`) ?? 0;
   const rowTotal = (memberId: string) => days.reduce((s, d) => s + cell(memberId, d), 0);
   const dayTotal = (day: string) => rows.reduce((s, b) => s + cell(b.id, day), 0);
-  const dayCanceled = (day: string) => rows.reduce((s, b) => s + canceledCell(b.id, day), 0);
   const weekTotal = days.reduce((s, d) => s + dayTotal(d), 0);
-  const weekCanceled = days.reduce((s, d) => s + dayCanceled(d), 0);
 
   const [stageError, setStageError] = useState<string | null>(null);
   async function changeStage(v: Visit, stage: VisitStage | null) {
@@ -221,11 +216,9 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                     </td>
                     {days.map((d) => {
                       const n = cell(b.id, d);
-                      const c = canceledCell(b.id, d);
                       return (
                         <td key={d} className={clsx("px-2 py-2 text-center tabular-nums", d === today && "bg-brand-soft/50")}>
                           <span className={clsx("font-display text-base font-semibold", n === 0 && "text-muted/60")}>{n}</span>
-                          {c ? <span className="block text-[11px] font-medium text-danger">{c} canc.</span> : null}
                         </td>
                       );
                     })}
@@ -241,12 +234,10 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                   {days.map((d) => (
                     <td key={d} className="px-2 py-2.5 text-center tabular-nums">
                       <span className="font-display text-base font-semibold">{dayTotal(d)}</span>
-                      {dayCanceled(d) ? <span className="block text-[11px] font-medium text-danger">{dayCanceled(d)} canc.</span> : null}
                     </td>
                   ))}
                   <td className="px-3 py-2.5 text-center">
                     <span className="font-display text-lg font-semibold tabular-nums">{weekTotal}</span>
-                    {weekCanceled ? <span className="block text-[11px] font-medium text-danger">{weekCanceled} canc.</span> : null}
                   </td>
                 </tr>
               </tfoot>
@@ -261,7 +252,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
           description={
             brokerFilter || dayFilter
               ? `${list.length} de ${visits.length} visitas`
-              : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Mude a situação e a linha ganha a cor; \"não irá vir\" não conta no total."
+              : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Mude a situação e a linha ganha a cor. Todo agendamento conta no total."
           }
           action={
             brokerFilter || dayFilter ? (
