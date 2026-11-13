@@ -88,8 +88,15 @@ const isActive = (path: string, href: string) => path === href || path.startsWit
 
 export function SideNav({ role, segment }: { role: Role; segment: Segment }) {
   const path = usePathname();
+  const nav = useRef<HTMLElement>(null);
+
+  // Em telas baixas a lista rola: mantém o item da página atual à vista.
+  useEffect(() => {
+    nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest" });
+  }, [path]);
+
   return (
-    <nav aria-label="Principal" className="flex flex-col gap-0.5">
+    <nav ref={nav} aria-label="Principal" className="flex flex-col gap-0.5">
       {visibleGroups(role, segment).map((group, gi) => (
         <div key={group.title} className="flex flex-col gap-0.5">
           <p className={clsx("px-3 pb-1 text-[11px] font-semibold tracking-wider text-muted uppercase", gi === 0 ? "pt-1" : "pt-4")}>{group.title}</p>

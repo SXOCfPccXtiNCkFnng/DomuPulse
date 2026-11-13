@@ -14,7 +14,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex min-h-dvh">
       {/* z-40: a barra fixa é uma camada própria; sem isso a caixa de avisos fica atrás da página. */}
-      <aside className="sticky top-0 z-40 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex print:hidden">
+      <aside className="sticky top-0 z-40 hidden h-dvh w-64 shrink-0 flex-col border-r border-line px-4 py-6 lg:flex print:hidden [@media(max-height:760px)]:py-4">
         <div className="flex items-center justify-between px-2">
           <Link href="/painel">
             <Logo />
@@ -23,12 +23,12 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
             <MemberBell align="left" />
           </Suspense>
         </div>
-        <div className="mt-8 flex-1">
+        <div className="-mx-2 mt-8 min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 [scrollbar-width:thin] [@media(max-height:760px)]:mt-5">
           <Suspense fallback={<NavSkeleton />}>
             <MemberSideNav />
           </Suspense>
         </div>
-        <ThemeSwitcher className="mb-3" />
+        <ThemeSwitcher className="mt-3 mb-3 shrink-0" />
         <Suspense>
           <MemberCard />
         </Suspense>
@@ -87,7 +87,7 @@ async function MemberTabBar() {
 async function MemberCard() {
   const member = await getCurrentMember();
   return (
-    <div className="rounded-2xl border border-line bg-surface p-3">
+    <div className="shrink-0 rounded-2xl border border-line bg-surface p-3">
       <p className="truncate text-sm font-semibold">{member.displayName}</p>
       <p className="truncate text-xs text-muted">
         {ROLE_LABEL[member.role]} em {member.org.name}
