@@ -1,10 +1,11 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, MessageCircle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, MessageCircle, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { setVisitStage } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
+import { roleLabel } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { VisitStageSelect } from "@/components/visit-stage-select";
@@ -13,6 +14,19 @@ import { useOrgClock } from "@/lib/live/use-live-day";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { addDays, dateIn, formatTimeIn, zonedToIso } from "@/lib/time";
 import { type AppointmentStatus, startOfVisitWeek, VISIT_STAGE_KEYS, VISIT_STAGES, VISIT_WEEKDAYS, type VisitStage, visitStageOf } from "@/lib/visits";
+
+// Cores (ARGB) usadas no Excel, nos mesmos tons das situações da tela.
+const EXPORT_FILL: Record<VisitStage, string> = {
+  message_sent: "FFE2EFDA",
+  confirmed: "FFFFF2CC",
+  rescheduled: "FFDCE9F5",
+  no_show: "FFFDE0DF",
+  wont_come: "FFF4CCCC",
+  visited: "FFD9F2E3",
+};
+const EXPORT_HEADER = "FFEFEFEF";
+const EXPORT_TODAY = "FFE8F0FE";
+const EXPORT_BORDER = "FFDDDDDD";
 
 type Visit = {
   id: string;
@@ -152,6 +166,98 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
     setDayFilter(null);
   };
 
+  // Exporta a semana inteira para Excel, com a grade em cima e os clientes
+  // embaixo, nas mesmas cores das situações. A lib carrega só ao clicar.
+  const [exporting, setExporting] = useState(false);
+  async function exportXlsx() {
+    if (!ready || exporting) return;
+    setExporting(true);
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Visitas");
+      const line = { style: "thin" as const, color: { argb: EXPORT_BORDER } };
+      const bordered = { top: line, left: line, bottom: line, right: line };
+      const fillOf = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
+
+      const titleRow = ws.addRow([`Visitas · ${member.org.name}`]);
+      titleRow.font = { bold: true, size: 14 };
+      const subRow = ws.addRow([`Semana de ${dayMonth(days[0])} a ${dayMonth(days[6])}${isCurrent ? " (semana atual)" : ""}`]);
+      subRow.font = { color: { argb: "FF888888" } };
+      ws.addRow([]);
+
+      // Grade: corretores x dias, com totais e meta.
+      const head1 = ws.addRow(["Corretor", ...days.map((d, i) => `${VISIT_WEEKDAYS[i]} ${dayMonth(d)}`), "Total", "Meta"]);
+      head1.eachCell((c, col) => {
+        c.font = { bold: true };
+        c.fill = fillOf(EXPORT_HEADER);
+        c.border = bordered;
+        c.alignment = { horizontal: col === 1 ? "left" : "center" };
+      });
+      const todayIdx = days.indexOf(today);
+      rows.forEach((b) => {
+        const r = ws.addRow([b.name, ...days.map((d) => cell(b.id, d)), rowTotal(b.id), goalOf(b)]);
+        r.eachCell((c, col) => {
+          c.border = bordered;
+          if (col > 1) c.alignment = { horizontal: "center" };
+        });
+        if (todayIdx >= 0) r.getCell(todayIdx + 2).fill = fillOf(EXPORT_TODAY);
+      });
+      const foot1 = ws.addRow(["Total do dia", ...days.map((d) => dayTotal(d)), weekTotal, goalTotal]);
+      foot1.eachCell((c, col) => {
+        c.font = { bold: true };
+        c.fill = fillOf(EXPORT_HEADER);
+        c.border = bordered;
+        if (col > 1) c.alignment = { horizontal: "center" };
+      });
+
+      ws.addRow([]);
+      const title2 = ws.addRow(["Clientes da semana"]);
+      title2.font = { bold: true, size: 12 };
+
+      // Clientes, cada linha na cor da situação.
+      const head2 = ws.addRow(["Nome do cliente", "Telefone", "Dia", "Horário", "Região", "Corretor", "Situação"]);
+      head2.eachCell((c) => {
+        c.font = { bold: true };
+        c.fill = fillOf(EXPORT_HEADER);
+        c.border = bordered;
+      });
+      const sorted = [...visits].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+      sorted.forEach((v) => {
+        const day = dateIn(v.scheduled_at, tz);
+        const weekday = VISIT_WEEKDAYS[days.indexOf(day)] ?? dayMonth(day);
+        const stage = visitStageOf(v.visit_stage, v.status);
+        const r = ws.addRow([
+          v.client_name,
+          v.client_phone ?? "",
+          `${weekday} ${dayMonth(day)}`,
+          formatTimeIn(v.scheduled_at, tz),
+          v.region ?? "",
+          nameOf.get(v.member_id) ?? "",
+          stage ? VISIT_STAGES[stage].label : "",
+        ]);
+        r.eachCell((c) => {
+          c.border = bordered;
+          if (stage) c.fill = fillOf(EXPORT_FILL[stage]);
+        });
+      });
+
+      const widths = [26, 15, 12, 12, 15, 16, 12, 10, 10, 10];
+      widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `visitas-${days[0]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-4 animate-rise">
@@ -159,7 +265,12 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
           <p className="text-sm text-muted">Toda a equipe · semana de quinta a quarta</p>
           <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">Visitas</h1>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => void exportXlsx()} disabled={!ready || exporting}>
+            <Download className="size-4" />
+            {exporting ? "Gerando..." : "Exportar Excel"}
+          </Button>
+          <div className="flex items-center gap-1.5">
           <Button size="sm" variant="ghost" onClick={() => go(-1)} aria-label="Semana anterior">
             <ChevronLeft className="size-4" />
           </Button>
@@ -182,6 +293,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
               Semana atual
             </Button>
           ) : null}
+          </div>
         </div>
       </header>
 
@@ -351,7 +463,11 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                 const stage = visitStageOf(v.visit_stage, v.status);
                 const canceled = v.status === "canceled";
                 const canEdit = leader || v.member_id === member.id;
-                const text = `Olá, ${v.client_name.split(" ")[0]}! Tudo bem? Aqui é da ${member.org.name}, sobre a sua visita de ${weekday.toLowerCase()} (${dayMonth(day)}) às ${time}.`;
+                const prep = weekday === "Sábado" || weekday === "Domingo" ? "no" : "na";
+                const senderRole = roleLabel(member.role, member.org.segment);
+                const senderName = member.displayName.split(" ")[0];
+                const brokerName = nameOf.get(v.member_id) ?? "";
+                const text = `Olá ${v.client_name.split(" ")[0]}! Tudo bem? Aqui é o ${senderRole} ${senderName}, to passando pra confirmar sua visita ${prep} ${weekday.toLowerCase()} ( ${dayMonth(day)} ) as ${time} com o corretor ${brokerName}!! Podemos confirmar sua presença?`;
                 return (
                   <tr key={v.id} className={clsx("border-t border-line transition-colors", stage && VISIT_STAGES[stage].row)}>
                     <td className={clsx("px-4 py-2.5 font-medium", canceled && "line-through opacity-80")}>{v.client_name}</td>
@@ -361,7 +477,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                           {v.client_phone}
                         </a>
                       ) : (
-                        <span className="text-muted">—</span>
+                        <span className="text-muted">-</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
@@ -370,7 +486,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                     <td className="px-3 py-2.5 tabular-nums">{time}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{v.region ?? <span className="text-muted">—</span>}</td>
                     <td className="px-3 py-2.5">
-                      <span className={clsx(brokerChip, "text-[12px]")}>{nameOf.get(v.member_id) ?? "—"}</span>
+                      <span className={clsx(brokerChip, "text-[12px]")}>{nameOf.get(v.member_id) ?? "-"}</span>
                     </td>
                     <td className="px-3 py-2">
                       <VisitStageSelect value={stage} onChange={(s) => void changeStage(v, s)} disabled={!canEdit} className="min-w-40" />
