@@ -273,7 +273,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
             ) : undefined
           }
         />
-        <div className="overflow-x-auto">
+        <div className="mt-5 overflow-x-auto">
           <table className="w-full min-w-[46rem] border-collapse text-sm">
             <thead>
               <tr className="border-y border-line bg-surface-2 text-xs font-semibold tracking-wide text-muted uppercase">

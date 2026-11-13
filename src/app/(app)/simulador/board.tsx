@@ -16,6 +16,7 @@ import {
 } from "@/lib/financing";
 import { formatMoney } from "@/lib/metrics";
 import { maskMoneyInput, parseMoney } from "@/lib/money";
+import { PaymentFlow } from "./payment-flow";
 
 export type PropOption = {
   id: string;
@@ -27,7 +28,7 @@ export type PropOption = {
   bedrooms: number | null;
 };
 
-type Mode = "income" | "property";
+type Mode = "income" | "property" | "flow";
 
 const reais = (s: string) => (parseMoney(s) || 0) / 100;
 const money = (v: number) => formatMoney(Math.round(v * 100));
@@ -81,7 +82,7 @@ export function SimuladorBoard({ properties, config }: { properties: PropOption[
 
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Tipo de simulação" className="flex gap-1 rounded-xl bg-surface-2 p-1">
-          {([["income", "Quanto consegue"], ["property", "Simular um imóvel"]] as const).map(([id, label]) => (
+          {([["income", "Quanto consegue"], ["property", "Simular um imóvel"], ["flow", "Fluxo de pagamento"]] as const).map(([id, label]) => (
             <button
               key={id}
               type="button"
@@ -94,21 +95,26 @@ export function SimuladorBoard({ properties, config }: { properties: PropOption[
             </button>
           ))}
         </div>
-        <div role="group" aria-label="Sistema" className="flex gap-1 rounded-xl bg-surface-2 p-1">
-          {([["price", "PRICE"], ["sac", "SAC"]] as const).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={system === id}
-              onClick={() => setSystem(id)}
-              className={clsx("h-8 rounded-lg px-3 text-[13px] font-medium transition-colors", system === id ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink")}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {mode !== "flow" ? (
+          <div role="group" aria-label="Sistema" className="flex gap-1 rounded-xl bg-surface-2 p-1">
+            {([["price", "PRICE"], ["sac", "SAC"]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={system === id}
+                onClick={() => setSystem(id)}
+                className={clsx("h-8 rounded-lg px-3 text-[13px] font-medium transition-colors", system === id ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink")}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
+      {mode === "flow" ? (
+        <PaymentFlow properties={properties} />
+      ) : (
       <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         <Card className="self-start">
           <CardHeader title={mode === "income" ? "Dados do cliente" : "Dados da simulação"} />
@@ -208,6 +214,7 @@ export function SimuladorBoard({ properties, config }: { properties: PropOption[
           ) : null}
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -23,7 +23,7 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
             <MemberBell align="left" />
           </Suspense>
         </div>
-        <div className="-mx-2 mt-8 min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 [scrollbar-width:thin] [@media(max-height:760px)]:mt-5">
+        <div className="-mx-2 mt-8 min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [@media(max-height:760px)]:mt-5">
           <Suspense fallback={<NavSkeleton />}>
             <MemberSideNav />
           </Suspense>
