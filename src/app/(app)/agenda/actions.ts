@@ -5,7 +5,7 @@ import { z } from "zod";
 import { describeError, logger } from "@/lib/logger";
 import { propertyLabel, type Property } from "@/lib/properties";
 import { createClient } from "@/lib/supabase/server";
-import { VISIT_REGIONS } from "@/lib/visits";
+import { VISIT_REGIONS, VISIT_STAGES, type VisitStage } from "@/lib/visits";
 
 // A agenda fica ligada ao cliente: agendar escolhe (ou cria) um cliente, e o
 // funil anda sozinho, mas só para frente (nunca rebaixa um negócio adiantado).
@@ -134,6 +134,29 @@ export async function setVisitStatus(id: string, status: VisitStatus): Promise<{
 
   if (appt.client_id) await syncClientStage(supabase, appt.client_id as string, status);
   revalidatePath("/agenda");
+  revalidatePath("/visitas");
+  revalidatePath("/clientes");
+  return { ok: true };
+}
+
+/** Muda a situação detalhada (mensagem enviada, confirmado...); o status e o funil acompanham. */
+export async function setVisitStage(id: string, stage: VisitStage | null): Promise<{ error: string } | { ok: true }> {
+  if (!uuid(id)) return { error: "Visita inválida." };
+  if (stage !== null && !(stage in VISIT_STAGES)) return { error: "Situação inválida." };
+  const status = stage ? VISIT_STAGES[stage].status : "scheduled";
+  const supabase = await createClient();
+  const { data: appt, error } = await supabase
+    .from("appointments")
+    .update({ visit_stage: stage, status })
+    .eq("id", id)
+    .select("client_id")
+    .maybeSingle();
+  if (error?.code === "42703" || error?.code === "PGRST204") return { error: "Falta rodar a atualização do banco (20261117000000_visit_stage.sql)." };
+  if (error || !appt) return { error: "Só o corretor da visita ou a liderança podem mudar a situação." };
+
+  if (appt.client_id) await syncClientStage(supabase, appt.client_id as string, status);
+  revalidatePath("/agenda");
+  revalidatePath("/visitas");
   revalidatePath("/clientes");
   return { ok: true };
 }

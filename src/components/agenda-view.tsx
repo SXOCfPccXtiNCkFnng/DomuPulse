@@ -3,7 +3,9 @@
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight, MapPin, Pencil, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { deleteVisit, scheduleVisit, setVisitStatus, updateVisit } from "@/app/(app)/agenda/actions";
+import { deleteVisit, scheduleVisit, setVisitStage, setVisitStatus, updateVisit } from "@/app/(app)/agenda/actions";
+import { VisitStageSelect } from "@/components/visit-stage-select";
+import { VISIT_STAGES, type VisitStage, visitStageOf } from "@/lib/visits";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
@@ -26,6 +28,7 @@ type Appointment = {
   status: Status;
   notes: string | null;
   region?: string | null;
+  visit_stage?: string | null;
 };
 
 const APPOINTMENT_COLUMNS = "id, member_id, client_id, client_name, client_phone, scheduled_at, status, notes";
@@ -71,8 +74,10 @@ export function AgendaView({ member }: { member: ClientMember }) {
         : appointments.gte("scheduled_at", zonedToIso(today, "00:00", tz)).limit(UPCOMING_LIMIT);
     };
     const range = async () => {
+      // Sem as atualizações do banco (situação, região), a agenda segue sem esses campos.
+      const full = await query(`${APPOINTMENT_COLUMNS}, region, visit_stage`);
+      if (full.error?.code !== "42703") return full;
       const r = await query(`${APPOINTMENT_COLUMNS}, region`);
-      // Sem a atualização do banco (região), a agenda segue sem esse campo.
       return r.error?.code === "42703" ? query(APPOINTMENT_COLUMNS) : r;
     };
     const [{ data: a }, { data: m }, { data: cl }, { data: pr }, { data: links }] = await Promise.all([
@@ -137,6 +142,13 @@ export function AgendaView({ member }: { member: ClientMember }) {
   async function setStatus(id: string, status: Status) {
     setItems((list) => list.map((i) => (i.id === id ? { ...i, status } : i)));
     const r = await setVisitStatus(id, status);
+    if ("error" in r) void reload();
+  }
+
+  async function setStage(id: string, stage: VisitStage | null) {
+    const status = stage ? VISIT_STAGES[stage].status : "scheduled";
+    setItems((list) => list.map((i) => (i.id === id ? { ...i, status, visit_stage: stage } : i)));
+    const r = await setVisitStage(id, stage);
     if ("error" in r) void reload();
   }
 
@@ -294,6 +306,7 @@ export function AgendaView({ member }: { member: ClientMember }) {
                       properties={properties}
                       propertyId={a.client_id ? (clientProperty[a.client_id] ?? "") : ""}
                       onStatus={(status) => setStatus(a.id, status)}
+                      onStage={(stage) => setStage(a.id, stage)}
                       onChanged={() => void reload()}
                     />
                   ))}
@@ -333,6 +346,7 @@ function VisitRow({
   properties,
   propertyId,
   onStatus,
+  onStage,
   onChanged,
 }: {
   visit: Appointment;
@@ -342,6 +356,7 @@ function VisitRow({
   properties: PropertyOption[];
   propertyId: string;
   onStatus: (status: Status) => void;
+  onStage: (stage: VisitStage | null) => void;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -355,6 +370,7 @@ function VisitRow({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const linkedTitle = properties.find((p) => p.id === propertyId);
+  const stage = a.visit_stage !== undefined ? visitStageOf(a.visit_stage, a.status) : null;
 
   function open() {
     setEditing((v) => !v);
@@ -396,7 +412,7 @@ function VisitRow({
   }
 
   return (
-    <li className="rounded-2xl border border-line p-3.5">
+    <li className={clsx("rounded-2xl border border-line p-3.5", stage && VISIT_STAGES[stage].row)}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className={clsx("w-14 font-display text-lg font-semibold tabular-nums", a.status !== "scheduled" && "text-muted")}>
           {formatTimeIn(a.scheduled_at, timezone)}
@@ -424,7 +440,9 @@ function VisitRow({
         </span>
 
         <span className="flex w-full flex-wrap items-center gap-1 sm:w-auto">
-          {a.status === "scheduled" ? (
+          {a.visit_stage !== undefined ? (
+            <VisitStageSelect value={stage} onChange={onStage} className="min-w-44 flex-1 sm:flex-none" />
+          ) : a.status === "scheduled" ? (
             <span className="flex flex-1 gap-1 sm:flex-none [&>button]:flex-1 sm:[&>button]:flex-none">
               <Button size="sm" variant="secondary" onClick={() => onStatus("done")}>
                 Realizada

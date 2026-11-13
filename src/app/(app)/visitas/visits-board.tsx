@@ -3,44 +3,36 @@
 import clsx from "clsx";
 import { ChevronLeft, ChevronRight, MessageCircle, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { setVisitStage } from "@/app/(app)/agenda/actions";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
-import { Badge, Card, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
+import { VisitStageSelect } from "@/components/visit-stage-select";
 import { whatsappLink } from "@/lib/clients";
 import { useOrgClock } from "@/lib/live/use-live-day";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { addDays, dateIn, formatTimeIn, zonedToIso } from "@/lib/time";
-import { startOfVisitWeek, VISIT_WEEKDAYS } from "@/lib/visits";
+import { type AppointmentStatus, startOfVisitWeek, VISIT_STAGE_KEYS, VISIT_STAGES, VISIT_WEEKDAYS, type VisitStage, visitStageOf } from "@/lib/visits";
 
-type Status = "scheduled" | "done" | "no_show" | "canceled";
 type Visit = {
   id: string;
   member_id: string;
   client_name: string;
   client_phone: string | null;
   scheduled_at: string;
-  status: Status;
+  status: AppointmentStatus;
   region: string | null;
+  visit_stage?: string | null;
 };
 type Broker = { id: string; name: string; active: boolean; is_broker: boolean };
 type Board = { start: string; visits: Visit[]; brokers: Broker[]; error: string | null };
-
-const STATUS: Partial<Record<Status, { label: string; tone: "brand" | "warn" | "danger" }>> = {
-  done: { label: "Realizada", tone: "brand" },
-  no_show: { label: "Não compareceu", tone: "warn" },
-  canceled: { label: "Cancelada", tone: "danger" },
-};
 
 const REFRESH_MS = 60_000;
 
 /** "12/11" a partir de "2026-11-12". */
 const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 
-/** Cor fixa por corretor (mesma posição na lista, mesma cor), legível no claro e no escuro. */
-function brokerStyle(index: number) {
-  const hue = (index * 47 + 210) % 360;
-  return { backgroundColor: `hsl(${hue} 75% 50% / 0.16)`, color: `hsl(${hue} 65% 42%)` };
-}
+const brokerChip = "inline-block max-w-44 truncate rounded-md bg-surface-2 px-2 py-0.5 text-left font-semibold uppercase text-ink-2";
 
 export function VisitsBoard({ member }: { member: ClientMember }) {
   const supabase = useMemo(() => getBrowserClient(), []);
@@ -96,7 +88,6 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
     for (const id of withVisits) if (!list.some((b) => b.id === id)) list.push({ id, name: "Outro membro", active: false, is_broker: false });
     return list;
   }, [ready, visits]);
-  const colorOf = useMemo(() => new Map(rows.map((b, i) => [b.id, brokerStyle(i)])), [rows]);
   const nameOf = useMemo(() => new Map(rows.map((b) => [b.id, b.name])), [rows]);
 
   // Contagem: tudo que foi marcado para o dia, menos as canceladas (que aparecem à parte).
@@ -117,6 +108,22 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
   const dayCanceled = (day: string) => rows.reduce((s, b) => s + canceledCell(b.id, day), 0);
   const weekTotal = days.reduce((s, d) => s + dayTotal(d), 0);
   const weekCanceled = days.reduce((s, d) => s + dayCanceled(d), 0);
+
+  const [stageError, setStageError] = useState<string | null>(null);
+  async function changeStage(v: Visit, stage: VisitStage | null) {
+    setStageError(null);
+    const status = stage ? VISIT_STAGES[stage].status : "scheduled";
+    setBoard((b) => (b ? { ...b, visits: b.visits.map((x) => (x.id === v.id ? { ...x, visit_stage: stage, status } : x)) } : b));
+    const r = await setVisitStage(v.id, stage);
+    if ("error" in r) setStageError(r.error);
+    void load();
+  }
+
+  const stageCounts = new Map<VisitStage, number>();
+  for (const v of visits) {
+    const s = visitStageOf(v.visit_stage, v.status);
+    if (s) stageCounts.set(s, (stageCounts.get(s) ?? 0) + 1);
+  }
 
   const list = visits.filter(
     (v) => (!brokerFilter || v.member_id === brokerFilter) && (!dayFilter || dateIn(v.scheduled_at, tz) === dayFilter),
@@ -206,8 +213,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                       <button
                         type="button"
                         onClick={() => setBrokerFilter((f) => (f === b.id ? null : b.id))}
-                        className="max-w-44 truncate rounded-md px-2 py-0.5 text-left text-[13px] font-semibold uppercase"
-                        style={colorOf.get(b.id)}
+                        className={clsx(brokerChip, "text-[13px] hover:text-ink", brokerFilter === b.id && "bg-brand-soft text-brand-text")}
                         title="Mostrar só as visitas deste corretor"
                       >
                         {b.name}
@@ -255,7 +261,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
           description={
             brokerFilter || dayFilter
               ? `${list.length} de ${visits.length} visitas`
-              : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Canceladas ficam destacadas e não contam no total."
+              : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Mude a situação e a linha ganha a cor; \"não irá vir\" não conta no total."
           }
           action={
             brokerFilter || dayFilter ? (
@@ -273,7 +279,17 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
             ) : undefined
           }
         />
-        <div className="mt-5 overflow-x-auto">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-5 pt-4 text-xs text-ink-2 sm:px-6">
+          {VISIT_STAGE_KEYS.map((k) => (
+            <span key={k} className="flex items-center gap-1.5">
+              <span className={clsx("size-3 rounded-sm", VISIT_STAGES[k].chip)} />
+              {VISIT_STAGES[k].label}
+              <span className="font-semibold tabular-nums text-muted">{stageCounts.get(k) ?? 0}</span>
+            </span>
+          ))}
+        </div>
+        {stageError ? <p className="mx-5 mt-3 rounded-xl bg-danger-soft px-4 py-2.5 text-sm text-danger sm:mx-6">{stageError}</p> : null}
+        <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[46rem] border-collapse text-sm">
             <thead>
               <tr className="border-y border-line bg-surface-2 text-xs font-semibold tracking-wide text-muted uppercase">
@@ -299,12 +315,13 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                 const day = dateIn(v.scheduled_at, tz);
                 const time = formatTimeIn(v.scheduled_at, tz);
                 const weekday = VISIT_WEEKDAYS[days.indexOf(day)] ?? dayMonth(day);
+                const stage = visitStageOf(v.visit_stage, v.status);
                 const canceled = v.status === "canceled";
-                const st = STATUS[v.status];
+                const canEdit = leader || v.member_id === member.id;
                 const text = `Olá, ${v.client_name.split(" ")[0]}! Tudo bem? Aqui é da ${member.org.name}, sobre a sua visita de ${weekday.toLowerCase()} (${dayMonth(day)}) às ${time}.`;
                 return (
-                  <tr key={v.id} className={clsx("border-t border-line", canceled && "bg-danger-soft/60")}>
-                    <td className={clsx("px-4 py-2.5 font-medium", canceled && "text-danger line-through")}>{v.client_name}</td>
+                  <tr key={v.id} className={clsx("border-t border-line transition-colors", stage && VISIT_STAGES[stage].row)}>
+                    <td className={clsx("px-4 py-2.5 font-medium", canceled && "line-through opacity-80")}>{v.client_name}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">
                       {v.client_phone ? (
                         <a href={`tel:${v.client_phone.replace(/[^\d+]/g, "")}`} className="hover:underline">
@@ -320,11 +337,11 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                     <td className="px-3 py-2.5 tabular-nums">{time}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{v.region ?? <span className="text-muted">—</span>}</td>
                     <td className="px-3 py-2.5">
-                      <span className="inline-block max-w-40 truncate rounded-md px-2 py-0.5 text-[12px] font-semibold uppercase" style={colorOf.get(v.member_id)}>
-                        {nameOf.get(v.member_id) ?? "—"}
-                      </span>
+                      <span className={clsx(brokerChip, "text-[12px]")}>{nameOf.get(v.member_id) ?? "—"}</span>
                     </td>
-                    <td className="px-3 py-2.5">{st ? <Badge tone={st.tone}>{st.label}</Badge> : <span className="text-muted">Agendada</span>}</td>
+                    <td className="px-3 py-2">
+                      <VisitStageSelect value={stage} onChange={(s) => void changeStage(v, s)} disabled={!canEdit} className="min-w-40" />
+                    </td>
                     {leader ? (
                       <td className="px-4 py-2.5 text-right">
                         {v.client_phone ? (
