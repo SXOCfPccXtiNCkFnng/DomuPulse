@@ -41,7 +41,7 @@ export default async function RelatoriosPage(props: PageProps<"/relatorios">) {
   const sp = await props.searchParams;
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-  const period = resolvePeriod({ periodo: one(sp.periodo), de: one(sp.de), ate: one(sp.ate) }, member.org.timezone);
+  const period = resolvePeriod({ periodo: one(sp.periodo), de: one(sp.de), ate: one(sp.ate) }, member.org.timezone, member.org.weekStart);
   const leader = isLeader(member.role);
   const data = await loadReportData(period, null);
   // Corretor escolhido vale mais que a equipe: mostra só os números dele.

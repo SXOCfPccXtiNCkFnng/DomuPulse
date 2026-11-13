@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
   try {
     const { data: orgs, error } = await createAdminClient()
       .from("organizations")
-      .select("id, name, timezone, report_slots, status, trial_ends_at, segment")
+      // "*" inclui week_start quando a coluna existe, sem quebrar antes da atualização do banco.
+      .select("*")
       .in("status", ["trialing", "active", "past_due"]);
     if (error) throw error;
 

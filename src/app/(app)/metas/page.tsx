@@ -9,7 +9,7 @@ import { GOAL_METRICS, projection, type GoalMetric, type GoalPeriod } from "@/li
 import { formatMoney, formatNumber, METRICS } from "@/lib/metrics";
 import { endOfMonth } from "@/lib/period";
 import { createClient } from "@/lib/supabase/server";
-import { addDays, formatDate, normalizeSlot, slotPeriodLabel, startOfMonth, startOfWeek, todayIn } from "@/lib/time";
+import { addDays, formatDate, normalizeSlot, slotPeriodLabel, startOfMonth, startOfWeek, todayIn, weekRangeLabel } from "@/lib/time";
 import { deleteCommission } from "./actions";
 import { BulkGoalsForm, CommissionForm, CreatedGoals, GoalRowForm, type CreatedGoal, type SlotGoalValues } from "./forms";
 
@@ -34,7 +34,8 @@ export default async function MetasPage(props: PageProps<"/metas">) {
 
   const supabase = await createClient();
   const isCurrent = month === startOfMonth(today);
-  const weekStart = startOfWeek(today);
+  const weekStart = startOfWeek(today, me.org.weekStart);
+  const weekRange = weekRangeLabel(me.org.weekStart);
   const slots = me.org.reportSlots.map(normalizeSlot).sort();
   // Filtro por tipo de meta (mês/semana/dia/horário), guardado na URL.
   const tipo = ((): "mes" | "semana" | "dia" | "horario" => {
@@ -84,7 +85,7 @@ export default async function MetasPage(props: PageProps<"/metas">) {
   const TIPOS: [typeof tipo, string][] = [["mes", "Mês"], ["semana", "Semana"], ["dia", "Dia"], ...(slots.length ? ([["horario", "Horário"]] as [typeof tipo, string][]) : [])];
   const periodDates = {
     mes: `${formatDate(month)} a ${formatDate(monthEnd)}`,
-    semana: isCurrent ? `${formatDate(weekStart)} a ${formatDate(addDays(weekStart, 6))}` : "Cada semana, de segunda a domingo",
+    semana: isCurrent ? `${formatDate(weekStart)} a ${formatDate(addDays(weekStart, 6))}` : `Cada semana, ${weekRange}`,
     dia: isCurrent ? `Hoje, ${formatDate(today)}` : "Cada dia do mês",
     horario: "Por horário de relatório, todo dia",
   }[tipo];
@@ -169,7 +170,7 @@ export default async function MetasPage(props: PageProps<"/metas">) {
         <Card>
           <CardHeader
             title="Mesma meta para todos"
-            description={`Aplica a ${people.length} corretores ativos. Zero apaga a meta. As metas por semana (segunda a domingo), por dia e por horário valem para todo o mês.`}
+            description={`Aplica a ${people.length} corretores ativos. Zero apaga a meta. As metas por semana (${weekRange}), por dia e por horário valem para todo o mês.`}
           />
           <BulkGoalsForm month={month} memberIds={people.map((p) => p.id)} slots={slots} initialPeriod={tipo === "horario" ? "slot" : periodMap[tipo]} />
         </Card>

@@ -177,7 +177,7 @@ export function BrokerToday({ member }: { member: ClientMember }) {
               <Funnel totals={totals} />
             </div>
           </Card>
-          <DailyGoals memberId={member.id} today={clock.today} totals={totals} goals={goals.filter((g) => g.period !== "slot")} supabase={supabase} />
+          <DailyGoals memberId={member.id} weekStartDay={member.org.weekStart} today={clock.today} totals={totals} goals={goals.filter((g) => g.period !== "slot")} supabase={supabase} />
         </div>
       </div>
     </div>
@@ -210,24 +210,26 @@ function usePeriodGoals(supabase: ReturnType<typeof getBrowserClient>, memberId:
 
 /**
  * Metas por semana e por dia definidas pela liderança. O dia usa os relatórios
- * de hoje (ao vivo); a semana soma os dias anteriores desde segunda com hoje.
+ * de hoje (ao vivo); a semana soma os dias anteriores desde o início da semana com hoje.
  */
 function DailyGoals({
   memberId,
+  weekStartDay,
   today,
   totals,
   goals,
   supabase,
 }: {
   memberId: string;
+  weekStartDay: number;
   today: string;
   totals: Totals;
   goals: PeriodGoal[];
   supabase: ReturnType<typeof getBrowserClient>;
 }) {
-  // Guardado com a semana a que pertence: na virada para segunda, o da semana passada some.
+  // Guardado com a semana a que pertence: na virada da semana, o da semana passada some.
   const [earlier, setEarlier] = useState<{ week: string; totals: Totals } | null>(null);
-  const weekStart = startOfWeek(today);
+  const weekStart = startOfWeek(today, weekStartDay);
   const earlierInWeek = earlier?.week === weekStart ? earlier.totals : emptyTotals();
   const hasWeekly = goals.some((g) => g.period === "week");
 

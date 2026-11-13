@@ -5,14 +5,28 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FormMessage, Input, Select } from "@/components/ui/field";
 import { BR_TIMEZONES, MAX_SLOTS } from "@/lib/org-settings";
+import { WEEKDAY_NAMES, weekRangeLabel } from "@/lib/time";
 import type { FormState } from "@/lib/validation";
 import { updateOrgSettings } from "./org-actions";
 
-export function OrgSettingsForm({ name, timezone, slots, showSlots = true }: { name: string; timezone: string; slots: string[]; showSlots?: boolean }) {
+export function OrgSettingsForm({
+  name,
+  timezone,
+  weekStart,
+  slots,
+  showSlots = true,
+}: {
+  name: string;
+  timezone: string;
+  weekStart: number;
+  slots: string[];
+  showSlots?: boolean;
+}) {
   const [state, action, pending] = useActionState(updateOrgSettings, {} as FormState);
   // Controlados: continuam como a pessoa deixou se o servidor recusar.
   const [orgName, setOrgName] = useState(name);
   const [tz, setTz] = useState(timezone);
+  const [firstDay, setFirstDay] = useState(String(weekStart));
   const [times, setTimes] = useState(slots);
 
   return (
@@ -33,6 +47,17 @@ export function OrgSettingsForm({ name, timezone, slots, showSlots = true }: { n
             ))}
           </Select>
         </Field>
+        {showSlots ? (
+          <Field label="A semana começa na" hint={`Metas da semana e "Esta semana" vão ${weekRangeLabel(Number(firstDay))}.`}>
+            <Select name="week_start" value={firstDay} onChange={(e) => setFirstDay(e.target.value)}>
+              {WEEKDAY_NAMES.map((day, i) => (
+                <option key={day} value={i}>
+                  {day[0].toUpperCase() + day.slice(1)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : null}
       </div>
 
       {showSlots ? (

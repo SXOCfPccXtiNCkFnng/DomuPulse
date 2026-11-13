@@ -11,11 +11,12 @@ import { fieldErrors, nameSchema, type FormState } from "@/lib/validation";
 const schema = z.object({
   name: nameSchema,
   timezone: z.enum(BR_TIMEZONES.map((t) => t.id) as [string, ...string[]], "Escolha um fuso da lista."),
+  week_start: z.coerce.number().int().min(0).max(6).optional(),
 });
 
 /**
- * Nome, fuso e horários de relatório. Grava com o cliente do usuário: o banco
- * só aceita do administrador e só nessas três colunas.
+ * Nome, fuso, início da semana e horários de relatório. Grava com o cliente do
+ * usuário: o banco só aceita do administrador e só nessas colunas.
  */
 export async function updateOrgSettings(_: FormState, formData: FormData): Promise<FormState> {
   const me = await getCurrentMember();
@@ -29,8 +30,16 @@ export async function updateOrgSettings(_: FormState, formData: FormData): Promi
   const supabase = await createClient();
   const { error } = await supabase
     .from("organizations")
-    .update({ name: parsed.data.name, timezone: parsed.data.timezone, report_slots: slots.slots })
+    .update({
+      name: parsed.data.name,
+      timezone: parsed.data.timezone,
+      report_slots: slots.slots,
+      ...(parsed.data.week_start === undefined ? {} : { week_start: parsed.data.week_start }),
+    })
     .eq("id", me.org.id);
+  if (error?.code === "42703" || error?.code === "PGRST204") {
+    return { error: "Falta rodar a atualização do banco (20261118000000_week_start_visit_goal.sql)." };
+  }
   if (error) {
     logger.error("org.settings", { message: describeError(error), orgId: me.org.id });
     return { error: "Não foi possível salvar. Tente novamente." };

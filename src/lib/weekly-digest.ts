@@ -57,21 +57,21 @@ const monthName = (date: string) =>
 
 /**
  * Resumo do período anterior para a liderança:
- *  - semana: a última semana completa (segunda a domingo), no dia da semana
- *    que cada pessoa escolheu;
+ *  - semana: a última semana completa (a partir do dia de início da empresa),
+ *    no dia da semana que cada pessoa escolheu;
  *  - mês: o mês anterior inteiro, no dia 1.
  * Os dois saem a partir das 8h. O registro de envio garante um por período por
  * pessoa, mesmo que a rotina rode várias vezes.
  */
 export async function sendPeriodDigests(
-  org: { id: string; name: string; timezone: string; report_slots: string[] },
+  org: { id: string; name: string; timezone: string; report_slots: string[]; week_start?: number | null },
   period: "week" | "month",
 ) {
   const today = todayIn(org.timezone);
   if (minutesNowIn(org.timezone) < SEND_AT_MIN) return 0;
   if (period === "month" && today.slice(8) !== "01") return 0;
 
-  const start = period === "week" ? addDays(startOfWeek(today), -7) : startOfMonth(addDays(startOfMonth(today), -1));
+  const start = period === "week" ? addDays(startOfWeek(today, org.week_start ?? 1), -7) : startOfMonth(addDays(startOfMonth(today), -1));
   const end = period === "week" ? addDays(start, 6) : addDays(startOfMonth(today), -1);
   const prevStart = period === "week" ? addDays(start, -7) : startOfMonth(addDays(start, -1));
   const label = period === "week" ? `${formatDate(start).slice(0, 5)} a ${formatDate(end).slice(0, 5)}` : monthName(start);

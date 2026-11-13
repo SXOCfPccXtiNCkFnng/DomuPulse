@@ -14,7 +14,7 @@ export const GOAL_METRICS = [
 ] as const satisfies readonly MetricKey[];
 export type GoalMetric = (typeof GOAL_METRICS)[number];
 
-/** Meta do mês inteiro, por semana (segunda a domingo) ou por dia; as duas últimas valem para todo o mês. */
+/** Meta do mês inteiro, por semana (a partir do dia de início configurado na empresa) ou por dia; as duas últimas valem para todo o mês. */
 export type GoalPeriod = "month" | "week" | "day";
 export const GOAL_PERIODS = ["month", "week", "day"] as const satisfies readonly GoalPeriod[];
 

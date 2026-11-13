@@ -24,7 +24,11 @@ export function endOfMonth(date: string) {
 }
 
 /** Lê o período da URL. Qualquer valor estranho cai em "este mês". */
-export function resolvePeriod(params: { periodo?: string; de?: string; ate?: string }, timezone: string): Period {
+export function resolvePeriod(
+  params: { periodo?: string; de?: string; ate?: string },
+  timezone: string,
+  weekStart = 1,
+): Period {
   const today = todayIn(timezone);
   const id = (PERIODS.find((p) => p.id === params.periodo)?.id ?? "mes") as PeriodId;
 
@@ -32,7 +36,7 @@ export function resolvePeriod(params: { periodo?: string; de?: string; ate?: str
     case "hoje":
       return { id, from: today, to: today, label: "Hoje" };
     case "semana":
-      return { id, from: startOfWeek(today), to: today, label: "Esta semana" };
+      return { id, from: startOfWeek(today, weekStart), to: today, label: "Esta semana" };
     case "mes-passado": {
       const lastMonthEnd = addDays(startOfMonth(today), -1);
       return { id, from: startOfMonth(lastMonthEnd), to: lastMonthEnd, label: "Mês passado" };

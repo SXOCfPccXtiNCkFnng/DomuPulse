@@ -92,7 +92,7 @@ export default async function ContaPage(props: PageProps<"/conta">) {
         <div className="grid items-start gap-5 xl:grid-cols-2">
           <Card>
             <CardHeader title="Empresa" description={hr ? "Nome e fuso horário da conta" : "Nome, fuso e horários de relatório da equipe"} />
-            <OrgSettingsForm name={me.org.name} timezone={me.org.timezone} slots={me.org.reportSlots} showSlots={!hr} />
+            <OrgSettingsForm name={me.org.name} timezone={me.org.timezone} weekStart={me.org.weekStart} slots={me.org.reportSlots} showSlots={!hr} />
           </Card>
           {hr ? <WhatsappCard orgId={me.org.id} isOwner={me.role === "owner"} /> : <OrgFiscal orgId={me.org.id} />}
         </div>

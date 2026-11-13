@@ -29,11 +29,13 @@ export async function GET(request: NextRequest) {
   const limit = await rateLimit(`export:${userId}`, 20, 60 * 60);
   if (!limit.ok) return NextResponse.json({ error: "Muitas exportações. Tente mais tarde." }, { status: 429 });
 
-  const { data: org } = await supabase.from("organizations").select("timezone").maybeSingle();
+  // "*" para não quebrar enquanto a coluna week_start não existir no banco.
+  const { data: org } = await supabase.from("organizations").select("*").maybeSingle();
   const q = request.nextUrl.searchParams;
   const period = resolvePeriod(
     { periodo: q.get("periodo") ?? undefined, de: q.get("de") ?? undefined, ate: q.get("ate") ?? undefined },
     org?.timezone ?? DEFAULT_TIMEZONE,
+    org?.week_start ?? 1,
   );
   const teamId = q.get("equipe");
   // Mesmo filtro da tela: um corretor só. O RLS continua decidindo o que a pessoa vê.

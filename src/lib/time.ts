@@ -50,10 +50,17 @@ export function addDays(date: string, amount: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function startOfWeek(date: string): string {
-  const d = new Date(`${date}T12:00:00Z`);
-  const weekday = (d.getUTCDay() + 6) % 7; // segunda = 0
-  return addDays(date, -weekday);
+/** Início da semana que contém a data. firstDay: 0 = domingo ... 6 = sábado (padrão segunda). */
+export function startOfWeek(date: string, firstDay = 1): string {
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return addDays(date, -((weekday - firstDay + 7) % 7));
+}
+
+export const WEEKDAY_NAMES = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/** "de quinta a quarta", "de segunda a domingo". */
+export function weekRangeLabel(firstDay = 1): string {
+  return `de ${WEEKDAY_NAMES[firstDay]} a ${WEEKDAY_NAMES[(firstDay + 6) % 7]}`;
 }
 
 export function startOfMonth(date: string): string {

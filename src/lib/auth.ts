@@ -34,6 +34,8 @@ export type CurrentMember = {
     cancelAt: string | null;
     /** Corretores ou RH: decide módulo, menu e onboarding. */
     segment: Segment;
+    /** Dia em que a semana começa (0 = domingo ... 6 = sábado). */
+    weekStart: number;
   };
   /** Versão dos Termos que a pessoa aceitou por último (null se nunca aceitou). */
   termsVersion: string | null;
@@ -57,9 +59,13 @@ type MemberRow = {
     trial_ends_at: string;
     cancel_at: string | null;
     segment: Segment;
+    week_start?: number;
   };
   terms_version: string | null;
 };
+
+const MEMBER_COLUMNS = "id, user_id, full_name, broker_name, display_name, role, team_id, division_id, terms_version";
+const ORG_COLUMNS = "id, name, timezone, report_slots, status, trial_ends_at, cancel_at, segment";
 
 // Camada de acesso a dados: o único lugar que resolve quem é o usuário.
 // getClaims valida a assinatura do JWT, ao contrário de getSession.
@@ -75,14 +81,16 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
   const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   if (aal?.nextLevel === "aal2" && aal.currentLevel !== "aal2") redirect("/verificacao");
 
-  const { data } = await supabase
-    .from("members")
-    .select(
-      "id, user_id, full_name, broker_name, display_name, role, team_id, division_id, terms_version, organizations (id, name, timezone, report_slots, status, trial_ends_at, cancel_at, segment)",
-    )
-    .eq("user_id", userId)
-    .eq("active", true)
-    .maybeSingle<MemberRow>();
+  const fetchMember = (orgColumns: string) =>
+    supabase
+      .from("members")
+      .select(`${MEMBER_COLUMNS}, organizations (${orgColumns})`)
+      .eq("user_id", userId)
+      .eq("active", true)
+      .maybeSingle<MemberRow>();
+  let { data, error } = await fetchMember(`${ORG_COLUMNS}, week_start`);
+  // Sem a atualização do banco (início da semana), entra com a semana de segunda.
+  if (error?.code === "42703") ({ data, error } = await fetchMember(ORG_COLUMNS));
 
   if (!data) {
     const admin = createAdminClient();
@@ -117,6 +125,7 @@ export const getCurrentMember = cache(async (): Promise<CurrentMember> => {
       trialEndsAt: data.organizations.trial_ends_at,
       cancelAt: data.organizations.cancel_at,
       segment: data.organizations.segment,
+      weekStart: data.organizations.week_start ?? 1,
     },
     termsVersion: data.terms_version,
   };

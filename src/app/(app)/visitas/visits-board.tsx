@@ -24,7 +24,9 @@ type Visit = {
   region: string | null;
   visit_stage?: string | null;
 };
-type Broker = { id: string; name: string; active: boolean; is_broker: boolean };
+type Broker = { id: string; name: string; active: boolean; is_broker: boolean; visit_goal?: number };
+
+const DEFAULT_VISIT_GOAL = 15;
 type Board = { start: string; visits: Visit[]; brokers: Broker[]; error: string | null };
 
 const REFRESH_MS = 60_000;
@@ -103,6 +105,25 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
   const rowTotal = (memberId: string) => days.reduce((s, d) => s + cell(memberId, d), 0);
   const dayTotal = (day: string) => rows.reduce((s, b) => s + cell(b.id, day), 0);
   const weekTotal = days.reduce((s, d) => s + dayTotal(d), 0);
+  const goalOf = (b: Broker) => b.visit_goal ?? DEFAULT_VISIT_GOAL;
+  const goalTotal = rows.reduce((s, b) => s + goalOf(b), 0);
+
+  const [goalError, setGoalError] = useState<string | null>(null);
+  async function changeGoal(memberId: string, goal: number) {
+    setGoalError(null);
+    setBoard((b) => (b ? { ...b, brokers: b.brokers.map((x) => (x.id === memberId ? { ...x, visit_goal: goal } : x)) } : b));
+    const { error } = await supabase.rpc("set_visit_goal", { p_member: memberId, p_goal: goal });
+    if (error) {
+      setGoalError(
+        error.code === "PGRST202" || error.code === "42883"
+          ? "Falta rodar a atualização do banco (20261118000000_week_start_visit_goal.sql) para salvar a meta."
+          : error.code === "42501"
+            ? error.message
+            : "Não foi possível salvar a meta. Tente de novo.",
+      );
+    }
+    void load();
+  }
 
   const [stageError, setStageError] = useState<string | null>(null);
   async function changeStage(v: Visit, stage: VisitStage | null) {
@@ -165,6 +186,7 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
       </header>
 
       {ready?.error ? <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">{ready.error}</p> : null}
+      {goalError ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{goalError}</p> : null}
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
@@ -186,18 +208,21 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                   </th>
                 ))}
                 <th className="px-3 py-2.5 text-center">Total</th>
+                <th className="px-3 py-2.5 text-center" title={leader ? "Meta de visitas da semana. Clique para alterar." : "Meta de visitas da semana"}>
+                  Meta
+                </th>
               </tr>
             </thead>
             <tbody>
               {!ready ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted">
                     Carregando...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted">
                     Nenhum corretor na equipe ainda.
                   </td>
                 </tr>
@@ -222,7 +247,21 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center font-display text-base font-semibold tabular-nums">{rowTotal(b.id)}</td>
+                    <td
+                      className={clsx(
+                        "px-3 py-2 text-center font-display text-base font-semibold tabular-nums",
+                        goalOf(b) > 0 && rowTotal(b.id) >= goalOf(b) && "text-success",
+                      )}
+                    >
+                      {rowTotal(b.id)}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {leader ? (
+                        <GoalInput key={goalOf(b)} value={goalOf(b)} name={b.name} onSave={(g) => void changeGoal(b.id, g)} />
+                      ) : (
+                        <span className="font-display text-base font-semibold tabular-nums text-ink-2">{goalOf(b)}</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               )}
@@ -238,6 +277,9 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
                   ))}
                   <td className="px-3 py-2.5 text-center">
                     <span className="font-display text-lg font-semibold tabular-nums">{weekTotal}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className="font-display text-lg font-semibold tabular-nums text-ink-2">{goalTotal}</span>
                   </td>
                 </tr>
               </tfoot>
@@ -356,5 +398,32 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+/** Meta editável da liderança: salva ao sair do campo ou no Enter. */
+function GoalInput({ value, name, onSave }: { value: number; name: string; onSave: (goal: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const commit = () => {
+    const goal = Number(text);
+    if (text.trim() === "" || !Number.isInteger(goal) || goal < 0 || goal > 999) {
+      setText(String(value));
+      return;
+    }
+    if (goal !== value) onSave(goal);
+  };
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={0}
+      max={999}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      aria-label={`Meta de visitas de ${name}`}
+      className="h-8 w-14 rounded-lg border border-line bg-surface text-center font-display text-base font-semibold tabular-nums outline-none [appearance:textfield] focus:border-brand [&::-webkit-inner-spin-button]:appearance-none"
+    />
   );
 }
