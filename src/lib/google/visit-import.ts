@@ -3,7 +3,7 @@ import { getGoogleAccessToken } from "@/lib/google/connection";
 import { getAllValues } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addDays, todayIn, zonedToIso } from "@/lib/time";
+import { addDays, dateIn, formatTimeIn, todayIn, zonedToIso } from "@/lib/time";
 import { startOfVisitWeek, VISIT_WEEKDAYS } from "@/lib/visits";
 
 const MAX_IMPORT = 500;
@@ -78,6 +78,19 @@ export async function importVisitsFromSheet(
 
   const cell = (row: string[], idx: number | undefined) => (idx != null && idx >= 0 ? (row[idx] ?? "").trim() : "");
 
+  // Visitas que já existem no sistema na semana (para não importar duplicado).
+  const weekEnd = addDays(weekStart, 7);
+  const { data: existing } = await admin
+    .from("appointments")
+    .select("member_id, scheduled_at, client_name")
+    .eq("org_id", orgId)
+    .gte("scheduled_at", zonedToIso(weekStart, "00:00", tz))
+    .lt("scheduled_at", zonedToIso(weekEnd, "00:00", tz));
+  const keyOf = (memberId: string, date: string, time: string, name: string) => `${memberId}|${date}|${time}|${normalize(name)}`;
+  const seenKeys = new Set(
+    (existing ?? []).map((e) => keyOf(e.member_id as string, dateIn(e.scheduled_at as string, tz), formatTimeIn(e.scheduled_at as string, tz), (e.client_name as string) ?? "")),
+  );
+
   const dataRows = grid.slice(found.index + 1).slice(0, MAX_IMPORT);
   const toInsert: Record<string, unknown>[] = [];
   const pendingNames = new Set<string>();
@@ -107,6 +120,11 @@ export async function importVisitsFromSheet(
     } catch {
       continue;
     }
+
+    // Pula se já existe essa visita (mesmo corretor, dia, hora e cliente).
+    const key = keyOf(memberId, date, time, name);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
 
     const phone = cell(row, colMap.client_phone);
     const region = cell(row, colMap.region).slice(0, 40);

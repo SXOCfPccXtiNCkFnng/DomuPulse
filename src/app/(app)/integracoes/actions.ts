@@ -7,6 +7,7 @@ import { getGoogleAccessToken, removeSheetConnection, saveSpreadsheetSelection }
 import { firstSheetTitle, getAllValues } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, VISIT_FIELDS } from "@/lib/google/visit-sheet";
 import { importVisitsFromSheet, matchMember, normalize } from "@/lib/google/visit-import";
+import { pullEditsFromSheet } from "@/lib/google/visit-pull";
 import { syncVisitsToSheet } from "@/lib/google/visit-sync";
 import { describeError, logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -181,6 +182,9 @@ export async function syncNow(): Promise<
 > {
   const me = await requireLeader();
   if (!me) return { error: "Sem permissão." };
+
+  // 1) Puxa as edições feitas na planilha para o sistema.
+  await pullEditsFromSheet(me.org.id);
 
   let imported = 0;
   let pending = 0;

@@ -159,5 +159,20 @@ export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number
   await appendRows(token, spreadsheetId, `${sheetTitle}!A${headerRowNum}`, appends);
   await admin.from("sheet_connections").update({ last_push_at: new Date().toISOString() }).eq("org_id", orgId);
 
+  // Guarda a foto do que foi escrito (para o pull saber o que mudou depois).
+  const now = new Date().toISOString();
+  const snapshots = appts.map((a) => ({
+    appointment_id: a.id,
+    org_id: orgId,
+    snapshot: {
+      status: valueFor("status", a),
+      region: a.region ?? "",
+      name: a.client_name ?? "",
+      phone: onlyDigits(a.client_phone),
+    },
+    updated_at: now,
+  }));
+  for (const part of chunk(snapshots, 500)) await admin.from("sheet_sync_state").upsert(part, { onConflict: "appointment_id" });
+
   return { pushed: appts.length };
 }
