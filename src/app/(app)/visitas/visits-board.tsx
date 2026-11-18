@@ -171,7 +171,12 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
     setSyncing(false);
     if ("error" in r) return setSyncMsg(r.error);
     await load();
-    setSyncMsg(`Atualizado: ${r.imported} da planilha, ${r.pushed} enviadas.`);
+    const parts = [
+      `${r.imported} da planilha`,
+      `${r.pushed} enviadas`,
+      r.pending > 0 ? `${r.pending} sem corretor (${r.pendingNames.slice(0, 5).join(", ")})` : null,
+    ].filter(Boolean);
+    setSyncMsg(`Atualizado: ${parts.join(" · ")}.`);
   };
 
   const isCurrent = start === currentWeek;
