@@ -61,6 +61,14 @@ export const geminiEnv = lazy(() =>
     .parse({ apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL }),
 );
 
+// Google OAuth (integração de Visitas com Google Sheets). O cliente é criado
+// uma vez no Google Cloud (Aplicativo da Web); o segredo fica só no servidor.
+export const googleOAuthEnv = lazy(() =>
+  z
+    .object({ clientId: z.string().min(10), clientSecret: z.string().min(10) })
+    .parse({ clientId: process.env.GOOGLE_OAUTH_CLIENT_ID, clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET }),
+);
+
 // Evolution API (WhatsApp do módulo de RH). EVOLUTION_API_URL é a URL do
 // servidor (ex.: no Render), EVOLUTION_API_KEY é a AUTHENTICATION_API_KEY dele,
 // e EVOLUTION_WEBHOOK_TOKEN é o segredo que confere os avisos que chegam.

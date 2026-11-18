@@ -5,6 +5,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseWs = supabaseUrl.replace(/^http/, "ws");
 // Captcha do Cloudflare (Turnstile): script, iframe do desafio e verificação.
 const turnstile = "https://challenges.cloudflare.com";
+// Google Picker (integração com Google Sheets): script, iframe e APIs.
+const googlePicker = "https://apis.google.com";
+const googleFrames = "https://docs.google.com https://drive.google.com";
+const googleApis = "https://content.googleapis.com https://www.googleapis.com";
+const googleImg = "https://*.gstatic.com https://*.googleusercontent.com";
 
 // CSP sem nonce para manter o prerender estático. 'unsafe-inline' em script
 // é exigido pelos scripts de inicialização do Next; o React escapa todo
@@ -12,12 +17,12 @@ const turnstile = "https://challenges.cloudflare.com";
 // (src/lib/theme-script.ts), sem nenhum dado de usuário.
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' ${turnstile}${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' ${turnstile} ${googlePicker}${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' blob: data:" + (supabaseUrl ? ` ${supabaseUrl}` : ""),
+  `img-src 'self' blob: data: ${googleImg}` + (supabaseUrl ? ` ${supabaseUrl}` : ""),
   "font-src 'self'",
-  `connect-src 'self' ${supabaseUrl} ${supabaseWs} ${turnstile}`.trim(),
-  `frame-src ${turnstile}`,
+  `connect-src 'self' ${supabaseUrl} ${supabaseWs} ${turnstile} ${googlePicker} ${googleApis}`.trim(),
+  `frame-src ${turnstile} ${googleFrames}`,
   "worker-src 'self'",
   "manifest-src 'self'",
   "object-src 'none'",
