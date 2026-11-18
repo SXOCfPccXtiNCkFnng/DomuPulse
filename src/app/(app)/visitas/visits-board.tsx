@@ -1,9 +1,10 @@
 "use client";
 
 import clsx from "clsx";
-import { ChevronLeft, ChevronRight, Download, MessageCircle, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, MessageCircle, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { setVisitStage } from "@/app/(app)/agenda/actions";
+import { syncNow } from "@/app/(app)/integracoes/actions";
 import type { ClientMember } from "@/components/live/types";
 import { roleLabel } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,7 @@ const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 
 const brokerChip = "inline-block max-w-44 truncate rounded-md bg-surface-2 px-2 py-0.5 text-left font-semibold uppercase text-ink-2";
 
-export function VisitsBoard({ member }: { member: ClientMember }) {
+export function VisitsBoard({ member, canSync = false }: { member: ClientMember; canSync?: boolean }) {
   const supabase = useMemo(() => getBrowserClient(), []);
   const tz = member.org.timezone;
   const { today } = useOrgClock(tz);
@@ -61,6 +62,8 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
   const [board, setBoard] = useState<Board | null>(null);
   const [brokerFilter, setBrokerFilter] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const leader = member.role !== "broker";
 
   const load = useCallback(async () => {
@@ -158,6 +161,18 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
   const list = visits.filter(
     (v) => (!brokerFilter || v.member_id === brokerFilter) && (!dayFilter || dateIn(v.scheduled_at, tz) === dayFilter),
   );
+
+  // Alinha os dois lados: puxa da planilha e manda pra planilha, depois recarrega.
+  const runSync = async () => {
+    if (syncing) return;
+    setSyncMsg(null);
+    setSyncing(true);
+    const r = await syncNow();
+    setSyncing(false);
+    if ("error" in r) return setSyncMsg(r.error);
+    await load();
+    setSyncMsg(`Atualizado: ${r.imported} da planilha, ${r.pushed} enviadas.`);
+  };
 
   const isCurrent = start === currentWeek;
   const go = (n: number) => {
@@ -422,19 +437,28 @@ export function VisitsBoard({ member }: { member: ClientMember }) {
               : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Mude a situação e a linha ganha a cor. Todo agendamento conta no total."
           }
           action={
-            brokerFilter || dayFilter ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setBrokerFilter(null);
-                  setDayFilter(null);
-                }}
-              >
-                <X className="size-3.5" />
-                Limpar filtro
-              </Button>
-            ) : undefined
+            <span className="flex items-center gap-2">
+              {syncMsg ? <span className="hidden text-xs text-muted sm:inline">{syncMsg}</span> : null}
+              {brokerFilter || dayFilter ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setBrokerFilter(null);
+                    setDayFilter(null);
+                  }}
+                >
+                  <X className="size-3.5" />
+                  Limpar filtro
+                </Button>
+              ) : null}
+              {canSync ? (
+                <Button size="sm" variant="secondary" onClick={() => void runSync()} disabled={syncing}>
+                  <RefreshCw className={clsx("size-3.5", syncing && "animate-spin")} />
+                  {syncing ? "Atualizando..." : "Atualizar"}
+                </Button>
+              ) : null}
+            </span>
           }
         />
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-5 pt-4 text-xs text-ink-2 sm:px-6">
