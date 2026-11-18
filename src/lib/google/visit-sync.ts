@@ -139,6 +139,8 @@ export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number
 
     if (rowNum != null) {
       for (const f of VISIT_FIELDS) {
+        // Não sobrescreve o corretor que a empresa digitou na planilha (a planilha é a dona do corretor).
+        if (f.key === "broker") continue;
         const c = colOf(f.key);
         if (c >= 0) updates.push({ range: `${sheetTitle}!${colLetter(c)}${rowNum}`, values: [[valueFor(f.key, a)]] });
       }
