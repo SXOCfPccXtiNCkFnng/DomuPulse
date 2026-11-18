@@ -7,7 +7,7 @@ import { Button, buttonClass } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { FormMessage } from "@/components/ui/field";
 import { pickSpreadsheet } from "@/lib/google/picker-client";
-import { type BrokerName, connectSpreadsheet, disconnectSheets, getBrokerMapping, getPickerToken, saveBrokerMap, syncNow } from "./actions";
+import { type BrokerName, connectSpreadsheet, disconnectSheets, getBrokerMapping, getPickerToken, pullAllFromSheet, saveBrokerMap, syncNow } from "./actions";
 
 const ERRORS: Record<string, string> = {
   "sem-permissao": "Só a liderança pode conectar a planilha.",
@@ -81,6 +81,16 @@ export function IntegrationsBoard({
         r.pending > 0 ? `${r.pending} ${r.pending === 1 ? "linha sem corretor reconhecido (confira)" : "linhas sem corretor reconhecido (confira)"}` : null,
       ].filter(Boolean);
       setNote(`Planilha conectada. ${partes.join(" · ")}.`);
+      router.refresh();
+    });
+
+  const pullAll = () =>
+    start(async () => {
+      setError(null);
+      setNote(null);
+      const r = await pullAllFromSheet();
+      if ("error" in r) return setError(r.error);
+      setNote(`Planilha aplicada no sistema. ${r.updated} atualizadas · ${r.imported} importadas.`);
       router.refresh();
     });
 
@@ -159,6 +169,9 @@ export function IntegrationsBoard({
                   <div className="flex flex-wrap gap-2">
                     <Button onClick={resync} disabled={pending}>
                       {pending ? "Sincronizando..." : "Sincronizar agora"}
+                    </Button>
+                    <Button variant="secondary" onClick={pullAll} disabled={pending}>
+                      Puxar tudo da planilha
                     </Button>
                     <Button variant="secondary" onClick={openMapper} disabled={pending}>
                       Vincular corretores

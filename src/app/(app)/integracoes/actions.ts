@@ -176,6 +176,28 @@ export async function saveBrokerMap(
   return { ok: true, imported, pending, pendingNames };
 }
 
+/** A planilha manda: aplica os dados da planilha por cima do sistema (sem apagar o que a planilha deixou em branco), importa as novas e reenvia. */
+export async function pullAllFromSheet(): Promise<{ error: string } | { ok: true; updated: number; imported: number }> {
+  const me = await requireLeader();
+  if (!me) return { error: "Sem permissão." };
+
+  let updated = 0;
+  const pr = await pullEditsFromSheet(me.org.id, { force: true });
+  if ("error" in pr) {
+    const msg = pr.error === "sem-planilha" ? "Escolha uma planilha primeiro." : pr.error === "sem-cabecalho" ? "Não achei os títulos na planilha." : "Não foi possível ler a planilha. Reconecte o Google.";
+    return { error: msg };
+  }
+  updated = pr.updated;
+
+  let imported = 0;
+  const imp = await importVisitsFromSheet(me.org.id);
+  if (!("error" in imp)) imported = imp.imported;
+
+  await syncVisitsToSheet(me.org.id);
+  revalidatePath("/integracoes");
+  return { ok: true, updated, imported };
+}
+
 /** Sincroniza na hora: importa as linhas novas da planilha e envia as do sistema. */
 export async function syncNow(): Promise<
   { error: string } | { ok: true; pushed: number; imported: number; pending: number; pendingNames: string[]; importError: string | null }

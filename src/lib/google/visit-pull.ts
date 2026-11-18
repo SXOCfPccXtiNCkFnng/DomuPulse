@@ -21,7 +21,8 @@ type Snap = { status: string; region: string; name: string; phone: string };
  * sincronização: só aplica o que mudou na planilha, então não desfaz o que foi
  * editado no sistema. Não cria nem apaga visitas aqui (isso é import/push).
  */
-export async function pullEditsFromSheet(orgId: string): Promise<{ updated: number } | { error: string }> {
+export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean }): Promise<{ updated: number } | { error: string }> {
+  const force = opts?.force === true;
   const admin = createAdminClient();
   const { data: conn } = await admin.from("sheet_connections").select("spreadsheet_id, sheet_title, enabled").eq("org_id", orgId).maybeSingle();
   if (!conn?.spreadsheet_id || !conn.enabled) return { error: "sem-planilha" };
@@ -68,25 +69,37 @@ export async function pullEditsFromSheet(orgId: string): Promise<{ updated: numb
   for (const [id, sv] of bySheet) {
     if (!ours.has(id)) continue; // não é desta empresa ou foi apagada
     const snap = snapById.get(id);
-    if (!snap) continue; // sem foto base: o push vai criar; nada a puxar agora
-    if (sv.status === snap.status && sv.region === snap.region && sv.name === snap.name && sv.phone === snap.phone) continue;
+    // Modo normal: precisa de foto base e só age se a planilha mudou.
+    // Modo forçado ("a planilha manda"): ignora a foto e aplica o que a planilha tem.
+    if (!force) {
+      if (!snap) continue;
+      if (sv.status === snap.status && sv.region === snap.region && sv.name === snap.name && sv.phone === snap.phone) continue;
+    }
+    const changed = (f: keyof Snap) => force || !snap || sv[f] !== snap[f];
 
     const patch: Record<string, unknown> = {};
-    if (sv.status !== snap.status) {
-      if (sv.status === "") {
-        patch.visit_stage = null;
-        patch.status = "scheduled";
-      } else {
+    if (changed("status")) {
+      if (sv.status) {
         const stage = LABEL_TO_STAGE.get(normalize(sv.status));
         if (stage) {
           patch.visit_stage = stage;
           patch.status = VISIT_STAGES[stage].status;
         }
+      } else if (!force) {
+        // No forçado, planilha vazia não apaga a situação (só preenche o que tem).
+        patch.visit_stage = null;
+        patch.status = "scheduled";
       }
     }
-    if (sv.region !== snap.region) patch.region = sv.region ? sv.region.slice(0, 40) : null;
-    if (sv.name !== snap.name && sv.name) patch.client_name = sv.name.slice(0, 120);
-    if (sv.phone !== snap.phone) patch.client_phone = sv.phone && phoneOk(sv.phone) ? sv.phone : null;
+    if (changed("region")) {
+      if (sv.region) patch.region = sv.region.slice(0, 40);
+      else if (!force) patch.region = null;
+    }
+    if (changed("name") && sv.name) patch.client_name = sv.name.slice(0, 120);
+    if (changed("phone")) {
+      if (sv.phone && phoneOk(sv.phone)) patch.client_phone = sv.phone;
+      else if (!force) patch.client_phone = null;
+    }
 
     if (Object.keys(patch).length) {
       const { error } = await admin.from("appointments").update(patch).eq("id", id).eq("org_id", orgId);
