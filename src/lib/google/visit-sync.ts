@@ -1,6 +1,6 @@
 import "server-only";
 import { getGoogleAccessToken } from "@/lib/google/connection";
-import { appendRows, batchUpdateValues, colLetter, getAllValues } from "@/lib/google/sheets";
+import { appendRows, batchUpdateValues, colLetter, ensureSheetSize, getAllValues } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER, VISIT_FIELDS, type VisitField } from "@/lib/google/visit-sheet";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatTimeIn } from "@/lib/time";
@@ -127,6 +127,12 @@ export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number
   });
 
   const width = Math.max(headers.length, statusCol + 1, pulseCol + 1, ...VISIT_FIELDS.map((f) => colOf(f.key) + 1));
+  // Planilhas reais (ex.: AGENDAMENTOS SETEMBRO) costumam ter a grade cortada
+  // nas colunas usadas. Sem expandir, escrever "Situação"/"ID Pulse" na coluna
+  // N devolve 400 "exceeds grid limits".
+  const lastDataRow = dataStartRow + Math.max(dataRows.length, 0) + appts.length;
+  await ensureSheetSize(token, spreadsheetId, sheetTitle, width, lastDataRow);
+
   const updates: { range: string; values: string[][] }[] = [...headerWrites];
   const appends: string[][] = [];
 
