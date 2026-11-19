@@ -2,7 +2,16 @@
 
 import clsx from "clsx";
 import { Eye, LayoutGrid, List, Phone, Plus, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
 import { CLIENT_COLUMNS, STAGE_LABEL, STAGES, VALUE_STAGES, type Client, type Stage } from "@/lib/clients";
@@ -56,6 +65,68 @@ function useClientsView(): View {
 }
 
 /**
+ * Segurar e arrastar com o mouse para rolar o kanban na horizontal, sem
+ * precisar descer até a barra. Não interfere no arraste de card (etapa) nem
+ * no clique para abrir o cliente.
+ */
+function useKanbanDragScroll() {
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ pointerId: number; startX: number; left: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    // Corretor arrastando card entre etapas: deixa o drag nativo trabalhar.
+    if (target.closest('[draggable="true"]')) return;
+    const el = ref.current;
+    if (!el) return;
+    drag.current = { pointerId: e.pointerId, startX: e.clientX, left: el.scrollLeft, moved: false };
+    el.setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    const el = ref.current;
+    if (!d || d.pointerId !== e.pointerId || !el) return;
+    const dx = e.clientX - d.startX;
+    if (!d.moved && Math.abs(dx) < 6) return;
+    d.moved = true;
+    el.scrollLeft = d.left - dx;
+  };
+
+  const endDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    if (d.moved) suppressClick.current = true;
+    drag.current = null;
+    try {
+      ref.current?.releasePointerCapture(e.pointerId);
+    } catch {
+      // Já liberado.
+    }
+  };
+
+  const onClickCapture = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (!suppressClick.current) return;
+    suppressClick.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  return {
+    ref,
+    props: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: endDrag,
+      onPointerCancel: endDrag,
+      onClickCapture,
+    },
+  };
+}
+
+/**
  * Carteira de clientes em colunas por etapa. As gravações vão direto ao
  * banco com a sessão da pessoa: o RLS decide o que ela pode ver e mexer.
  */
@@ -73,6 +144,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
   const [over, setOver] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const view = useClientsView();
+  const kanbanScroll = useKanbanDragScroll();
 
   const fetchAll = useCallback(async () => {
     const [{ data: c }, { data: m }] = await Promise.all([
@@ -208,7 +280,11 @@ export function ClientBoard({ member }: { member: ClientMember }) {
       {error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p> : null}
 
       {view === "kanban" ? (
-      <div className="-mx-4 snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0">
+      <div
+        ref={kanbanScroll.ref}
+        {...kanbanScroll.props}
+        className="-mx-4 cursor-grab snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 active:cursor-grabbing sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0"
+      >
         <div className="flex gap-3">
           {columns.map((col) => {
             const items = visible.filter((c) => c.stage === col.id);

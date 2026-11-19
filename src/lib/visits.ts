@@ -11,6 +11,14 @@ export function startOfVisitWeek(date: string): string {
 
 export const VISIT_WEEKDAYS = ["Quinta", "Sexta", "Sábado", "Domingo", "Segunda", "Terça", "Quarta"];
 
+/** Nome colocado no ajuste da planilha quando a linha não tinha cliente. */
+export const SHEET_PLACEHOLDER_NAME = "Cliente da planilha (sem nome)";
+
+/** Mostra o corretor no lugar do placeholder, para a lista não ficar genérica. */
+export function visitClientLabel(clientName: string, brokerName: string | null | undefined): string {
+  return clientName === SHEET_PLACEHOLDER_NAME && brokerName ? brokerName : clientName;
+}
+
 export type AppointmentStatus = "scheduled" | "done" | "no_show" | "canceled";
 
 /** Situação da visita (as cores da planilha). O status da agenda acompanha. */

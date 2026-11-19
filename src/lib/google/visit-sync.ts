@@ -4,7 +4,7 @@ import { appendRows, batchUpdateValues, colLetter, ensureSheetSize, getAllValues
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER, VISIT_FIELDS, type VisitField } from "@/lib/google/visit-sheet";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatTimeIn } from "@/lib/time";
-import { VISIT_STAGES, visitStageOf } from "@/lib/visits";
+import { SHEET_PLACEHOLDER_NAME, VISIT_STAGES, visitStageOf } from "@/lib/visits";
 
 const MAX_ROWS = 2000;
 
@@ -90,6 +90,15 @@ export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number
     ? await admin.from("members").select("id, display_name").in("id", memberIds)
     : { data: [] as { id: string; display_name: string }[] };
   const nameOf = new Map((memberData ?? []).map((m) => [m.id as string, m.display_name as string]));
+
+  // Preenchimentos do ajuste ("Cliente da planilha…") passam a usar o nome do corretor.
+  const renamed = appts.filter((a) => a.client_name === SHEET_PLACEHOLDER_NAME && a.member_id && nameOf.has(a.member_id));
+  for (const a of renamed) a.client_name = nameOf.get(a.member_id!)!;
+  for (const part of chunk(renamed, 50)) {
+    await Promise.all(
+      part.map((a) => admin.from("appointments").update({ client_name: a.client_name }).eq("id", a.id).eq("org_id", orgId)),
+    );
+  }
 
   const valueFor = (field: VisitField, a: Appt): string => {
     switch (field) {

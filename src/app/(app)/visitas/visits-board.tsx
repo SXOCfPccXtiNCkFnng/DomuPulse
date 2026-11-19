@@ -14,7 +14,7 @@ import { whatsappLink } from "@/lib/clients";
 import { useOrgClock } from "@/lib/live/use-live-day";
 import { getBrowserClient } from "@/lib/supabase/client";
 import { addDays, dateIn, formatTimeIn, zonedToIso } from "@/lib/time";
-import { type AppointmentStatus, startOfVisitWeek, VISIT_STAGE_KEYS, VISIT_STAGES, VISIT_WEEKDAYS, type VisitStage, visitStageOf } from "@/lib/visits";
+import { type AppointmentStatus, startOfVisitWeek, visitClientLabel, VISIT_STAGE_KEYS, VISIT_STAGES, VISIT_WEEKDAYS, type VisitStage, visitStageOf } from "@/lib/visits";
 
 // Cores (ARGB) usadas no Excel, nos mesmos tons das situações da tela.
 const EXPORT_FILL: Record<VisitStage, string> = {
@@ -42,6 +42,7 @@ type Visit = {
 type Broker = { id: string; name: string; active: boolean; is_broker: boolean; visit_goal?: number };
 
 const DEFAULT_VISIT_GOAL = 15;
+const LIST_PAGE_SIZE = 15;
 type Board = { start: string; visits: Visit[]; brokers: Broker[]; error: string | null };
 
 const REFRESH_MS = 60_000;
@@ -62,6 +63,7 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
   const [board, setBoard] = useState<Board | null>(null);
   const [brokerFilter, setBrokerFilter] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<string | null>(null);
+  const [listPage, setListPage] = useState(1);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const leader = member.role !== "broker";
@@ -161,6 +163,14 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
   const list = visits.filter(
     (v) => (!brokerFilter || v.member_id === brokerFilter) && (!dayFilter || dateIn(v.scheduled_at, tz) === dayFilter),
   );
+  const listPages = Math.max(1, Math.ceil(list.length / LIST_PAGE_SIZE));
+  const currentListPage = Math.min(listPage, listPages);
+  const pageList = list.slice((currentListPage - 1) * LIST_PAGE_SIZE, currentListPage * LIST_PAGE_SIZE);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setListPage(1);
+  }, [brokerFilter, dayFilter, start]);
 
   // Alinha os dois lados: puxa da planilha e manda pra planilha, depois recarrega.
   const runSync = async () => {
@@ -247,13 +257,14 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
         const day = dateIn(v.scheduled_at, tz);
         const weekday = VISIT_WEEKDAYS[days.indexOf(day)] ?? dayMonth(day);
         const stage = visitStageOf(v.visit_stage, v.status);
+        const broker = nameOf.get(v.member_id) ?? "";
         const r = ws.addRow([
-          v.client_name,
+          visitClientLabel(v.client_name, broker),
           v.client_phone ?? "",
           `${weekday} ${dayMonth(day)}`,
           formatTimeIn(v.scheduled_at, tz),
           v.region ?? "",
-          nameOf.get(v.member_id) ?? "",
+          broker,
           stage ? VISIT_STAGES[stage].label : "",
         ]);
         r.eachCell((c) => {
@@ -498,7 +509,7 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
                   </td>
                 </tr>
               ) : null}
-              {list.map((v) => {
+              {pageList.map((v) => {
                 const day = dateIn(v.scheduled_at, tz);
                 const time = formatTimeIn(v.scheduled_at, tz);
                 const weekday = VISIT_WEEKDAYS[days.indexOf(day)] ?? dayMonth(day);
@@ -509,10 +520,11 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
                 const senderRole = roleLabel(member.role, member.org.segment);
                 const senderName = member.displayName.split(" ")[0];
                 const brokerName = nameOf.get(v.member_id) ?? "";
-                const text = `Olá ${v.client_name.split(" ")[0]}! Tudo bem? Aqui é o ${senderRole} ${senderName}, to passando pra confirmar sua visita ${prep} ${weekday.toLowerCase()} ( ${dayMonth(day)} ) as ${time} com o corretor ${brokerName}!! Podemos confirmar sua presença?`;
+                const clientName = visitClientLabel(v.client_name, brokerName);
+                const text = `Olá ${clientName.split(" ")[0]}! Tudo bem? Aqui é o ${senderRole} ${senderName}, to passando pra confirmar sua visita ${prep} ${weekday.toLowerCase()} ( ${dayMonth(day)} ) as ${time} com o corretor ${brokerName}!! Podemos confirmar sua presença?`;
                 return (
                   <tr key={v.id} className={clsx("border-t border-line transition-colors", stage && VISIT_STAGES[stage].row)}>
-                    <td className={clsx("px-4 py-2.5 font-medium", canceled && "line-through opacity-80")}>{v.client_name}</td>
+                    <td className={clsx("px-4 py-2.5 font-medium", canceled && "line-through opacity-80")}>{clientName}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap tabular-nums">
                       {v.client_phone ? (
                         <a href={`tel:${v.client_phone.replace(/[^\d+]/g, "")}`} className="hover:underline">
@@ -554,6 +566,26 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
             </tbody>
           </table>
         </div>
+        {list.length > LIST_PAGE_SIZE ? (
+          <nav aria-label="Páginas" className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm sm:px-6">
+            <span className="text-muted">
+              {(currentListPage - 1) * LIST_PAGE_SIZE + 1} a {Math.min(currentListPage * LIST_PAGE_SIZE, list.length)} de {list.length} visitas
+            </span>
+            <span className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" disabled={currentListPage === 1} onClick={() => setListPage(currentListPage - 1)}>
+                <ChevronLeft className="size-4" />
+                Anterior
+              </Button>
+              <span className="tabular-nums text-muted">
+                {currentListPage}/{listPages}
+              </span>
+              <Button size="sm" variant="secondary" disabled={currentListPage === listPages} onClick={() => setListPage(currentListPage + 1)}>
+                Próxima
+                <ChevronRight className="size-4" />
+              </Button>
+            </span>
+          </nav>
+        ) : null}
       </Card>
     </div>
   );
