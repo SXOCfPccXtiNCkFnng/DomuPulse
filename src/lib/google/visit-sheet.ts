@@ -6,7 +6,7 @@ export type VisitField = "client_name" | "client_phone" | "date" | "time" | "reg
 export const VISIT_FIELDS: { key: VisitField; label: string; synonyms: string[] }[] = [
   { key: "client_name", label: "Nome do cliente", synonyms: ["nome", "cliente", "nome do cliente", "nome cliente", "lead"] },
   { key: "client_phone", label: "Telefone", synonyms: ["telefone", "fone", "whatsapp", "celular", "contato", "tel"] },
-  { key: "date", label: "Dia", synonyms: ["dia", "data", "data da visita"] },
+  { key: "date", label: "Dia", synonyms: ["dia"] },
   { key: "time", label: "Horário", synonyms: ["horario", "hora", "horas"] },
   { key: "region", label: "Região", synonyms: ["regiao", "zona", "bairro", "local", "localizacao"] },
   { key: "broker", label: "Corretor", synonyms: ["corretor", "consultor", "responsavel", "vendedor", "agente"] },

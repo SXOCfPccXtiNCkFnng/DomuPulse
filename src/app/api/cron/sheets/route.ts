@@ -22,10 +22,12 @@ export async function GET(request: NextRequest) {
   for (const c of conns ?? []) {
     const orgId = c.org_id as string;
     try {
-      await pullEditsFromSheet(orgId);
-      await importVisitsFromSheet(orgId);
+      // Automático: só o mês atual (leve). O histórico completo é pelo "Puxar tudo".
+      const light = { currentOnly: true };
+      await pullEditsFromSheet(orgId, light);
+      await importVisitsFromSheet(orgId, light);
       await linkOrphanVisitsToClients(orgId);
-      await syncVisitsToSheet(orgId);
+      await syncVisitsToSheet(orgId, light);
       synced += 1;
     } catch (err) {
       logger.error("cron.sheets", { message: describeError(err), orgId });

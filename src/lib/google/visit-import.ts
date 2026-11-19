@@ -5,7 +5,7 @@ import { getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
 import { isArchiveTitle, monthFromTitle, tabWeekStart, weekFromGrid } from "@/lib/google/visit-tabs";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addDays, dateIn, formatTimeIn, zonedToIso } from "@/lib/time";
+import { addDays, dateIn, formatTimeIn, todayIn, zonedToIso } from "@/lib/time";
 import { VISIT_WEEKDAYS } from "@/lib/visits";
 
 const MAX_IMPORT = 500;
@@ -22,6 +22,22 @@ const WEEKDAY_INDEX = new Map<string, number>();
 VISIT_WEEKDAYS.forEach((w, i) => WEEKDAY_INDEX.set(normalize(w).split("-")[0], i));
 
 const phoneOk = (p: string) => /^[0-9+() -]{8,20}$/.test(p);
+
+/** Lê uma data da planilha ("15/09/2026", "15/9/26", "2026-09-15") -> "YYYY-MM-DD" ou null. */
+function parseDateCell(raw: string): string | null {
+  const s = raw.trim();
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const br = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
+  if (br) {
+    const d = Number(br[1]);
+    const mo = Number(br[2]);
+    const y = br[3].length === 2 ? `20${br[3]}` : br[3];
+    if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  return null;
+}
 
 /** Normaliza o horário para "HH:MM" (aceita 9:00, 10h00, 10.00). Sem hora válida, usa 09:00. */
 function parseTime(raw: string): string {
@@ -52,6 +68,7 @@ export function matchMember(name: string, members: { id: string; display_name: s
  */
 export async function importVisitsFromSheet(
   orgId: string,
+  opts?: { currentOnly?: boolean },
 ): Promise<{ imported: number; pending: number; pendingNames: string[] } | { error: string }> {
   const admin = createAdminClient();
   const { data: conn } = await admin.from("sheet_connections").select("spreadsheet_id, enabled, broker_map").eq("org_id", orgId).maybeSingle();
@@ -63,6 +80,8 @@ export async function importVisitsFromSheet(
 
   const { data: org } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
   const tz = (org?.timezone as string) || "America/Sao_Paulo";
+  // No modo leve (dia a dia), só o mês atual; sem arquivos.
+  const curMonth = Number(todayIn(tz).slice(5, 7));
 
   const { data: memberData } = await admin.from("members").select("id, display_name").eq("org_id", orgId).eq("active", true);
   const members = (memberData ?? []) as { id: string; display_name: string }[];
@@ -86,6 +105,7 @@ export async function importVisitsFromSheet(
     const month = monthFromTitle(title);
     if (!month) continue;
     const archive = isArchiveTitle(title);
+    if (opts?.currentOnly && (month !== curMonth || archive)) continue; // dia a dia: só o mês atual, sem arquivo
     const grid = await getAllValues(token, spreadsheetId, title);
     const found = locateHeader(grid);
     if (!found) continue;
@@ -93,18 +113,19 @@ export async function importVisitsFromSheet(
     if (colMap.client_name == null) continue;
     foundAny = true;
     const pulseCol = found.headers.findIndex((h) => h.trim() === PULSE_ID_HEADER);
+    // Coluna de DATA real (dd/mm/aaaa), se a empresa tiver. Senão, calcula pela semana.
+    const dateColIdx = found.headers.findIndex((h) => normalize(h) === "data");
 
     // Data base desta aba: mês do nome da aba + "SEMANA N".
     const weekStart = tabWeekStart(month, weekFromGrid(grid), tz);
-    const weekEnd = addDays(weekStart, 7);
 
-    // Visitas que já existem no sistema nessa semana (para não duplicar).
+    // Visitas que já existem no sistema no mês (para não duplicar), janela ampla.
     const { data: existing } = await admin
       .from("appointments")
       .select("member_id, scheduled_at, client_name")
       .eq("org_id", orgId)
-      .gte("scheduled_at", zonedToIso(weekStart, "00:00", tz))
-      .lt("scheduled_at", zonedToIso(weekEnd, "00:00", tz));
+      .gte("scheduled_at", zonedToIso(addDays(weekStart, -35), "00:00", tz))
+      .lt("scheduled_at", zonedToIso(addDays(weekStart, 35), "00:00", tz));
     const seenKeys = new Set(
       (existing ?? []).map((e) => keyOf(e.member_id as string, dateIn(e.scheduled_at as string, tz), formatTimeIn(e.scheduled_at as string, tz), (e.client_name as string) ?? "")),
     );
@@ -115,9 +136,16 @@ export async function importVisitsFromSheet(
       const name = cell(row, colMap.client_name);
       if (!name) continue;
 
-      const wd = WEEKDAY_INDEX.get(normalize(cell(row, colMap.date)).split("-")[0]);
-      if (wd == null) continue;
-      const date = addDays(weekStart, wd);
+      // Data exata da coluna DATA, se houver; senão, dia da semana aplicado à semana da aba.
+      const fullDate = dateColIdx >= 0 ? parseDateCell(cell(row, dateColIdx)) : null;
+      let date: string;
+      if (fullDate) {
+        date = fullDate;
+      } else {
+        const wd = WEEKDAY_INDEX.get(normalize(cell(row, colMap.date)).split("-")[0]);
+        if (wd == null) continue;
+        date = addDays(weekStart, wd);
+      }
       const time = parseTime(cell(row, colMap.time));
 
       const brokerName = cell(row, colMap.broker);

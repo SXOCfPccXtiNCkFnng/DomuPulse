@@ -212,14 +212,16 @@ export async function syncNow(): Promise<
   const me = await requireLeader();
   if (!me) return { error: "Sem permissão." };
 
+  // Dia a dia: sincroniza só o mês atual (leve). O histórico completo é pelo "Puxar tudo".
+  const light = { currentOnly: true };
   // 1) Puxa as edições feitas na planilha para o sistema.
-  await pullEditsFromSheet(me.org.id);
+  await pullEditsFromSheet(me.org.id, light);
 
   let imported = 0;
   let pending = 0;
   let pendingNames: string[] = [];
   let importError: string | null = null;
-  const imp = await importVisitsFromSheet(me.org.id);
+  const imp = await importVisitsFromSheet(me.org.id, light);
   if ("error" in imp) importError = imp.error;
   else {
     imported = imp.imported;
@@ -227,7 +229,7 @@ export async function syncNow(): Promise<
     pendingNames = imp.pendingNames;
   }
 
-  const result = await syncVisitsToSheet(me.org.id);
+  const result = await syncVisitsToSheet(me.org.id, light);
   if ("error" in result) {
     const msg = result.error === "sem-planilha" ? "Escolha uma planilha primeiro." : "Não foi possível sincronizar. Reconecte o Google e tente de novo.";
     return { error: msg };

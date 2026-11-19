@@ -5,6 +5,7 @@ import { getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
 import { matchMember, normalize } from "@/lib/google/visit-import";
 import { syncableMonth } from "@/lib/google/visit-tabs";
+import { todayIn } from "@/lib/time";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VISIT_STAGES, type VisitStage } from "@/lib/visits";
 
@@ -25,7 +26,7 @@ type Snap = { status: string; region: string; name: string; phone: string };
  * editado no sistema). O corretor é sempre reconciliado com a planilha (ela é a
  * dona do corretor). Não cria nem apaga visitas aqui.
  */
-export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean }): Promise<{ updated: number } | { error: string }> {
+export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean; currentOnly?: boolean }): Promise<{ updated: number } | { error: string }> {
   const force = opts?.force === true;
   const admin = createAdminClient();
   const { data: conn } = await admin.from("sheet_connections").select("spreadsheet_id, sheet_title, enabled, broker_map").eq("org_id", orgId).maybeSingle();
@@ -35,6 +36,9 @@ export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean
   if (!token) return { error: "sem-token" };
   const spreadsheetId = conn.spreadsheet_id as string;
 
+  const { data: orgRow } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
+  const curMonth = Number(todayIn((orgRow?.timezone as string) || "America/Sao_Paulo").slice(5, 7));
+
   const cell = (row: string[], idx: number | undefined) => (idx != null && idx >= 0 ? (row[idx] ?? "").trim() : "");
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,7 +46,9 @@ export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean
   const titles = await listSheetTitles(token, spreadsheetId);
   const bySheet = new Map<string, SheetVals>();
   for (const title of titles) {
-    if (!syncableMonth(title)) continue;
+    const month = syncableMonth(title);
+    if (!month) continue;
+    if (opts?.currentOnly && month !== curMonth) continue; // dia a dia: só o mês atual
     const grid = await getAllValues(token, spreadsheetId, title);
     const found = locateHeader(grid);
     if (!found) continue;

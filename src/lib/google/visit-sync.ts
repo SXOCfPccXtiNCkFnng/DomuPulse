@@ -3,10 +3,10 @@ import { getGoogleAccessToken } from "@/lib/google/connection";
 import { appendRows, batchUpdateValues, colLetter, ensureSheetSize, getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { ARCHIVE_NOTE } from "@/lib/google/visit-import";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER, VISIT_FIELDS, type VisitField } from "@/lib/google/visit-sheet";
-import { syncableMonth, tabWeekStart, weekFromGrid } from "@/lib/google/visit-tabs";
+import { syncableMonth } from "@/lib/google/visit-tabs";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { dateIn, formatTimeIn } from "@/lib/time";
-import { SHEET_PLACEHOLDER_NAME, startOfVisitWeek, VISIT_STAGES, visitStageOf } from "@/lib/visits";
+import { dateIn, formatTimeIn, todayIn } from "@/lib/time";
+import { SHEET_PLACEHOLDER_NAME, VISIT_STAGES, visitStageOf } from "@/lib/visits";
 
 const MAX_ROWS = 3000;
 
@@ -36,7 +36,7 @@ type Appt = {
  * linha pela coluna "ID Pulse" (ou adota por telefone+dia+hora), escreve só nas
  * colunas conhecidas e não sobrescreve o corretor que a empresa digitou.
  */
-export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number } | { error: string }> {
+export async function syncVisitsToSheet(orgId: string, opts?: { currentOnly?: boolean }): Promise<{ pushed: number } | { error: string }> {
   const admin = createAdminClient();
   const { data: conn } = await admin.from("sheet_connections").select("spreadsheet_id, enabled").eq("org_id", orgId).maybeSingle();
   if (!conn?.spreadsheet_id || !conn.enabled) return { error: "sem-planilha" };
@@ -71,7 +71,7 @@ export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number
     await Promise.all(part.map((a) => admin.from("appointments").update({ client_name: a.client_name }).eq("id", a.id).eq("org_id", orgId)));
   }
 
-  const apptWeek = new Map(appts.map((a) => [a.id, startOfVisitWeek(dateIn(a.scheduled_at, tz))]));
+  const apptMonth = new Map(appts.map((a) => [a.id, Number(dateIn(a.scheduled_at, tz).slice(5, 7))]));
   const weekday = (iso: string) => new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: tz }).format(new Date(iso)).toUpperCase();
   const valueFor = (field: VisitField, a: Appt): string => {
     switch (field) {
@@ -99,15 +99,17 @@ export async function syncVisitsToSheet(orgId: string): Promise<{ pushed: number
   const now = new Date().toISOString();
   let pushed = 0;
 
+  const curMonth = Number(todayIn(tz).slice(5, 7));
   for (const title of titles) {
     const month = syncableMonth(title);
     if (!month) continue; // só abas de mês normais (ignora arquivos e sem mês)
+    if (opts?.currentOnly && month !== curMonth) continue; // dia a dia: só o mês atual
     const grid = await getAllValues(token, spreadsheetId, title);
     const found = locateHeader(grid);
     if (!found) continue;
 
-    const weekStart = tabWeekStart(month, weekFromGrid(grid), tz);
-    const tabAppts = appts.filter((a) => apptWeek.get(a.id) === weekStart);
+    // Cada aba é um mês: manda pra cá as visitas daquele mês.
+    const tabAppts = appts.filter((a) => apptMonth.get(a.id) === month);
     if (tabAppts.length === 0) continue;
 
     const headerRowNum = found.index + 1;
