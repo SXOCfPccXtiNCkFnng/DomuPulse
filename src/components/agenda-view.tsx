@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, MapPin, Pencil, Phone, RotateCcw, Trash2 } f
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteVisit, scheduleVisit, setVisitStage, setVisitStatus, updateVisit } from "@/app/(app)/agenda/actions";
 import { VisitStageSelect } from "@/components/visit-stage-select";
-import { VISIT_STAGES, type VisitStage, visitStageOf } from "@/lib/visits";
+import { visitClientLabel, VISIT_STAGES, type VisitStage, visitStageOf } from "@/lib/visits";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader } from "@/components/ui/card";
@@ -418,7 +418,7 @@ function VisitRow({
           {formatTimeIn(a.scheduled_at, timezone)}
         </span>
         <span className={clsx("min-w-0 flex-1", a.status !== "scheduled" && "opacity-70")}>
-          <span className="block truncate font-medium">{a.client_name}</span>
+          <span className="block truncate font-medium">{visitClientLabel(a.client_name, brokerName)}</span>
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             {brokerName ? (
               <span className="inline-flex items-center rounded-md bg-brand-soft px-1.5 py-0.5 font-semibold text-brand-text">{brokerName}</span>

@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import type { ClientMember } from "@/components/live/types";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ function useClientsView(): View {
  * precisar descer até a barra. Não interfere no arraste de card (etapa) nem
  * no clique para abrir o cliente.
  */
-function useKanbanDragScroll() {
+function KanbanScroller({ children, className }: { children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ pointerId: number; startX: number; left: number; moved: boolean } | null>(null);
   const suppressClick = useRef(false);
@@ -114,16 +115,19 @@ function useKanbanDragScroll() {
     e.stopPropagation();
   };
 
-  return {
-    ref,
-    props: {
-      onPointerDown,
-      onPointerMove,
-      onPointerUp: endDrag,
-      onPointerCancel: endDrag,
-      onClickCapture,
-    },
-  };
+  return (
+    <div
+      ref={ref}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onClickCapture={onClickCapture}
+      className={clsx("cursor-grab active:cursor-grabbing", className)}
+    >
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -144,7 +148,6 @@ export function ClientBoard({ member }: { member: ClientMember }) {
   const [over, setOver] = useState<Stage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const view = useClientsView();
-  const kanbanScroll = useKanbanDragScroll();
 
   const fetchAll = useCallback(async () => {
     const [{ data: c }, { data: m }] = await Promise.all([
@@ -280,11 +283,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
       {error ? <p className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p> : null}
 
       {view === "kanban" ? (
-      <div
-        ref={kanbanScroll.ref}
-        {...kanbanScroll.props}
-        className="-mx-4 cursor-grab snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 active:cursor-grabbing sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0"
-      >
+      <KanbanScroller className="-mx-4 snap-x snap-mandatory scroll-px-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:mx-0 lg:snap-none lg:px-0">
         <div className="flex gap-3">
           {columns.map((col) => {
             const items = visible.filter((c) => c.stage === col.id);
@@ -357,7 +356,7 @@ export function ClientBoard({ member }: { member: ClientMember }) {
             );
           })}
         </div>
-      </div>
+      </KanbanScroller>
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
           {listItems.map((c) => (
