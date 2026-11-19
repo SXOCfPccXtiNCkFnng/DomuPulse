@@ -1,5 +1,6 @@
 import "server-only";
 import { getGoogleAccessToken } from "@/lib/google/connection";
+import { ensureClientForVisit, linkOrphanVisitsToClients } from "@/lib/google/visit-clients";
 import { getAllValues } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -38,10 +39,10 @@ export function matchMember(name: string, members: { id: string; display_name: s
 }
 
 /**
- * Importa as linhas antigas da planilha como visitas no sistema (uma vez, ao
- * conectar). Data = o dia da semana aplicado à SEMANA ATUAL. Corretor casado
- * pelo nome; sem corretor único, a linha fica de fora (pendente). Linhas que já
- * têm "ID Pulse" são puladas. Não escreve na planilha (o push cuida disso).
+ * Importa as linhas da planilha como visitas no sistema. Data = o dia da semana
+ * aplicado à SEMANA ATUAL. Corretor casado pelo nome; sem corretor único, a
+ * linha fica de fora (pendente). Também cria/atualiza o cliente na carteira e
+ * liga a visita a ele. Linhas com "ID Pulse" são puladas. Não escreve na planilha.
  */
 export async function importVisitsFromSheet(
   orgId: string,
@@ -128,11 +129,21 @@ export async function importVisitsFromSheet(
 
     const phone = cell(row, colMap.client_phone);
     const region = cell(row, colMap.region).slice(0, 40);
+    const clientPhone = phone && phoneOk(phone) ? phone : null;
+    const clientId = await ensureClientForVisit(admin, {
+      orgId,
+      memberId,
+      name,
+      phone: clientPhone,
+      status: "scheduled",
+      source: "Planilha",
+    });
     toInsert.push({
       org_id: orgId,
       member_id: memberId,
+      client_id: clientId,
       client_name: name.slice(0, 120),
-      client_phone: phone && phoneOk(phone) ? phone : null,
+      client_phone: clientPhone,
       scheduled_at: scheduledAt,
       region: region || null,
       status: "scheduled",
@@ -146,6 +157,9 @@ export async function importVisitsFromSheet(
     if (error) return { error: "insercao" };
     imported = count ?? toInsert.length;
   }
+
+  // Visitas antigas do Sheets que entraram sem cliente passam a aparecer no kanban.
+  await linkOrphanVisitsToClients(orgId);
 
   return { imported, pending: pendingNames.size, pendingNames: [...pendingNames] };
 }

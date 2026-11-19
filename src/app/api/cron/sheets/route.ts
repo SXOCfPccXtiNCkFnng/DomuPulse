@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isCronRequest } from "@/lib/cron-auth";
+import { linkOrphanVisitsToClients } from "@/lib/google/visit-clients";
 import { importVisitsFromSheet } from "@/lib/google/visit-import";
 import { pullEditsFromSheet } from "@/lib/google/visit-pull";
 import { syncVisitsToSheet } from "@/lib/google/visit-sync";
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     try {
       await pullEditsFromSheet(orgId);
       await importVisitsFromSheet(orgId);
+      await linkOrphanVisitsToClients(orgId);
       await syncVisitsToSheet(orgId);
       synced += 1;
     } catch (err) {

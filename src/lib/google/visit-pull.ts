@@ -1,5 +1,6 @@
 import "server-only";
 import { getGoogleAccessToken } from "@/lib/google/connection";
+import { ensureClientForVisit, syncLinkedClient } from "@/lib/google/visit-clients";
 import { getAllValues } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
 import { matchMember, normalize } from "@/lib/google/visit-import";
@@ -61,11 +62,19 @@ export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean
   const ids = [...bySheet.keys()];
   const [{ data: snapData }, { data: apptData }, { data: memberData }] = await Promise.all([
     admin.from("sheet_sync_state").select("appointment_id, snapshot").in("appointment_id", ids),
-    admin.from("appointments").select("id, member_id").eq("org_id", orgId).in("id", ids),
+    admin.from("appointments").select("id, member_id, client_id, client_name, client_phone, status").eq("org_id", orgId).in("id", ids),
     admin.from("members").select("id, display_name").eq("org_id", orgId).eq("active", true),
   ]);
+  type ApptRow = {
+    id: string;
+    member_id: string;
+    client_id: string | null;
+    client_name: string;
+    client_phone: string | null;
+    status: string;
+  };
   const snapById = new Map((snapData ?? []).map((s) => [s.appointment_id as string, s.snapshot as Snap]));
-  const apptMember = new Map((apptData ?? []).map((a) => [a.id as string, a.member_id as string]));
+  const apptById = new Map((apptData ?? []).map((a) => [a.id as string, a as ApptRow]));
   const members = (memberData ?? []) as { id: string; display_name: string }[];
   const memberIds = new Set(members.map((m) => m.id));
   const brokerMap = (conn.broker_map ?? {}) as Record<string, string>;
@@ -80,14 +89,15 @@ export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean
   let updated = 0;
 
   for (const [id, sv] of bySheet) {
-    if (!apptMember.has(id)) continue; // não é desta empresa ou foi apagada
+    const appt = apptById.get(id);
+    if (!appt) continue; // não é desta empresa ou foi apagada
     const snap = snapById.get(id);
     const patch: Record<string, unknown> = {};
 
     // Corretor: sempre segue a planilha (quando dá para reconhecer o nome).
     if (sv.broker) {
       const want = resolveMember(sv.broker);
-      if (want && want !== apptMember.get(id)) patch.member_id = want;
+      if (want && want !== appt.member_id) patch.member_id = want;
     }
 
     // Demais campos: só quando a planilha mudou em relação à foto.
@@ -121,6 +131,35 @@ export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean
       const { error } = await admin.from("appointments").update(patch).eq("id", id).eq("org_id", orgId);
       if (!error) updated++;
     }
+
+    const memberId = (patch.member_id as string | undefined) ?? appt.member_id;
+    const clientName = (patch.client_name as string | undefined) ?? appt.client_name;
+    const clientPhone =
+      patch.client_phone !== undefined ? (patch.client_phone as string | null) : appt.client_phone;
+    const status = (patch.status as string | undefined) ?? appt.status;
+
+    let clientId = appt.client_id;
+    if (!clientId) {
+      clientId = await ensureClientForVisit(admin, {
+        orgId,
+        memberId,
+        name: clientName,
+        phone: clientPhone,
+        status,
+        source: "Planilha",
+      });
+      if (clientId) await admin.from("appointments").update({ client_id: clientId }).eq("id", id).eq("org_id", orgId);
+    } else {
+      await syncLinkedClient(admin, {
+        orgId,
+        clientId,
+        memberId,
+        name: clientName,
+        phone: clientPhone,
+        status: status as "scheduled" | "done" | "no_show" | "canceled",
+      });
+    }
+
     await admin
       .from("sheet_sync_state")
       .upsert({ appointment_id: id, org_id: orgId, snapshot: { status: sv.status, region: sv.region, name: sv.name, phone: sv.phone }, updated_at: now }, { onConflict: "appointment_id" });
