@@ -1,9 +1,10 @@
 import "server-only";
 import { getGoogleAccessToken } from "@/lib/google/connection";
 import { ensureClientForVisit, syncLinkedClient } from "@/lib/google/visit-clients";
-import { getAllValues } from "@/lib/google/sheets";
+import { getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
 import { matchMember, normalize } from "@/lib/google/visit-import";
+import { syncableMonth } from "@/lib/google/visit-tabs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { VISIT_STAGES, type VisitStage } from "@/lib/visits";
 
@@ -32,30 +33,34 @@ export async function pullEditsFromSheet(orgId: string, opts?: { force?: boolean
 
   const token = await getGoogleAccessToken(orgId);
   if (!token) return { error: "sem-token" };
-
-  const grid = await getAllValues(token, conn.spreadsheet_id as string, (conn.sheet_title as string) || "Página1");
-  const found = locateHeader(grid);
-  if (!found) return { error: "sem-cabecalho" };
-
-  const colMap = autoMapHeaders(found.headers);
-  const pulseCol = found.headers.findIndex((h) => h.trim() === PULSE_ID_HEADER);
-  if (pulseCol < 0) return { updated: 0 };
-  const statusCol = colMap.status ?? found.headers.findIndex((h) => ["situacao", "status"].includes(normalize(h)));
+  const spreadsheetId = conn.spreadsheet_id as string;
 
   const cell = (row: string[], idx: number | undefined) => (idx != null && idx >= 0 ? (row[idx] ?? "").trim() : "");
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+  // Lê as linhas ligadas ("ID Pulse") das abas de mês (ignora arquivos e sem mês).
+  const titles = await listSheetTitles(token, spreadsheetId);
   const bySheet = new Map<string, SheetVals>();
-  for (const row of grid.slice(found.index + 1)) {
-    const pid = (row[pulseCol] ?? "").trim();
-    if (!pid || !uuid.test(pid)) continue;
-    bySheet.set(pid, {
-      status: statusCol >= 0 ? (row[statusCol] ?? "").trim() : "",
-      region: cell(row, colMap.region),
-      name: cell(row, colMap.client_name),
-      phone: onlyDigits(cell(row, colMap.client_phone)),
-      broker: cell(row, colMap.broker),
-    });
+  for (const title of titles) {
+    if (!syncableMonth(title)) continue;
+    const grid = await getAllValues(token, spreadsheetId, title);
+    const found = locateHeader(grid);
+    if (!found) continue;
+    const colMap = autoMapHeaders(found.headers);
+    const pulseCol = found.headers.findIndex((h) => h.trim() === PULSE_ID_HEADER);
+    if (pulseCol < 0) continue;
+    const statusCol = colMap.status ?? found.headers.findIndex((h) => ["situacao", "status"].includes(normalize(h)));
+    for (const row of grid.slice(found.index + 1)) {
+      const pid = (row[pulseCol] ?? "").trim();
+      if (!pid || !uuid.test(pid)) continue;
+      bySheet.set(pid, {
+        status: statusCol >= 0 ? (row[statusCol] ?? "").trim() : "",
+        region: cell(row, colMap.region),
+        name: cell(row, colMap.client_name),
+        phone: onlyDigits(cell(row, colMap.client_phone)),
+        broker: cell(row, colMap.broker),
+      });
+    }
   }
   if (bySheet.size === 0) return { updated: 0 };
 

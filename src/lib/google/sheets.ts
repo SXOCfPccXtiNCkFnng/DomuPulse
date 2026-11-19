@@ -60,6 +60,12 @@ export async function firstSheetTitle(token: string, spreadsheetId: string): Pro
   return String(title);
 }
 
+/** Títulos de todas as abas da planilha. */
+export async function listSheetTitles(token: string, spreadsheetId: string): Promise<string[]> {
+  const data = await call(token, `/${spreadsheetId}?fields=sheets.properties.title`);
+  return ((data?.sheets ?? []) as { properties?: { title?: string } }[]).map((s) => s.properties?.title ?? "").filter(Boolean);
+}
+
 type SheetGrid = { sheetId: number; rowCount: number; columnCount: number };
 
 /** Id e tamanho da grade da aba (a API recusa escrever fora desses limites). */

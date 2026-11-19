@@ -1,13 +1,18 @@
 import "server-only";
 import { getGoogleAccessToken } from "@/lib/google/connection";
 import { ensureClientForVisit, linkOrphanVisitsToClients } from "@/lib/google/visit-clients";
-import { getAllValues } from "@/lib/google/sheets";
+import { getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, PULSE_ID_HEADER } from "@/lib/google/visit-sheet";
+import { isArchiveTitle, monthFromTitle, tabWeekStart, weekFromGrid } from "@/lib/google/visit-tabs";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { addDays, dateIn, formatTimeIn, todayIn, zonedToIso } from "@/lib/time";
-import { startOfVisitWeek, VISIT_WEEKDAYS } from "@/lib/visits";
+import { addDays, dateIn, formatTimeIn, zonedToIso } from "@/lib/time";
+import { VISIT_WEEKDAYS } from "@/lib/visits";
 
 const MAX_IMPORT = 500;
+
+// Marcador de visitas vindas das abas de arquivo ("que não vieram"): o push
+// ignora essas (são só histórico, não voltam para a planilha).
+export const ARCHIVE_NOTE = "Importado da planilha (nao veio)";
 
 export const normalize = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -39,38 +44,29 @@ export function matchMember(name: string, members: { id: string; display_name: s
 }
 
 /**
- * Importa as linhas da planilha como visitas no sistema. Data = o dia da semana
- * aplicado à SEMANA ATUAL. Corretor casado pelo nome; sem corretor único, a
- * linha fica de fora (pendente). Também cria/atualiza o cliente na carteira e
- * liga a visita a ele. Linhas com "ID Pulse" são puladas. Não escreve na planilha.
+ * Importa as visitas de TODAS as abas da planilha. A data de cada visita vem da
+ * aba: mês (nome da aba) + "SEMANA N" + dia da semana (aproximado). Corretor
+ * casado pelo nome ou pelos vínculos; sem corretor único, fica pendente. Cria/
+ * liga o cliente na carteira. Linhas com "ID Pulse" e visitas já existentes são
+ * puladas (não duplica). Não escreve na planilha.
  */
 export async function importVisitsFromSheet(
   orgId: string,
 ): Promise<{ imported: number; pending: number; pendingNames: string[] } | { error: string }> {
   const admin = createAdminClient();
-  const { data: conn } = await admin.from("sheet_connections").select("spreadsheet_id, sheet_title, enabled, broker_map").eq("org_id", orgId).maybeSingle();
+  const { data: conn } = await admin.from("sheet_connections").select("spreadsheet_id, enabled, broker_map").eq("org_id", orgId).maybeSingle();
   if (!conn?.spreadsheet_id || !conn.enabled) return { error: "sem-planilha" };
 
   const token = await getGoogleAccessToken(orgId);
   if (!token) return { error: "sem-token" };
-
-  const sheetTitle = (conn.sheet_title as string) || "Página1";
-  const grid = await getAllValues(token, conn.spreadsheet_id as string, sheetTitle);
-  const found = locateHeader(grid);
-  if (!found) return { error: "sem-cabecalho" };
-
-  const colMap = autoMapHeaders(found.headers);
-  if (colMap.client_name == null) return { error: "sem-cabecalho" };
-  const pulseCol = found.headers.findIndex((h) => h.trim() === PULSE_ID_HEADER);
+  const spreadsheetId = conn.spreadsheet_id as string;
 
   const { data: org } = await admin.from("organizations").select("timezone").eq("id", orgId).maybeSingle();
   const tz = (org?.timezone as string) || "America/Sao_Paulo";
-  const weekStart = startOfVisitWeek(todayIn(tz));
 
   const { data: memberData } = await admin.from("members").select("id, display_name").eq("org_id", orgId).eq("active", true);
   const members = (memberData ?? []) as { id: string; display_name: string }[];
   const memberIds = new Set(members.map((m) => m.id));
-  // Vínculos manuais (nome da planilha -> corretor), definidos na tela.
   const brokerMap = (conn.broker_map ?? {}) as Record<string, string>;
   const mappedMember = (name: string) => {
     const id = brokerMap[normalize(name)];
@@ -78,88 +74,99 @@ export async function importVisitsFromSheet(
   };
 
   const cell = (row: string[], idx: number | undefined) => (idx != null && idx >= 0 ? (row[idx] ?? "").trim() : "");
-
-  // Visitas que já existem no sistema na semana (para não importar duplicado).
-  const weekEnd = addDays(weekStart, 7);
-  const { data: existing } = await admin
-    .from("appointments")
-    .select("member_id, scheduled_at, client_name")
-    .eq("org_id", orgId)
-    .gte("scheduled_at", zonedToIso(weekStart, "00:00", tz))
-    .lt("scheduled_at", zonedToIso(weekEnd, "00:00", tz));
   const keyOf = (memberId: string, date: string, time: string, name: string) => `${memberId}|${date}|${time}|${normalize(name)}`;
-  const seenKeys = new Set(
-    (existing ?? []).map((e) => keyOf(e.member_id as string, dateIn(e.scheduled_at as string, tz), formatTimeIn(e.scheduled_at as string, tz), (e.client_name as string) ?? "")),
-  );
 
-  const dataRows = grid.slice(found.index + 1).slice(0, MAX_IMPORT);
-  const toInsert: Record<string, unknown>[] = [];
-  const pendingNames = new Set<string>();
-
-  for (const row of dataRows) {
-    if (pulseCol >= 0 && cell(row, pulseCol)) continue; // já veio do sistema
-    const name = cell(row, colMap.client_name);
-    if (!name) continue;
-
-    const wd = WEEKDAY_INDEX.get(normalize(cell(row, colMap.date)).split("-")[0]);
-    if (wd == null) continue; // sem dia reconhecível
-    const date = addDays(weekStart, wd);
-    const time = parseTime(cell(row, colMap.time));
-
-    const brokerName = cell(row, colMap.broker);
-    const memberId = brokerName ? matchMember(brokerName, members) ?? mappedMember(brokerName) : null;
-    if (!memberId) {
-      if (brokerName) pendingNames.add(brokerName);
-      continue;
-    }
-
-    // Converte dia + hora para a data real; se der ruim, pula a linha (não derruba tudo).
-    let scheduledAt: string;
-    try {
-      scheduledAt = zonedToIso(date, time, tz);
-      if (!Number.isFinite(new Date(scheduledAt).getTime())) continue;
-    } catch {
-      continue;
-    }
-
-    // Pula se já existe essa visita (mesmo corretor, dia, hora e cliente).
-    const key = keyOf(memberId, date, time, name);
-    if (seenKeys.has(key)) continue;
-    seenKeys.add(key);
-
-    const phone = cell(row, colMap.client_phone);
-    const region = cell(row, colMap.region).slice(0, 40);
-    const clientPhone = phone && phoneOk(phone) ? phone : null;
-    const clientId = await ensureClientForVisit(admin, {
-      orgId,
-      memberId,
-      name,
-      phone: clientPhone,
-      status: "scheduled",
-      source: "Planilha",
-    });
-    toInsert.push({
-      org_id: orgId,
-      member_id: memberId,
-      client_id: clientId,
-      client_name: name.slice(0, 120),
-      client_phone: clientPhone,
-      scheduled_at: scheduledAt,
-      region: region || null,
-      status: "scheduled",
-      notes: "Importado da planilha",
-    });
-  }
-
+  const titles = await listSheetTitles(token, spreadsheetId);
   let imported = 0;
-  if (toInsert.length) {
-    const { error, count } = await admin.from("appointments").insert(toInsert, { count: "exact" });
-    if (error) return { error: "insercao" };
-    imported = count ?? toInsert.length;
+  const pendingNames = new Set<string>();
+  let foundAny = false;
+
+  for (const title of titles) {
+    // Abas de mês (inclusive as de arquivo "que não vieram", que entram como não-veio).
+    const month = monthFromTitle(title);
+    if (!month) continue;
+    const archive = isArchiveTitle(title);
+    const grid = await getAllValues(token, spreadsheetId, title);
+    const found = locateHeader(grid);
+    if (!found) continue;
+    const colMap = autoMapHeaders(found.headers);
+    if (colMap.client_name == null) continue;
+    foundAny = true;
+    const pulseCol = found.headers.findIndex((h) => h.trim() === PULSE_ID_HEADER);
+
+    // Data base desta aba: mês do nome da aba + "SEMANA N".
+    const weekStart = tabWeekStart(month, weekFromGrid(grid), tz);
+    const weekEnd = addDays(weekStart, 7);
+
+    // Visitas que já existem no sistema nessa semana (para não duplicar).
+    const { data: existing } = await admin
+      .from("appointments")
+      .select("member_id, scheduled_at, client_name")
+      .eq("org_id", orgId)
+      .gte("scheduled_at", zonedToIso(weekStart, "00:00", tz))
+      .lt("scheduled_at", zonedToIso(weekEnd, "00:00", tz));
+    const seenKeys = new Set(
+      (existing ?? []).map((e) => keyOf(e.member_id as string, dateIn(e.scheduled_at as string, tz), formatTimeIn(e.scheduled_at as string, tz), (e.client_name as string) ?? "")),
+    );
+
+    const toInsert: Record<string, unknown>[] = [];
+    for (const row of grid.slice(found.index + 1).slice(0, MAX_IMPORT)) {
+      if (pulseCol >= 0 && cell(row, pulseCol)) continue; // já veio do sistema
+      const name = cell(row, colMap.client_name);
+      if (!name) continue;
+
+      const wd = WEEKDAY_INDEX.get(normalize(cell(row, colMap.date)).split("-")[0]);
+      if (wd == null) continue;
+      const date = addDays(weekStart, wd);
+      const time = parseTime(cell(row, colMap.time));
+
+      const brokerName = cell(row, colMap.broker);
+      const memberId = brokerName ? matchMember(brokerName, members) ?? mappedMember(brokerName) : null;
+      if (!memberId) {
+        if (brokerName) pendingNames.add(brokerName);
+        continue;
+      }
+
+      let scheduledAt: string;
+      try {
+        scheduledAt = zonedToIso(date, time, tz);
+        if (!Number.isFinite(new Date(scheduledAt).getTime())) continue;
+      } catch {
+        continue;
+      }
+
+      const key = keyOf(memberId, date, time, name);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      const phone = cell(row, colMap.client_phone);
+      const clientPhone = phone && phoneOk(phone) ? phone : null;
+      const region = cell(row, colMap.region).slice(0, 40);
+      const status = archive ? "no_show" : "scheduled";
+      const clientId = await ensureClientForVisit(admin, { orgId, memberId, name, phone: clientPhone, status, source: "Planilha" });
+      toInsert.push({
+        org_id: orgId,
+        member_id: memberId,
+        client_id: clientId,
+        client_name: name.slice(0, 120),
+        client_phone: clientPhone,
+        scheduled_at: scheduledAt,
+        region: region || null,
+        status,
+        visit_stage: archive ? "no_show" : null,
+        notes: archive ? ARCHIVE_NOTE : "Importado da planilha",
+      });
+    }
+
+    if (toInsert.length) {
+      const { error, count } = await admin.from("appointments").insert(toInsert, { count: "exact" });
+      if (error) return { error: "insercao" };
+      imported += count ?? toInsert.length;
+    }
   }
 
-  // Visitas antigas do Sheets que entraram sem cliente passam a aparecer no kanban.
-  await linkOrphanVisitsToClients(orgId);
+  if (!foundAny) return { error: "sem-cabecalho" };
 
+  await linkOrphanVisitsToClients(orgId);
   return { imported, pending: pendingNames.size, pendingNames: [...pendingNames] };
 }

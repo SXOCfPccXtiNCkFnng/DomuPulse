@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getCurrentMember, isLeader } from "@/lib/auth";
 import { getGoogleAccessToken, removeSheetConnection, saveSpreadsheetSelection } from "@/lib/google/connection";
-import { firstSheetTitle, getAllValues } from "@/lib/google/sheets";
+import { firstSheetTitle, getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, VISIT_FIELDS } from "@/lib/google/visit-sheet";
 import { importVisitsFromSheet, matchMember, normalize } from "@/lib/google/visit-import";
 import { pullEditsFromSheet } from "@/lib/google/visit-pull";
@@ -115,11 +115,6 @@ export async function getBrokerMapping(): Promise<
   try {
     const token = await getGoogleAccessToken(me.org.id);
     if (!token) return { error: "Reconecte a conta do Google." };
-    const grid = await getAllValues(token, conn.spreadsheet_id as string, (conn.sheet_title as string) || "Página1");
-    const found = locateHeader(grid);
-    if (!found) return { error: "Não achei os títulos na planilha." };
-    const colMap = autoMapHeaders(found.headers);
-    if (colMap.broker == null) return { error: "A planilha não tem uma coluna de Corretor." };
 
     const { data: memberData } = await admin.from("members").select("id, display_name").eq("org_id", me.org.id).eq("active", true).order("display_name");
     const memberList = (memberData ?? []).map((m) => ({ id: m.id as string, display_name: m.display_name as string }));
@@ -127,18 +122,30 @@ export async function getBrokerMapping(): Promise<
     const brokerMap = (conn.broker_map ?? {}) as Record<string, string>;
     const validId = new Set(members.map((m) => m.id));
 
+    // Varre TODAS as abas da planilha para juntar os nomes de corretor.
+    const titles = await listSheetTitles(token, conn.spreadsheet_id as string);
     const seen = new Set<string>();
     const names: BrokerName[] = [];
-    for (const row of grid.slice(found.index + 1)) {
-      const nm = (row[colMap.broker] ?? "").trim();
-      if (!nm) continue;
-      const key = normalize(nm);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const auto = matchMember(nm, memberList);
-      const mapped = brokerMap[key] && validId.has(brokerMap[key]) ? brokerMap[key] : null;
-      names.push({ name: nm, memberId: auto ?? mapped ?? null, auto: Boolean(auto) });
+    let foundAny = false;
+    for (const title of titles) {
+      const grid = await getAllValues(token, conn.spreadsheet_id as string, title);
+      const found = locateHeader(grid);
+      if (!found) continue;
+      const colMap = autoMapHeaders(found.headers);
+      if (colMap.broker == null) continue;
+      foundAny = true;
+      for (const row of grid.slice(found.index + 1)) {
+        const nm = (row[colMap.broker] ?? "").trim();
+        if (!nm) continue;
+        const key = normalize(nm);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const auto = matchMember(nm, memberList);
+        const mapped = brokerMap[key] && validId.has(brokerMap[key]) ? brokerMap[key] : null;
+        names.push({ name: nm, memberId: auto ?? mapped ?? null, auto: Boolean(auto) });
+      }
     }
+    if (!foundAny) return { error: "Não achei os títulos (Nome, Corretor...) na planilha." };
     names.sort((a, b) => (a.memberId ? 1 : 0) - (b.memberId ? 1 : 0)); // pendentes primeiro
     return { ok: true, names, members };
   } catch (error) {
