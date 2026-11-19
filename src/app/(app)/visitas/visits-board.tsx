@@ -38,17 +38,33 @@ type Visit = {
   status: AppointmentStatus;
   region: string | null;
   visit_stage?: string | null;
+  date_approx?: boolean;
 };
 type Broker = { id: string; name: string; active: boolean; is_broker: boolean; visit_goal?: number };
 
 const DEFAULT_VISIT_GOAL = 15;
 const LIST_PAGE_SIZE = 15;
-type Board = { start: string; visits: Visit[]; brokers: Broker[]; error: string | null };
+type Board = { monthKey: string; visits: Visit[]; brokers: Broker[]; error: string | null };
 
 const REFRESH_MS = 60_000;
 
 /** "12/11" a partir de "2026-11-12". */
 const dayMonth = (date: string) => `${date.slice(8, 10)}/${date.slice(5, 7)}`;
+
+const MONTH_NAMES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+/** "2026-11" -> "Novembro". */
+const monthLabel = (monthKey: string) => {
+  const name = MONTH_NAMES[Number(monthKey.slice(5, 7)) - 1] ?? "";
+  return name.charAt(0).toUpperCase() + name.slice(1);
+};
+/** Primeiro dia do mês e do mês seguinte (YYYY-MM-DD) para carregar o mês inteiro. */
+const monthRange = (monthKey: string) => {
+  const y = Number(monthKey.slice(0, 4));
+  const m = Number(monthKey.slice(5, 7));
+  const ny = m === 12 ? y + 1 : y;
+  const nm = m === 12 ? 1 : m + 1;
+  return { start: `${monthKey}-01`, end: `${ny}-${String(nm).padStart(2, "0")}-01` };
+};
 
 const brokerChip = "inline-block max-w-44 truncate rounded-md bg-surface-2 px-2 py-0.5 text-left font-semibold uppercase text-ink-2";
 
@@ -60,6 +76,8 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
   const [week, setWeek] = useState<string | null>(null);
   const start = week ?? currentWeek;
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [start]);
+  // Mês da semana que está sendo vista (pelo meio da semana, pra semanas que cruzam meses).
+  const monthKey = addDays(start, 3).slice(0, 7);
   const [board, setBoard] = useState<Board | null>(null);
   const [brokerFilter, setBrokerFilter] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState<string | null>(null);
@@ -69,13 +87,15 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
   const leader = member.role !== "broker";
 
   const load = useCallback(async () => {
+    // Carrega o MÊS inteiro: a lista de baixo mostra o mês; a grade de cima filtra a semana.
+    const { start: mStart, end: mEnd } = monthRange(monthKey);
     const [v, b] = await Promise.all([
-      supabase.rpc("visits_board", { p_from: zonedToIso(start, "00:00", tz), p_to: zonedToIso(addDays(start, 7), "00:00", tz) }),
+      supabase.rpc("visits_board", { p_from: zonedToIso(mStart, "00:00", tz), p_to: zonedToIso(mEnd, "00:00", tz) }),
       supabase.rpc("visits_board_brokers"),
     ]);
     const error = v.error ?? b.error;
     setBoard({
-      start,
+      monthKey,
       visits: (v.data ?? []) as Visit[],
       brokers: (b.data ?? []) as Broker[],
       error: error
@@ -84,7 +104,7 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
           : "Não foi possível carregar as visitas. Tente de novo."
         : null,
     });
-  }, [supabase, start, tz]);
+  }, [supabase, monthKey, tz]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -98,7 +118,7 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
     };
   }, [load]);
 
-  const ready = board?.start === start ? board : null;
+  const ready = board?.monthKey === monthKey ? board : null;
   const visits = useMemo(() => ready?.visits ?? [], [ready]);
 
   // Linhas: corretores ativos + quem tem visita na semana (inativo ou da liderança).
@@ -170,7 +190,7 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setListPage(1);
-  }, [brokerFilter, dayFilter, start]);
+  }, [brokerFilter, dayFilter, monthKey]);
 
   // Alinha os dois lados: puxa da planilha e manda pra planilha, depois recarrega.
   const runSync = async () => {
@@ -446,11 +466,11 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
 
       <Card>
         <CardHeader
-          title="Clientes da semana"
+          title={`Clientes de ${monthLabel(monthKey)}`}
           description={
             brokerFilter || dayFilter
               ? `${list.length} de ${visits.length} visitas`
-              : "Entram sozinhas ao marcar visita na Agenda, em Clientes ou no relatório. Mude a situação e a linha ganha a cor. Todo agendamento conta no total."
+              : `Todos os agendamentos de ${monthLabel(monthKey)} (a tabela de cima conta por semana). Mude a situação e a linha ganha a cor.`
           }
           action={
             <span className="flex items-center gap-2">
@@ -505,7 +525,7 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
               {ready && list.length === 0 ? (
                 <tr>
                   <td colSpan={leader ? 8 : 7} className="px-4 py-8 text-center text-muted">
-                    Nenhuma visita {brokerFilter || dayFilter ? "com esse filtro" : "marcada nesta semana"}.
+                    Nenhuma visita {brokerFilter || dayFilter ? "com esse filtro" : "nesse mês"}.
                   </td>
                 </tr>
               ) : null}
@@ -535,9 +555,15 @@ export function VisitsBoard({ member, canSync = false }: { member: ClientMember;
                       )}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      {weekday} <span className="text-muted tabular-nums">{dayMonth(day)}</span>
+                      {v.date_approx ? (
+                        <span className="text-muted">sem data</span>
+                      ) : (
+                        <>
+                          {weekday} <span className="text-muted tabular-nums">{dayMonth(day)}</span>
+                        </>
+                      )}
                     </td>
-                    <td className="px-3 py-2.5 tabular-nums">{time}</td>
+                    <td className="px-3 py-2.5 tabular-nums">{v.date_approx ? <span className="text-muted">-</span> : time}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{v.region ?? <span className="text-muted">—</span>}</td>
                     <td className="px-3 py-2.5">
                       <span className={clsx(brokerChip, "text-[12px]")}>{nameOf.get(v.member_id) ?? "-"}</span>

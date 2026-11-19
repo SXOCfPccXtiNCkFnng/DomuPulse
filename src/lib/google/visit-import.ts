@@ -182,6 +182,7 @@ export async function importVisitsFromSheet(
         region: region || null,
         status,
         visit_stage: archive ? "no_show" : null,
+        date_approx: !fullDate, // sem data real na planilha -> aparece como "sem data"
         notes: archive ? ARCHIVE_NOTE : "Importado da planilha",
       });
     }
