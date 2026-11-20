@@ -7,6 +7,7 @@ import { getGoogleAccessToken, removeSheetConnection, saveSpreadsheetSelection }
 import { firstSheetTitle, getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { autoMapHeaders, locateHeader, VISIT_FIELDS } from "@/lib/google/visit-sheet";
 import { importVisitsFromSheet, matchMember, normalize } from "@/lib/google/visit-import";
+import { cleanSheetPulseExtras } from "@/lib/google/visit-sheet-cleanup";
 import { pullEditsFromSheet } from "@/lib/google/visit-pull";
 import { syncVisitsToSheet } from "@/lib/google/visit-sync";
 import { describeError, logger } from "@/lib/logger";
@@ -88,7 +89,8 @@ export async function connectSpreadsheet(
       pending = imp.pending;
     }
 
-    // 2) Enche/atualiza a planilha com as visitas do sistema (backfill).
+    // 2) Atualiza só células das colunas que já existem (não cria coluna/linha).
+    await cleanSheetPulseExtras(me.org.id);
     const result = await syncVisitsToSheet(me.org.id);
     if ("error" in result) logger.warn("google.backfill", { message: result.error, orgId: me.org.id });
 
@@ -188,6 +190,8 @@ export async function pullAllFromSheet(): Promise<{ error: string } | { ok: true
   const me = await requireLeader();
   if (!me) return { error: "Sem permissão." };
 
+  await cleanSheetPulseExtras(me.org.id);
+
   let updated = 0;
   const pr = await pullEditsFromSheet(me.org.id, { force: true });
   if ("error" in pr) {
@@ -211,6 +215,9 @@ export async function syncNow(): Promise<
 > {
   const me = await requireLeader();
   if (!me) return { error: "Sem permissão." };
+
+  // Tira ID Pulse / Situação / linhas que o Pulse tinha colocado fora do padrão.
+  await cleanSheetPulseExtras(me.org.id);
 
   // Dia a dia: sincroniza só o mês atual (leve). O histórico completo é pelo "Puxar tudo".
   const light = { currentOnly: true };

@@ -109,3 +109,35 @@ export async function ensureSheetSize(token: string, spreadsheetId: string, shee
     body: JSON.stringify({ requests }),
   });
 }
+
+/** Apaga colunas (índices 0-based, inclusive). Apaga da direita para a esquerda. */
+export async function deleteColumns(token: string, spreadsheetId: string, sheetTitle: string, columnIndexes: number[]) {
+  if (columnIndexes.length === 0) return;
+  const grid = await getSheetGrid(token, spreadsheetId, sheetTitle);
+  const uniq = [...new Set(columnIndexes)].filter((i) => i >= 0).sort((a, b) => b - a);
+  const requests = uniq.map((startIndex) => ({
+    deleteDimension: {
+      range: { sheetId: grid.sheetId, dimension: "COLUMNS", startIndex, endIndex: startIndex + 1 },
+    },
+  }));
+  await call(token, `/${spreadsheetId}:batchUpdate`, {
+    method: "POST",
+    body: JSON.stringify({ requests }),
+  });
+}
+
+/** Apaga linhas (números 1-based da planilha). Apaga de baixo para cima. */
+export async function deleteRows(token: string, spreadsheetId: string, sheetTitle: string, rowNumbers: number[]) {
+  if (rowNumbers.length === 0) return;
+  const grid = await getSheetGrid(token, spreadsheetId, sheetTitle);
+  const uniq = [...new Set(rowNumbers)].filter((n) => n >= 1).sort((a, b) => b - a);
+  const requests = uniq.map((rowNum) => ({
+    deleteDimension: {
+      range: { sheetId: grid.sheetId, dimension: "ROWS", startIndex: rowNum - 1, endIndex: rowNum },
+    },
+  }));
+  await call(token, `/${spreadsheetId}:batchUpdate`, {
+    method: "POST",
+    body: JSON.stringify({ requests }),
+  });
+}

@@ -3,6 +3,7 @@ import { isCronRequest } from "@/lib/cron-auth";
 import { linkOrphanVisitsToClients } from "@/lib/google/visit-clients";
 import { importVisitsFromSheet } from "@/lib/google/visit-import";
 import { pullEditsFromSheet } from "@/lib/google/visit-pull";
+import { cleanSheetPulseExtras } from "@/lib/google/visit-sheet-cleanup";
 import { syncVisitsToSheet } from "@/lib/google/visit-sync";
 import { describeError, logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     try {
       // Automático: só o mês atual (leve). O histórico completo é pelo "Puxar tudo".
       const light = { currentOnly: true };
+      await cleanSheetPulseExtras(orgId);
       await pullEditsFromSheet(orgId, light);
       await importVisitsFromSheet(orgId, light);
       await linkOrphanVisitsToClients(orgId);

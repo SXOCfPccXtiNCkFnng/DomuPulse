@@ -1,8 +1,8 @@
 import "server-only";
 import { getGoogleAccessToken } from "@/lib/google/connection";
-import { appendRows, batchUpdateValues, colLetter, ensureSheetSize, getAllValues, listSheetTitles } from "@/lib/google/sheets";
+import { batchUpdateValues, colLetter, getAllValues, listSheetTitles } from "@/lib/google/sheets";
 import { ARCHIVE_NOTE } from "@/lib/google/visit-import";
-import { autoMapHeaders, locateHeader, PULSE_ID_HEADER, VISIT_FIELDS, type VisitField } from "@/lib/google/visit-sheet";
+import { autoMapHeaders, locateHeader, VISIT_FIELDS, type VisitField } from "@/lib/google/visit-sheet";
 import { syncableMonth } from "@/lib/google/visit-tabs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateIn, formatTimeIn, todayIn } from "@/lib/time";
@@ -31,10 +31,10 @@ type Appt = {
 };
 
 /**
- * Manda as visitas do sistema para a planilha, em TODAS as abas. Cada visita vai
- * para a aba cuja semana contém a data dela (mês da aba + "SEMANA N"). Casa a
- * linha pela coluna "ID Pulse" (ou adota por telefone+dia+hora), escreve só nas
- * colunas conhecidas e não sobrescreve o corretor que a empresa digitou.
+ * Atualiza a planilha SEM mudar o padrão dela: não cria coluna (ID Pulse,
+ * Situação…), não acrescenta linha e não expande a grade. Só escreve nas
+ * colunas que a empresa já tem (exceto corretor, que a planilha manda). Casa
+ * a linha por telefone + dia + hora.
  */
 export async function syncVisitsToSheet(orgId: string, opts?: { currentOnly?: boolean }): Promise<{ pushed: number } | { error: string }> {
   const admin = createAdminClient();
@@ -102,88 +102,56 @@ export async function syncVisitsToSheet(orgId: string, opts?: { currentOnly?: bo
   const curMonth = Number(todayIn(tz).slice(5, 7));
   for (const title of titles) {
     const month = syncableMonth(title);
-    if (!month) continue; // só abas de mês normais (ignora arquivos e sem mês)
-    if (opts?.currentOnly && month !== curMonth) continue; // dia a dia: só o mês atual
+    if (!month) continue;
+    if (opts?.currentOnly && month !== curMonth) continue;
     const grid = await getAllValues(token, spreadsheetId, title);
     const found = locateHeader(grid);
     if (!found) continue;
 
-    // Cada aba é um mês: manda pra cá as visitas daquele mês.
     const tabAppts = appts.filter((a) => apptMonth.get(a.id) === month);
     if (tabAppts.length === 0) continue;
 
-    const headerRowNum = found.index + 1;
-    const headers = found.headers;
-    const colMap = autoMapHeaders(headers);
+    const colMap = autoMapHeaders(found.headers);
     const dataRows = grid.slice(found.index + 1);
     const dataStartRow = found.index + 2;
+    const colOf = (field: VisitField) => colMap[field] ?? -1;
 
-    const headerWrites: { range: string; values: string[][] }[] = [];
-    let nextCol = headers.length;
-    let statusCol = colMap.status ?? -1;
-    if (statusCol < 0) {
-      statusCol = nextCol++;
-      headerWrites.push({ range: `${title}!${colLetter(statusCol)}${headerRowNum}`, values: [["Situação"]] });
-    }
-    let pulseCol = headers.findIndex((h) => h.trim() === PULSE_ID_HEADER);
-    if (pulseCol < 0) {
-      pulseCol = nextCol++;
-      headerWrites.push({ range: `${title}!${colLetter(pulseCol)}${headerRowNum}`, values: [[PULSE_ID_HEADER]] });
-    }
-    const colOf = (field: VisitField) => (field === "status" ? statusCol : colMap[field] ?? -1);
-
-    const rowByPulse = new Map<string, number>();
     const rowByKey = new Map<string, number>();
     dataRows.forEach((r, i) => {
-      const rowNum = dataStartRow + i;
-      const pid = (r[pulseCol] ?? "").trim();
-      if (pid) rowByPulse.set(pid, rowNum);
       const phone = onlyDigits(colMap.client_phone != null ? r[colMap.client_phone] : "");
       const date = (colMap.date != null ? r[colMap.date] : "")?.trim()?.toUpperCase() ?? "";
       const time = (colMap.time != null ? r[colMap.time] : "")?.trim() ?? "";
-      if (phone) rowByKey.set(`${phone}|${date}|${time}`, rowNum);
+      if (phone) rowByKey.set(`${phone}|${date}|${time}`, dataStartRow + i);
     });
 
-    const width = Math.max(headers.length, statusCol + 1, pulseCol + 1, ...VISIT_FIELDS.map((f) => colOf(f.key) + 1));
-    const lastDataRow = dataStartRow + dataRows.length + tabAppts.length;
-    await ensureSheetSize(token, spreadsheetId, title, width, lastDataRow);
-
-    const updates: { range: string; values: string[][] }[] = [...headerWrites];
-    const appends: string[][] = [];
-
+    const updates: { range: string; values: string[][] }[] = [];
     for (const a of tabAppts) {
-      let rowNum = rowByPulse.get(a.id) ?? null;
-      if (rowNum == null) {
-        const key = `${onlyDigits(a.client_phone)}|${weekday(a.scheduled_at)}|${formatTimeIn(a.scheduled_at, tz)}`;
-        rowNum = onlyDigits(a.client_phone) ? rowByKey.get(key) ?? null : null;
+      const key = `${onlyDigits(a.client_phone)}|${weekday(a.scheduled_at)}|${formatTimeIn(a.scheduled_at, tz)}`;
+      const rowNum = onlyDigits(a.client_phone) ? rowByKey.get(key) ?? null : null;
+      if (rowNum == null) continue; // não cria linha nova: a planilha manda no formato
+
+      for (const f of VISIT_FIELDS) {
+        // Corretor: a planilha é a dona. Status: só se a coluna já existir no padrão deles.
+        if (f.key === "broker") continue;
+        const c = colOf(f.key);
+        if (c < 0) continue;
+        updates.push({ range: `${title}!${colLetter(c)}${rowNum}`, values: [[valueFor(f.key, a)]] });
       }
-      if (rowNum != null) {
-        for (const f of VISIT_FIELDS) {
-          if (f.key === "broker") continue; // a planilha é a dona do corretor
-          const c = colOf(f.key);
-          if (c >= 0) updates.push({ range: `${title}!${colLetter(c)}${rowNum}`, values: [[valueFor(f.key, a)]] });
-        }
-        updates.push({ range: `${title}!${colLetter(pulseCol)}${rowNum}`, values: [[a.id]] });
-      } else {
-        const row = new Array<string>(width).fill("");
-        for (const f of VISIT_FIELDS) {
-          const c = colOf(f.key);
-          if (c >= 0) row[c] = valueFor(f.key, a);
-        }
-        row[pulseCol] = a.id;
-        appends.push(row);
-      }
+      pushed += 1;
       snapshots.push({
         appointment_id: a.id,
         org_id: orgId,
-        snapshot: { status: valueFor("status", a), region: a.region ?? "", name: a.client_name ?? "", phone: onlyDigits(a.client_phone) },
+        snapshot: {
+          status: colOf("status") >= 0 ? valueFor("status", a) : "",
+          region: a.region ?? "",
+          name: a.client_name ?? "",
+          phone: onlyDigits(a.client_phone),
+        },
         updated_at: now,
       });
     }
 
     for (const part of chunk(updates, 400)) await batchUpdateValues(token, spreadsheetId, part);
-    await appendRows(token, spreadsheetId, `${title}!A${headerRowNum}`, appends);
-    pushed += tabAppts.length;
   }
 
   await admin.from("sheet_connections").update({ last_push_at: now }).eq("org_id", orgId);
